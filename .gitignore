@@ -202,3 +202,5 @@ OldVer/
 
 # Ignore automatically generated BuildInfo.cs
 WzComparerR2/BuildInfo.cs
+
+.DS_Store

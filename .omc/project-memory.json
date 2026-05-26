@@ -1,0 +1,246 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1779797080990,
+  "projectRoot": "/Users/ijun17/Desktop/MSW/WzComparerR2",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [],
+    "gitBranches": {
+      "defaultBranch": "seotbeo_main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "Build": {
+      "path": "Build",
+      "purpose": "Build output",
+      "fileCount": 2,
+      "lastAccessed": 1779797080981,
+      "keyFiles": [
+        "Common.props",
+        "WcR2Plugin.targets"
+      ]
+    },
+    "CharaSimResource": {
+      "path": "CharaSimResource",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1779797080981,
+      "keyFiles": []
+    },
+    "References": {
+      "path": "References",
+      "purpose": null,
+      "fileCount": 8,
+      "lastAccessed": 1779797080981,
+      "keyFiles": [
+        "DevComponents.DotNetBar2.dll",
+        "EmptyKeys.UserInterface.Core.dll",
+        "EmptyKeys.UserInterface.MonoGame.dll",
+        "EmptyKeys.UserInterface.dll",
+        "IMEHelper.dll"
+      ]
+    },
+    "UpdateLogs": {
+      "path": "UpdateLogs",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1779797080981,
+      "keyFiles": [
+        "dev.md",
+        "v2.0.1.md",
+        "v2.0.9.md",
+        "v2.1.1.md",
+        "v2.1.md"
+      ]
+    },
+    "WzComparerR2": {
+      "path": "WzComparerR2",
+      "purpose": null,
+      "fileCount": 70,
+      "lastAccessed": 1779797080981,
+      "keyFiles": [
+        "AnimateEncoderFactory.cs",
+        "DBConnection.cs",
+        "Dotnet4Polyfill.cs",
+        "Dotnet6Patches.cs",
+        "DownloadingItem.cs"
+      ]
+    },
+    "WzComparerR2.Avatar": {
+      "path": "WzComparerR2.Avatar",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1779797080981,
+      "keyFiles": [
+        "Entry.cs",
+        "WzComparerR2.Avatar.csproj"
+      ]
+    },
+    "WzComparerR2.Common": {
+      "path": "WzComparerR2.Common",
+      "purpose": null,
+      "fileCount": 16,
+      "lastAccessed": 1779797080981,
+      "keyFiles": [
+        "BitmapOrigin.cs",
+        "Calculator.cs",
+        "Gif.cs",
+        "GifCanvas.cs",
+        "GifFrame.cs"
+      ]
+    },
+    "WzComparerR2.LuaConsole": {
+      "path": "WzComparerR2.LuaConsole",
+      "purpose": null,
+      "fileCount": 10,
+      "lastAccessed": 1779797080982,
+      "keyFiles": [
+        "AppSyntaxModeProvider.cs",
+        "Entry.cs",
+        "FrmConsole.Designer.cs",
+        "FrmConsole.cs",
+        "FrmConsole.resx"
+      ]
+    },
+    "WzComparerR2.MapRender": {
+      "path": "WzComparerR2.MapRender",
+      "purpose": null,
+      "fileCount": 54,
+      "lastAccessed": 1779797080982,
+      "keyFiles": [
+        "BehaviorController.cs",
+        "Camera.cs",
+        "Chat.cs",
+        "CommandParser.cs",
+        "Coroutine.cs"
+      ]
+    },
+    "WzComparerR2.Network": {
+      "path": "WzComparerR2.Network",
+      "purpose": null,
+      "fileCount": 11,
+      "lastAccessed": 1779797080982,
+      "keyFiles": [
+        "Entry.cs",
+        "Log.cs",
+        "LoggerForm.Designer.cs",
+        "LoggerForm.cs",
+        "LoggerForm.resx"
+      ]
+    },
+    "WzComparerR2.PluginBase": {
+      "path": "WzComparerR2.PluginBase",
+      "purpose": null,
+      "fileCount": 10,
+      "lastAccessed": 1779797080982,
+      "keyFiles": [
+        "FindWzEventArgs.cs",
+        "FindWzEventHandler.cs",
+        "PluginContext.cs",
+        "PluginContextProvider.cs",
+        "PluginEntry.cs"
+      ]
+    },
+    "WzComparerR2.Updater": {
+      "path": "WzComparerR2.Updater",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1779797080982,
+      "keyFiles": [
+        "App.config",
+        "Program.cs",
+        "Updater.ico",
+        "WzComparerR2.Updater.csproj",
+        "app.manifest"
+      ]
+    },
+    "WzComparerR2.WzLib": {
+      "path": "WzComparerR2.WzLib",
+      "purpose": null,
+      "fileCount": 29,
+      "lastAccessed": 1779797080982,
+      "keyFiles": [
+        "IMapleStoryBlob.cs",
+        "IMapleStoryFile.cs",
+        "IMapleStoryFileEntry.cs",
+        "Interop.cs",
+        "Mcv_Types.cs"
+      ]
+    },
+    "WzComparerR2/Config": {
+      "path": "WzComparerR2/Config",
+      "purpose": "Configuration files",
+      "fileCount": 16,
+      "lastAccessed": 1779797080983,
+      "keyFiles": [
+        "CharaSimConfig.cs",
+        "CharaSimDamageSkinConfig.cs",
+        "CharaSimGearConfig.cs"
+      ]
+    },
+    "WzComparerR2.Common/Config": {
+      "path": "WzComparerR2.Common/Config",
+      "purpose": "Configuration files",
+      "fileCount": 6,
+      "lastAccessed": 1779797080983,
+      "keyFiles": [
+        "ConfigArrayList.cs",
+        "ConfigItem.cs",
+        "ConfigItemCollectionBase.cs"
+      ]
+    },
+    "WzComparerR2.LuaConsole/Config": {
+      "path": "WzComparerR2.LuaConsole/Config",
+      "purpose": "Configuration files",
+      "fileCount": 1,
+      "lastAccessed": 1779797080983,
+      "keyFiles": [
+        "LuaConsoleConfig.cs"
+      ]
+    },
+    "WzComparerR2.LuaConsole/Examples": {
+      "path": "WzComparerR2.LuaConsole/Examples",
+      "purpose": "Example code",
+      "fileCount": 5,
+      "lastAccessed": 1779797080983,
+      "keyFiles": [
+        "DumpAnimations.lua",
+        "DumpImages.lua",
+        "DumpSounds.lua"
+      ]
+    },
+    "WzComparerR2.MapRender/Config": {
+      "path": "WzComparerR2.MapRender/Config",
+      "purpose": "Configuration files",
+      "fileCount": 1,
+      "lastAccessed": 1779797080983,
+      "keyFiles": [
+        "MapRenderConfig.cs"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}
