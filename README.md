@@ -37,6 +37,33 @@ Clone repository with submodules.
 # Compile
 - vs2022 or higher/.net 8 SDK
 
+# Command Line Tools
+
+This repository also contains an experimental CLI project: `WzComparerR2.Cli`.
+The CLI reuses `WzComparerR2.WzLib` and exposes headless workflows such as WZ
+info/tree/list/search, dump/extract, compare, patch inspect/apply, skill/item/
+gear/map metadata lookup, animation frame export, update/config, and CLI plugin
+discovery.
+
+Build:
+
+```sh
+dotnet restore WzComparerR2.Cli/WzComparerR2.Cli.csproj --ignore-failed-sources
+dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Debug --no-restore
+```
+
+Run:
+
+```sh
+dotnet WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll --help
+dotnet WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll info Base.wz
+dotnet WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll extract Base.wz --path String --out out/string --recursive
+```
+
+Full CLI usage is documented in [`docs/cli.md`](docs/cli.md).
+GUI-to-CLI workflow examples are in [`docs/cli-migration.md`](docs/cli-migration.md).
+Reusable shell examples are under [`samples/cli`](samples/cli).
+
 # Credits and Acknowledgement
 - **Fiel** ([Southperry](http://www.southperry.net))  wz文件读取代码改造自WzExtract 以及WzPatcher
 - **Index** ([Exrpg](http://bbs.exrpg.com/space-uid-137285.html)) MapRender的原始代码 以及libgif

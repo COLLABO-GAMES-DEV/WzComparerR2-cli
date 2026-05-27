@@ -161,12 +161,12 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 ## Phase 4. 검색 기능 구현
 
 - [x] `search --name <text>` 구현
-- [ ] `search --path <glob-or-regex>` 구현
+- [x] `search --match-path <glob-or-regex>` 구현
 - [x] `search --value <text>` 구현
-- [ ] 검색 범위 옵션 추가
+- [x] 검색 범위 옵션 추가
   - `--path <wz-path>`
   - `--max-results <n>`
-  - [ ] `--type image|sound|string|vector|uol|raw`
+  - `--type image|sound|string|vector|uol|raw`
 - [ ] lazy image extraction이 필요한 검색과 필요 없는 검색을 분리한다.
 - [ ] 검색 성능 측정용 샘플 케이스를 만든다.
 
@@ -177,9 +177,9 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 ## Phase 5. 덤프/export 기본 기능
 
-- [ ] `dump --format json` 구현
-- [x] `dump --format xml` 구현 여부 검토
-- [ ] `dump --format raw` 구현
+- [x] `dump --format json` 구현
+- [x] `dump --format xml` 구현
+- [x] `dump --format raw` 구현
 - [x] `extract` 경로에서 raw/video blob 파일 추출 구현
 - [x] `extract image` 구현
   - `Wz_Png` -> PNG
@@ -194,7 +194,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `VpxVideoDecoder`
   - native `libvpx`, `libyuv` 필요성 확인
 - [x] `Wz_Video` 원본 blob `.mcv` 추출 구현
-- [ ] export 결과 manifest 생성 옵션 추가
+- [x] export 결과 manifest 생성 옵션 추가
   - `--manifest export.json`
 
 완료 기준:
@@ -212,16 +212,19 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `WzPngComparison`
   - `WzVirtualNode`
 - [ ] WinForms 의존이 섞인 부분을 서비스로 분리한다.
-- [ ] `compare <old> <new>` 명령을 구현한다.
-- [ ] 출력 포맷을 정의한다.
-  - JSON diff
-  - human summary
-  - optional HTML/markdown report
+- [x] `compare <old> <new>` 명령을 구현한다.
+- [x] 출력 포맷을 정의한다.
+  - [x] JSON diff
+  - [x] human summary
+  - [x] optional markdown report
+  - [ ] optional HTML report
+- [x] JSON diff 파일 저장 옵션 추가
+  - `--out <json>`
 - [ ] 이미지 비교 결과 export를 지원한다.
 - [ ] filter 옵션 추가
-  - `--type added|removed|changed`
-  - `--path`
-  - `--ignore-image-binary`
+  - [x] `--type added|removed|changed`
+  - [x] `--path`
+  - [x] `--ignore-image-binary`
 
 완료 기준:
 
@@ -230,27 +233,30 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 ## Phase 7. 패처 기능 CLI화
 
-- [ ] `WzComparerR2/Patcher/` 구조를 분석한다.
+- [x] `WzComparerR2/Patcher/` 구조를 분석한다.
   - `WzPatcher`
   - `ReversePatcherBuilder`
   - `PatcherSetting`
   - `Builder/*`
-- [ ] 읽기 전용 dry-run 기능을 먼저 만든다.
-  - `patch inspect`
-  - `patch dry-run`
-- [ ] 실제 적용 명령을 만든다.
-  - `patch apply <patch-file> --target <dir> --out <dir>`
+- [x] 읽기 전용 dry-run 기능을 먼저 만든다.
+  - [x] `patch inspect`
+  - [x] `patch dry-run`
+- [x] 실제 적용 명령을 만든다.
+  - [x] `patch apply <patch-file> --target <dir> --out <dir>`
 - [ ] reverse patch 생성 명령을 만든다.
   - `patch reverse-build <old> <new> --out <patch>`
-- [ ] 파일 overwrite 정책을 명확히 한다.
+- [x] 파일 overwrite 정책을 명확히 한다.
   - 기본값은 원본 수정 금지
-  - `--in-place`는 별도 확인 옵션 필요
+  - `--in-place`는 지원하지 않음
+  - `--out`은 target과 분리되어야 하며 없거나 비어 있어야 함
 - [ ] checksum 검증과 로그 파일을 추가한다.
+  - [x] `patch dry-run` 기존 파일 checksum 검증
+  - [x] patch apply 로그 파일
 
 완료 기준:
 
-- [ ] dry-run으로 변경 예정 파일 목록 확인 가능
-- [ ] out directory 방식으로 안전하게 patch 적용 가능
+- [x] dry-run으로 변경 예정 파일 목록 확인 가능
+- [x] out directory 방식으로 안전하게 patch 적용 가능
 - [ ] checksum 실패가 명확히 보고됨
 
 ## Phase 8. CharaSim/Tooltip 계열 CLI화
@@ -258,19 +264,19 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [ ] `WzComparerR2.Common/CharaSim/` 모델 로딩 방식을 정리한다.
 - [ ] `WzComparerR2/CharaSim/CharaSimLoader.cs`의 UI 의존성을 분리한다.
 - [ ] 아이템/장비 조회 명령 구현
-  - `item info --id <id>`
-  - `gear info --id <id>`
-  - `skill info --id <id>`
+  - [x] `item info --id <id>`
+  - [x] `gear info --id <id>`
+  - [x] `skill info --id <id>`
   - `mob info --id <id>`
   - `npc info --id <id>`
   - `quest info --id <id>`
 - [ ] 출력 형식
-  - text
-  - JSON
+  - [x] text
+  - [x] JSON
   - optional tooltip image
 - [ ] 툴팁 렌더러의 WinForms/GDI 의존을 CLI에서 호출 가능한 렌더링 서비스로 감싼다.
 - [ ] string linker 초기화 옵션을 제공한다.
-  - `--string-wz`
+  - [x] `--string-wz`
   - `--item-wz`
   - `--etc-wz`
   - `--quest-wz`
@@ -278,12 +284,13 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 완료 기준:
 
 - [ ] 아이템/스킬/몬스터/NPC/퀘스트 정보를 CLI에서 조회 가능
+  - [x] 아이템/장비/스킬 기본 데이터 조회 명령 구현
 - [ ] 최소 하나 이상의 툴팁 이미지 export 가능
 
 ## Phase 9. 애니메이션/GIF 생성 CLI화
 
 - [ ] `WzComparerR2.Common/Gif*`, `Animation/`, `Encoders/` 구조를 분석한다.
-- [ ] animation frame 추출 명령 구현
+- [x] animation frame 추출 명령 구현
   - `animate frames --path <wz-path> --out <dir>`
 - [ ] GIF/APNG export 명령 구현
   - `animate gif`
@@ -299,13 +306,15 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 완료 기준:
 
 - [ ] WZ animation node에서 frame PNG export 가능
+  - [x] `animate frames` 구현과 manifest 생성 경로 빌드 검증 완료
+  - [ ] 실제 WZ animation sample 기반 PNG export 검증 필요
 - [ ] GIF 또는 APNG 파일 생성 가능
 
 ## Phase 10. Avatar 기능 CLI화
 
 - [ ] `WzComparerR2.Avatar/Entry.cs`와 `WzComparerR2.Avatar/UI/` 의존성을 분리한다.
 - [ ] `WzComparerR2/AvatarCommon/` 재사용 범위를 확인한다.
-- [ ] avatar code 파싱/검증 명령 구현
+- [x] avatar code 파싱/검증 명령 구현
   - `avatar inspect --code <code>`
   - `avatar unpack --code <code> --json`
 - [ ] avatar render 명령 구현
@@ -318,16 +327,18 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 완료 기준:
 
-- [ ] 아바타 구성 정보를 JSON으로 출력 가능
+- [x] 아바타 구성 정보를 JSON으로 출력 가능
 - [ ] 최소 정적 avatar PNG export 가능
 
 ## Phase 11. MapRender 기능 CLI화
 
-- [ ] `WzComparerR2.MapRender/Entry.cs`, `FrmMapRender.cs`, `FrmMapRender2.cs`, `MapData.cs` 구조를 분석한다.
-- [ ] map metadata 조회 명령 구현
-  - `map info --id <map-id>`
-  - `map objects --id <map-id>`
-  - `map portals --id <map-id>`
+- [x] `WzComparerR2.MapRender/Entry.cs`, `FrmMapRender.cs`, `FrmMapRender2.cs`, `MapData.cs` 구조를 분석한다.
+- [x] map metadata 조회 명령 구현
+  - [x] `map info --id <map-id>`
+  - [x] `map objects --id <map-id>`
+  - [x] `map portals --id <map-id>`
+  - [x] `map life --id <map-id>`
+  - [x] `map reactors --id <map-id>`
 - [ ] headless render 가능성 조사
   - MonoGame device 생성
   - offscreen render target
@@ -345,14 +356,23 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 완료 기준:
 
 - [ ] map metadata를 JSON으로 출력 가능
+  - [x] map metadata JSON DTO와 명령 surface 구현 완료
+  - [ ] 실제 Map.wz sample 기반 JSON 출력 검증 필요
 - [ ] 최소 한 개 map screenshot PNG export 가능
 
 ## Phase 12. LuaConsole 기능 CLI화
 
 - [ ] `WzComparerR2.LuaConsole/LuaSandbox.cs`를 CLI에서 재사용할 수 있게 정리한다.
-- [ ] Lua 실행 명령 구현
+  - 현재 `LuaSandbox`는 NLua + WinForms startup path 의존이 있어 CLI 직접 참조 대신 외부 lua 실행기 브릿지로 1차 구현
+- [x] `WzComparerR2.LuaConsole/LuaSandbox.cs` 재사용 가능성 분석
+- [x] Lua 실행 명령 구현
   - `lua run <script.lua> --wz <file-or-dir>`
-  - `lua eval <code> --wz <file-or-dir>`
+  - [ ] `lua eval <code> --wz <file-or-dir>`
+- [x] dry-run 검증 옵션 구현
+  - `--dry-run`
+- [x] WZ 입력 검증과 환경 변수 전달 구현
+  - `WCR2_WZ_INPUT`
+  - `WCR2_WZ_ROOT`
 - [ ] Lua global API 문서화
   - find node
   - dump
@@ -363,88 +383,102 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 완료 기준:
 
 - [ ] 기존 `Examples/*.lua` 중 최소 2개가 CLI에서 실행 가능
+  - [x] `DumpXml.lua` dry-run 검증 가능
+  - [ ] 현재 환경에 외부 lua 실행기가 없어 실제 script 실행 미검증
 - [ ] Lua 오류가 line/stack 정보와 함께 출력됨
 
 ## Phase 13. Network 기능 CLI화
 
-- [ ] `WzComparerR2.Network/WcClient.cs`와 `Contracts/`를 분석한다.
-- [ ] CLI에서 필요한 기능 범위를 재평가한다.
+- [x] `WzComparerR2.Network/WcClient.cs`와 `Contracts/`를 분석한다.
+- [x] CLI에서 필요한 기능 범위를 재평가한다.
   - 채팅 접속
   - 서버 정보 조회
   - 메시지 송수신
   - custom package
-- [ ] 명령 후보
-  - `network server-info`
-  - `network login`
-  - `network chat`
-  - `network send`
+- [x] 명령 후보
+  - [x] `network server-info`
+  - [ ] `network login`
+  - [x] `network chat`
+  - [x] `network send`
 - [ ] interactive CLI 모드와 non-interactive 모드를 분리한다.
-- [ ] credential 저장을 피하고 env var 또는 인자 입력으로 처리한다.
+- [x] credential 저장을 피하고 env var 또는 인자 입력으로 처리한다.
+  - 현재 credential을 받거나 저장하지 않는 dry-run/probe만 제공
 
 완료 기준:
 
-- [ ] 서버 정보 조회 또는 dry-run 수준 명령 구현
+- [x] 서버 정보 조회 또는 dry-run 수준 명령 구현
 - [ ] 실제 채팅 기능은 별도 승인 후 진행
 
 ## Phase 14. Updater 기능 CLI화
 
-- [ ] 기존 `WzComparerR2.Updater`와 `WzComparerR2/Updater.cs` 역할을 분석한다.
-- [ ] CLI update command의 책임을 정한다.
-  - 최신 버전 확인
-  - 다운로드 URL 출력
-  - 다운로드
-  - self-update 또는 외부 updater 실행
-- [ ] 명령 후보
-  - `update check`
-  - `update download --out <dir>`
-  - `update apply`
-- [ ] 기존 GUI 앱 업데이트와 CLI 업데이트가 충돌하지 않도록 분리한다.
+- [x] 기존 `WzComparerR2.Updater`와 `WzComparerR2/Updater.cs` 역할을 분석한다.
+- [x] CLI update command의 책임을 정한다.
+  - [x] 최신 버전 확인
+  - [x] 다운로드 URL 출력
+  - [x] 다운로드
+  - [x] self-update 또는 외부 updater 실행 계약
+- [x] 명령 후보
+  - [x] `update check`
+  - [x] `update download --out <dir>`
+  - [x] `update apply`
+- [x] 기존 GUI 앱 업데이트와 CLI 업데이트가 충돌하지 않도록 분리한다.
 
 완료 기준:
 
-- [ ] 최신 릴리스 정보를 CLI에서 확인 가능
-- [ ] 자동 적용은 별도 안전 설계 후 진행
+- [x] 최신 릴리스 정보를 CLI에서 확인 가능
+- [x] 자동 적용은 별도 안전 설계 후 진행
 
 ## Phase 15. Config CLI
 
-- [ ] CLI 전용 config 위치를 정한다.
-  - Windows: `%APPDATA%/WzComparerR2.Cli`
-  - portable: 실행 파일 옆 config
-- [ ] 기존 `ConfigManager` 재사용 가능성을 확인한다.
-- [ ] 명령 구현
-  - `config list`
-  - `config get <key>`
-  - `config set <key> <value>`
-  - `config unset <key>`
+- [x] CLI 전용 config 위치를 정한다.
+  - Windows: `%APPDATA%/WzComparerR2/wcr2.config.json`
+  - Unix: `$XDG_CONFIG_HOME/wzcomparerr2/wcr2.config.json` 또는 `~/.config/wzcomparerr2/wcr2.config.json`
+  - override: `--config <path>` 또는 `WCR2_CLI_CONFIG`
+- [x] 기존 `ConfigManager` 재사용 가능성을 확인한다.
+- [x] 명령 구현
+  - [x] `config path`
+  - [x] `config list`
+  - [x] `config get <key>`
+  - [x] `config set <key> <value>`
+  - [x] `config unset <key>`
 - [ ] profile 지원 검토
   - `--profile kms`
   - `--profile gms`
   - `--profile custom`
-- [ ] CLI 기본값 문서화
+- [x] CLI 기본값 문서화
 
 완료 기준:
 
-- [ ] 반복 작업에서 매번 WZ 경로를 입력하지 않아도 됨
-- [ ] config 오류가 명확히 보고됨
+- [x] 반복 작업에서 매번 WZ 경로를 입력하지 않아도 됨
+- [x] config 오류가 명확히 보고됨
 
 ## Phase 16. 플러그인/확장 모델 재설계
 
-- [ ] 기존 `PluginEntry`는 WinForms 컨텍스트 중심이므로 CLI용 plugin contract를 별도 설계한다.
-- [ ] 후보 인터페이스
-  - `ICliCommandProvider`
-  - `ICliExportProvider`
-  - `ICliNodeAction`
-- [ ] 기존 GUI 플러그인과 CLI 플러그인을 동시에 지원할지 결정한다.
-- [ ] plugin discovery 경로를 정한다.
-  - `Plugin/`
-  - `CliPlugin/`
-- [ ] version compatibility 정책을 만든다.
-- [ ] 실패한 plugin load가 CLI 전체를 죽이지 않게 한다.
+- [x] 기존 `PluginEntry`는 WinForms 컨텍스트 중심이므로 CLI용 plugin contract를 별도 설계한다.
+- [x] 후보 인터페이스
+  - [x] `ICliCommandProvider`: 구현 완료
+  - [ ] `ICliExportProvider`: WZ export hook가 필요해질 때 별도 추가
+  - [ ] `ICliNodeAction`: WZ node context 전달 계약이 안정화된 뒤 추가
+- [x] 기존 GUI 플러그인과 CLI 플러그인을 동시에 지원할지 결정한다.
+  - 결정: CLI 플러그인은 `CliPlugin/`과 `ICliCommandProvider` 중심으로 분리한다. 기존 GUI `Plugin/`은 기본 스캔하지 않고 `--include-gui-plugin-dir`로 inspect만 지원한다.
+- [x] plugin discovery 경로를 정한다.
+  - `--plugin-dir`
+  - config key `plugin-dir`
+  - `WCR2_CLI_PLUGIN_DIR`
+  - 실행 파일 옆 `CliPlugin/`
+  - 현재 작업 디렉터리의 `CliPlugin/`
+  - `Plugin/`은 `--include-gui-plugin-dir` 지정 시만 스캔
+- [x] version compatibility 정책을 만든다.
+  - 1차 정책: 플러그인은 `WzComparerR2.Cli.ICliCommandProvider` public contract를 참조한다. `plugin inspect`가 assembly name/version, provider type, command descriptor를 표시한다.
+- [x] 실패한 plugin load가 CLI 전체를 죽이지 않게 한다.
+  - 실패 assembly는 `Status=failed`, `Error=<message>`로 보고하고 `plugin list/commands`는 계속 진행한다.
 
 완료 기준:
 
-- [ ] 외부 CLI 명령을 plugin assembly에서 등록 가능
-- [ ] 기존 GUI plugin loading과 충돌하지 않음
+- [x] 외부 CLI 명령을 plugin assembly에서 등록 가능
+  - `plugin commands`가 `ICliCommandProvider.GetCommands()` 결과를 수집하고, `plugin run <command>`가 provider 실행까지 수행한다.
+- [x] 기존 GUI plugin loading과 충돌하지 않음
+  - CLI 기본 경로는 `CliPlugin/`이고 GUI `Plugin/`은 opt-in scan이다.
 
 ## Phase 17. 문서화
 
@@ -454,19 +488,21 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - 예제
   - exit code
   - JSON schema
-- [ ] `README.md`에 CLI 섹션 추가
+- [x] `README.md`에 CLI 섹션 추가
 - [x] 각 명령의 `--help` 텍스트 작성
-- [ ] 마이그레이션 가이드 작성
+- [x] 마이그레이션 가이드 작성
   - GUI에서 하던 작업을 CLI로 하는 예시
-- [ ] sample scripts 작성
-  - batch extract
-  - compare report
-  - avatar render
-  - map screenshot
+- [x] sample scripts 작성
+  - [x] batch extract: `samples/cli/batch-extract.sh`
+  - [x] compare report: `samples/cli/compare-report.sh`
+  - [x] avatar metadata export: `samples/cli/avatar-metadata.sh`
+  - [x] map metadata export: `samples/cli/map-metadata.sh`
+  - [ ] avatar render: CLI image rendering 미구현으로 metadata script만 제공
+  - [ ] map screenshot: CLI screenshot rendering 미구현으로 metadata script만 제공
 
 완료 기준:
 
-- [ ] 신규 사용자가 문서만 보고 `info/tree/extract/compare`를 실행할 수 있음
+- [x] 신규 사용자가 문서만 보고 `info/tree/extract/compare`를 실행할 수 있음
 
 ## Phase 18. 테스트 전략
 
@@ -532,6 +568,8 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `info`, `tree`, `list` 구현
 - [x] `search --name`, `search --value` 기본 구현
 - [x] `extract --path --out` 기본 구현
+- [x] `dump --format json|xml|raw` 기본 구현
+- [x] `compare <old> <new>` 기본 구현
 - [x] `--json` 출력 지원
 - [x] README 또는 `docs/cli.md` 초안 추가
 - [x] 최소 테스트 또는 수동 검증 로그 추가
@@ -550,7 +588,50 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] 현재 macOS 환경은 .NET 8 런타임이 없어 `DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll --help`로 도움말 실행 확인
 - [x] 없는 파일 입력 시 exit code `2`와 오류 메시지 확인
 - [x] `extract` 도움말 노출 및 없는 파일 입력 시 exit code `2` 확인
-- [ ] 실제 WZ/MS 샘플 기반 `info/tree/list/search/extract` 검증 필요
+- [x] `search --match-path`, `--type`, `--regex` 도움말 노출 및 잘못된 regex 입력 시 exit code `1` 확인
+- [x] `dump` 도움말 노출 및 없는 파일 입력 시 exit code `2` 확인
+- [x] `compare` 도움말 노출, 인자 부족 시 exit code `1`, 없는 파일 입력 시 exit code `2`, 잘못된 `--type` 입력 시 exit code `1` 확인
+- [x] `compare --format markdown --out <path>` 구현
+- [x] `patch inspect` 도움말 노출 및 없는 파일 입력 시 exit code `2` 확인
+- [x] `patch dry-run` 도움말, 인자 부족, 없는 patch 파일, 없는 target 폴더 입력 검증
+- [x] `patch apply` 도움말, 인자 부족, 없는 patch 파일, 없는 target 폴더, target과 같은 out 입력 검증
+- [x] `skill`, `animate` 도움말 노출 확인
+- [x] `avatar inspect --code "1002140,1040036,1060026" --json` 파싱 출력 확인
+- [x] `avatar unpack --code abc --json` 경고 출력 확인
+- [x] `skill info /no/such.wz --id 1001004` 없는 파일 입력 시 exit code `2` 확인
+- [x] `map` 도움말 노출 확인
+- [x] `lua run WzComparerR2.LuaConsole/Examples/DumpXml.lua --dry-run --json` 출력 확인
+- [x] `network server-info --json` dry-run 출력 확인
+- [x] `map portals /no/such.wz --id 100000000` 없는 파일 입력 시 exit code `2` 확인
+- [x] `network send` 메시지 누락 시 exit code `1` 확인
+- [x] `lua run /no/script.lua --dry-run --json` 없는 파일 입력 시 exit code `2` 확인
+- [x] `update --help` 도움말 노출 확인
+- [x] `update check --asset net8 --json`으로 GitHub latest release 조회 확인
+- [x] 현재 latest release가 통합 zip asset만 제공할 때 `--asset net8`이 zip fallback을 선택하는지 확인
+- [x] `update apply --asset net8 --json` dry-run 출력과 외부 updater 실행 안전장치 확인
+- [x] `update download --asset bad --out <dir>` 잘못된 asset 입력 시 exit code `1` 확인
+- [x] `update apply --execute --asset net10 --updater /no/updater` 기존 updater 미지원 asset 차단 확인
+- [x] `config path --config <tmp> --json` 경로와 존재 여부 출력 확인
+- [x] `config set/get/list/unset` 임시 JSON 파일 기반 동작 확인
+- [x] `config get <missing> --json` 누락 key에서 exit code `2` 확인
+- [x] `default-wz` 설정 후 `info --config <tmp>`가 positional input 없이 설정 경로를 fallback으로 쓰는지 확인
+- [x] `plugin --help`, `plugin list --json`, `plugin inspect <wcr2.dll> --json` 출력 확인
+- [x] 깨진 DLL이 있는 `plugin list --plugin-dir <tmp> --json`가 exit code `0`으로 계속 진행하고 `LoadFailedCount`/`Error`를 보고하는지 확인
+- [x] `/tmp` 테스트 플러그인이 `ICliCommandProvider`로 `hello` 명령을 등록하고 `plugin commands --plugin-dir <tmp> --json`에서 탐지되는지 확인
+- [x] `/tmp` 테스트 플러그인을 `plugin run hello Codex --plugin-dir <tmp> --json`으로 실행하고 stdout이 JSON `Stdout` 필드에 캡처되는지 확인
+- [x] Phase 17 문서화: README CLI 섹션, `docs/cli-migration.md`, `samples/cli/*.sh`, `docs/cli.md` first-run/JSON contract 추가
+- [x] `dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Debug --no-restore -p:UseSharedCompilation=false -p:UseAppHost=false -v:minimal` 재검증 통과
+- [x] `git diff --check` 공백 오류 없음
+- [x] 현재 저장소 안에서 `.wz`, `.img`, `.ms`, `.patch` 샘플 파일을 찾지 못함
+- [x] 현재 macOS 환경 PATH에서 `lua`, `lua5.4`, `lua5.3`, `luajit` 실행기를 찾지 못함
+- [ ] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증 필요
+- [ ] 실제 WZ/MS 샘플 기반 `skill/item/gear/map info`, `animate frames` 검증 필요
+- [ ] 실제 WZ/MS 샘플 기반 `map objects/portals/life/reactors` 검증 필요
+- [ ] 외부 lua 실행기와 CLI용 Lua API 기반 실제 script 실행 검증 필요
+- [ ] Network 실제 서버 protocol handshake 검증 필요
+- [ ] 실제 patch 파일 기반 `patch inspect` 검증 필요
+- [ ] 실제 patch 파일과 target 폴더 기반 `patch dry-run` 검증 필요
+- [ ] 실제 patch 파일과 target 폴더 기반 `patch apply` 검증 필요
 
 ## 주요 리스크
 

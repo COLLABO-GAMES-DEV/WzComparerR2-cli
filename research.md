@@ -194,6 +194,64 @@ WZ/MS 파일 포맷을 다루는 가장 낮은 레벨입니다.
 4. Windows 환경에서 `dotnet build WzComparerR2.sln -c Release /p:Platform="Any CPU"`
 5. 플러그인 관련 변경이면 출력 폴더의 `Plugin/<ProjectName>`과 `Lib/<arch>` 복사 결과 확인
 
+## CLI 전환 구현 후 재검증 메모
+
+작성일: 2026-05-27
+
+현재 CLI 프로젝트는 `WzComparerR2.Cli`이며, `WzComparerR2.WzLib`의 `net8.0` 타깃을 참조합니다. 실행 파일 이름은 `wcr2`로 설정되어 있습니다.
+
+구현된 CLI 표면:
+
+| 기능군 | 명령 | 현재 상태 |
+| --- | --- | --- |
+| 기본 탐색 | `info`, `tree`, `list` | 구현됨. 실제 WZ/MS 샘플 검증은 아직 필요 |
+| 검색 | `search --name`, `--value`, `--match-path`, `--type`, `--regex` | 구현됨. 잘못된 regex 오류 경로 확인 |
+| 덤프/추출 | `dump --format json|xml|raw`, `extract --recursive`, `--manifest` | 구현됨. PNG/sound/raw/video blob export 경로는 실제 샘플 검증 필요 |
+| 비교 | `compare <old> <new>`, `--type`, `--format json|markdown`, `--out` | 노드 타입/값 메타데이터 기준으로 구현됨. 기존 GUI comparer의 픽셀 비교와 HTML report는 미이식 |
+| 패치 | `patch inspect`, `patch dry-run`, `patch apply` | patcher 코드를 CLI 프로젝트에 링크해 구현. 실제 patch 파일 기반 검증 필요 |
+| 도메인 조회 | `skill/item/gear/map info` | id 노드 탐색과 `--string-wz` 이름/설명 보강 구현. CharaSim tooltip renderer는 미이식 |
+| 애니메이션 | `animate frames` | 숫자 프레임 노드 추출과 `frames.json` manifest 구현. GIF/APNG encoder는 미이식 |
+| 아바타 | `avatar inspect`, `avatar unpack` | avatar code 안의 item id 추출과 prefix 기반 슬롯 추정 구현. 실제 avatar renderer는 미이식 |
+| 맵 metadata | `map objects`, `map portals`, `map life`, `map reactors` | map `.img` 섹션의 scalar property JSON export 구현. MonoGame screenshot render는 미이식 |
+| Lua | `lua run` | 외부 `lua` 실행기 브릿지와 `--dry-run` 구현. NLua 기반 `LuaSandbox`/`env` API는 CLI에 직접 이식하지 않음 |
+| Network | `network server-info`, `network chat`, `network send` | dry-run과 `server-info --connect` TCP probe만 구현. protocol handshake/login/chat은 미이식 |
+| Updater | `update check`, `update download`, `update apply` | GitHub latest release 조회와 asset 다운로드 구현. `apply`는 기본 dry-run이며 `--execute --updater <path>`일 때만 외부 updater 실행 |
+| Config | `config path/list/get/set/unset` | GUI `Setting.config`와 분리된 CLI 전용 JSON key/value 저장소 구현. `--config`와 `WCR2_CLI_CONFIG` override 및 `default-wz` 입력 fallback 지원 |
+
+재검증 결과:
+
+- `dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Debug --no-restore -p:UseSharedCompilation=false -p:UseAppHost=false -v:minimal` 통과. 경고 0개, 오류 0개.
+- `DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll --help`로 도움말 표면 확인.
+- `avatar inspect --code "1002140,1040036,1060026" --json` 정상 JSON 출력 확인.
+- `lua run WzComparerR2.LuaConsole/Examples/DumpXml.lua --dry-run --json` 정상 dry-run 출력 확인.
+- `network send --message hi --json` 정상 dry-run 출력 확인.
+- `update check --asset net8 --json`으로 GitHub latest release 조회 정상 확인. 2026-05-20 생성된 `m26052000` 릴리스와 통합 zip asset을 확인.
+- `update apply --asset net8 --json`은 dry-run으로 외부 updater 실행 계획만 출력하는 것을 확인.
+- `update download --asset bad --out <dir>`는 잘못된 asset kind로 exit code `1`을 반환하는 것을 확인.
+- `config path/set/get/list/unset`을 임시 JSON config 파일로 검증. 누락 key 조회는 exit code `2` 반환 확인. `default-wz` 설정 후 입력 경로를 생략한 `info --config <tmp>`가 설정 경로를 사용해 없는 파일 exit code `2`를 반환하는 fallback 경로도 확인.
+- 오류 경로 확인: invalid regex는 exit code `1`, 없는 WZ/map/lua 파일은 exit code `2`, `network send` 메시지 누락은 exit code `1`.
+- `git diff --check` 기준 공백 오류 없음.
+
+현재 검증 한계:
+
+- 이 저장소 안에서 `.wz`, `.img`, `.ms`, `.patch` 샘플 파일을 찾지 못했습니다. 따라서 WZ/MS happy path, patch happy path, animation frame 실제 PNG export, map metadata 실제 JSON 출력은 아직 샘플 기반 검증이 필요합니다.
+- 현재 macOS 환경에는 .NET 10 런타임만 있어 CLI 실행 시 `DOTNET_ROLL_FORWARD=Major`가 필요합니다.
+- 현재 `PATH`에서 `lua`, `lua5.4`, `lua5.3`, `luajit` 실행기를 찾지 못했습니다. `lua run`의 실제 실행 경로는 외부 lua 설치 후 검증해야 합니다.
+- 전체 Windows GUI solution build는 아직 이 환경에서 검증하지 않았습니다. WinForms, MonoGame, 네이티브 DLL, `CharaSimResource` 서브모듈 때문에 Windows 기준 검증이 별도로 필요합니다.
+
+설계상 새로 확인한 제약:
+
+- `WzComparerR2.LuaConsole`은 NLua/KeraLua를 쓰지만 `System.Windows.Forms.Application.StartupPath`와 plugin `Entry` assembly 위치를 전제로 합니다. 그래서 CLI에서 프로젝트를 직접 참조하기보다, 당장은 외부 lua 프로세스 방식이 더 작고 안전합니다.
+- `WzComparerR2.Network`는 `WcClient`와 `Contracts`가 분리되어 있지만 plugin `Entry`가 UI logger, config, auto reconnect, login handshake를 함께 들고 있습니다. CLI에서 실제 채팅을 하려면 protocol handshake와 session state를 별도 서비스로 분리해야 합니다.
+- `WzComparerR2/Updater.cs`는 GitHub latest release 조회와 asset 선택을 담당하고, `WzComparerR2.Updater` 실행 파일은 zip 압축 해제와 GUI 앱 파일 교체를 담당합니다. CLI는 직접 self-update를 수행하지 않고 `update check/download`와 외부 updater 실행 계약으로 분리하는 편이 GUI 업데이트와 충돌하지 않습니다.
+- 현재 GitHub latest release는 `net8` 개별 asset 대신 통합 zip 하나를 제공합니다. CLI의 `--asset net8`은 통합 zip으로 fallback하되, 외부 updater 실행 시에는 기존 updater가 요구하는 버전 인자 `8`을 별도로 전달해야 합니다.
+- `WzComparerR2.Common/Config/ConfigManager.cs`는 `System.Windows.Forms.Application.StartupPath`와 `Setting.config`를 사용합니다. CLI에서 그대로 재사용하면 GUI 설정 파일과 lifecycle이 섞이므로, 현재는 OS별 user config 경로에 JSON 파일을 두는 별도 저장소가 더 안전합니다.
+- 기존 `WzComparerR2.PluginBase.PluginEntry`는 생성자부터 `PluginContext`를 요구하고, `PluginContext`는 `Form`, `DotNetBarManager`, ribbon/tab 추가 API, 선택 노드 이벤트에 묶여 있습니다. 따라서 CLI 플러그인은 GUI `PluginEntry`를 재사용하지 않고 `WzComparerR2.Cli.ICliCommandProvider` public contract로 분리했습니다.
+- CLI plugin discovery는 GUI `Plugin/`과 충돌하지 않도록 기본 경로를 `CliPlugin/`로 정했습니다. 명시 경로는 `--plugin-dir`, config key `plugin-dir`, `WCR2_CLI_PLUGIN_DIR`가 우선이고, GUI `Plugin/`은 `--include-gui-plugin-dir`가 있을 때만 inspect 대상으로 스캔합니다.
+- CLI plugin load는 `AssemblyDependencyResolver` 기반의 별도 `AssemblyLoadContext`를 사용하고, `WzComparerR2.Cli` assembly만 현재 실행 assembly로 되돌려 provider interface identity를 맞춥니다. 깨진 DLL이나 GUI 전용 DLL은 CLI 전체를 죽이지 않고 plugin 결과의 `Error`로 남깁니다.
+- `WzComparerR2.MapRender`는 MonoGame `Game`, graphics device, EmptyKeys UI, Bass/Native dependency와 강하게 연결되어 있습니다. CLI에서는 screenshot render보다 WZ metadata export를 먼저 제공하는 것이 현실적입니다.
+- `Avatar`와 `CharaSim` 계열은 실제 렌더링/툴팁으로 갈수록 WinForms/GDI/Common renderer 의존이 커집니다. 현재 CLI의 id/prefix 기반 정보 출력은 “탐색용 metadata” 수준이며 GUI와 동일한 결과물은 아닙니다.
+
 ## 처음 작업할 때 주의할 점
 
 - 이 프로젝트는 Windows 데스크톱/WinForms/DirectX/네이티브 DLL에 강하게 묶여 있습니다. macOS에서 구조 분석은 가능하지만 실제 빌드/실행 검증은 Windows가 사실상 필요합니다.

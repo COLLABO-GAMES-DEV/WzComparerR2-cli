@@ -18,4 +18,16 @@
   <ItemGroup>
     <ProjectReference Include="..\WzComparerR2.WzLib\WzComparerR2.WzLib.csproj" SetTargetFramework="TargetFramework=net8.0" AdditionalProperties="NuGetAudit=false;RestoreIgnoreFailedSources=true" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\WzComparerR2\Patcher\WzPatcher.cs" Link="Patcher\WzPatcher.cs" />
+    <Compile Include="..\WzComparerR2\Patcher\PatchPartContext.cs" Link="Patcher\PatchPartContext.cs" />
+    <Compile Include="..\WzComparerR2\Patcher\PatchingEventArgs.cs" Link="Patcher\PatchingEventArgs.cs" />
+    <Compile Include="..\WzComparerR2\Patcher\PatchingState.cs" Link="Patcher\PatchingState.cs" />
+    <Compile Include="..\WzComparerR2\Patcher\Builder\BuildInstruction.cs" Link="Patcher\Builder\BuildInstruction.cs" />
+    <Compile Include="..\WzComparerR2\Patcher\Builder\BuildType.cs" Link="Patcher\Builder\BuildType.cs" />
+    <Compile Include="..\WzComparerR2\Patcher\Builder\CheckSum.cs" Link="Patcher\Builder\CheckSum.cs" />
+    <Compile Include="..\WzComparerR2\Patcher\Builder\InflateStream.cs" Link="Patcher\Builder\InflateStream.cs" />
+    <Compile Include="..\WzComparerR2\Patcher\Builder\StreamUtils.cs" Link="Patcher\Builder\StreamUtils.cs" />
+  </ItemGroup>
 </Project>

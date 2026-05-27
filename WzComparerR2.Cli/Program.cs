@@ -1,10 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Xml;
+using System.Threading;
+using WzComparerR2.Patcher;
+using WzComparerR2.Patcher.Builder;
 using WzComparerR2.WzLib;
 
 namespace WzComparerR2.Cli
@@ -16,6 +25,7 @@ namespace WzComparerR2.Cli
         private const int ExitNotFound = 2;
         private const int ExitLoadFailed = 3;
         private const int ExitInternalError = 5;
+        private const string CliVersion = "0.1.0";
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
@@ -45,11 +55,38 @@ namespace WzComparerR2.Cli
                         return RunList(parsed);
                     case "search":
                         return RunSearch(parsed);
+                    case "compare":
+                        return RunCompare(parsed);
+                    case "dump":
+                        return RunDump(parsed);
                     case "extract":
                         return RunExtract(parsed);
+                    case "patch":
+                        return RunPatch(parsed);
+                    case "skill":
+                        return RunDomainInfo(parsed, "skill");
+                    case "item":
+                    case "gear":
+                        return RunDomainInfo(parsed, command);
+                    case "map":
+                        return RunMap(parsed);
+                    case "animate":
+                        return RunAnimate(parsed);
+                    case "avatar":
+                        return RunAvatar(parsed);
+                    case "lua":
+                        return RunLua(parsed);
+                    case "network":
+                        return RunNetwork(parsed);
+                    case "update":
+                        return RunUpdate(parsed).GetAwaiter().GetResult();
+                    case "config":
+                        return RunConfig(parsed);
+                    case "plugin":
+                        return RunPlugin(parsed);
                     case "version":
                     case "--version":
-                        Console.WriteLine("wcr2 cli 0.1.0");
+                        Console.WriteLine("wcr2 cli " + CliVersion);
                         return ExitSuccess;
                     default:
                         Console.Error.WriteLine("Unknown command: " + command);
@@ -166,17 +203,20 @@ namespace WzComparerR2.Cli
             string valueQuery = args.GetValue("value");
             string nodePath = args.GetValue("path");
             bool extractImages = args.HasFlag("extract-images");
-            int maxResults = args.GetInt("max-results", 100);
+            var searchOptions = SearchOptions.FromArgs(args);
 
-            if (string.IsNullOrEmpty(nameQuery) && string.IsNullOrEmpty(valueQuery))
+            if (string.IsNullOrEmpty(nameQuery) && string.IsNullOrEmpty(valueQuery) && string.IsNullOrEmpty(searchOptions.PathQuery))
             {
-                throw new UsageException("search requires --name <text> or --value <text>.");
+                throw new UsageException("search requires --name <text>, --value <text>, or --match-path <pattern>.");
             }
 
             using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
             {
                 Wz_Node node = ResolveRequiredNode(context.Root, nodePath, extractImages);
-                var results = Search(node, nameQuery, valueQuery, maxResults, extractImages);
+                searchOptions.NameQuery = nameQuery;
+                searchOptions.ValueQuery = valueQuery;
+                searchOptions.ExtractImages = extractImages;
+                var results = Search(node, searchOptions);
                 WriteOutput(results, json, writer =>
                 {
                     foreach (var result in results)
@@ -184,6 +224,1153 @@ namespace WzComparerR2.Cli
                         writer.WriteLine(result.Path + "\t" + result.Type + FormatOptionalValue(result.Value));
                     }
                 });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunDomainInfo(ParsedArgs args, string kind)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintDomainHelp(kind);
+                return ExitSuccess;
+            }
+            if (!string.Equals(args.Positionals[0], "info", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UsageException("Unknown " + kind + " command: " + args.Positionals[0]);
+            }
+            string input = RequireInputAt(args, 1, kind + " info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            string id = args.GetValue("id");
+            bool json = args.HasFlag("json");
+            string stringWz = args.GetValue("string-wz");
+            if (string.IsNullOrEmpty(id))
+            {
+                throw new UsageException(kind + " info requires --id <id>.");
+            }
+
+            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            {
+                Wz_Node dataNode = DomainInfoFinder.FindDataNode(context.Root, kind, id);
+                if (dataNode == null)
+                {
+                    throw new UsageException(kind + " id not found: " + id);
+                }
+
+                DomainStringInfo stringInfo = null;
+                if (!string.IsNullOrEmpty(stringWz))
+                {
+                    using (var stringContext = WzLoadContext.Load(stringWz, WzLoadOptions.FromArgs(args)))
+                    {
+                        stringInfo = DomainInfoFinder.FindStringInfo(stringContext.Root, kind, id);
+                    }
+                }
+
+                var dto = DomainInfoDto.FromNode(kind, id, dataNode, stringInfo);
+                WriteOutput(dto, json, writer =>
+                {
+                    writer.WriteLine(kind + " " + id);
+                    writer.WriteLine("Path: " + dto.Path);
+                    if (!string.IsNullOrEmpty(dto.Name))
+                    {
+                        writer.WriteLine("Name: " + dto.Name);
+                    }
+                    if (!string.IsNullOrEmpty(dto.Description))
+                    {
+                        writer.WriteLine("Description: " + dto.Description);
+                    }
+                    writer.WriteLine("Children: " + dto.ChildrenCount + " Properties: " + dto.Properties.Count);
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunAnimate(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintAnimateHelp();
+                return ExitSuccess;
+            }
+            if (!string.Equals(args.Positionals[0], "frames", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UsageException("Unknown animate command: " + args.Positionals[0]);
+            }
+            string input = RequireInputAt(args, 1, "animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
+            string nodePath = args.GetValue("path");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+            bool json = args.HasFlag("json");
+            if (string.IsNullOrEmpty(nodePath))
+            {
+                throw new UsageException("animate frames requires --path <wz-path>.");
+            }
+            if (string.IsNullOrEmpty(output))
+            {
+                throw new UsageException("animate frames requires --out <dir>.");
+            }
+
+            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            {
+                Wz_Node node = ResolveRequiredNode(context.Root, nodePath, true);
+                var result = AnimationFrameExporter.ExportFrames(node, output);
+                WriteOutput(result, json, writer =>
+                {
+                    writer.WriteLine("Frames: " + result.FrameCount);
+                    writer.WriteLine("Output: " + result.OutputDirectory);
+                    writer.WriteLine("Manifest: " + result.ManifestPath);
+                    foreach (var frame in result.Frames)
+                    {
+                        writer.WriteLine(frame.Index + "\tdelay=" + frame.Delay + "\tfiles=" + frame.Files.Count);
+                    }
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunAvatar(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintAvatarHelp();
+                return ExitSuccess;
+            }
+
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            if (subCommand != "inspect" && subCommand != "unpack")
+            {
+                throw new UsageException("Unknown avatar command: " + args.Positionals[0]);
+            }
+
+            string code = args.GetValue("code");
+            bool json = args.HasFlag("json") || subCommand == "unpack";
+            if (string.IsNullOrEmpty(code))
+            {
+                throw new UsageException("avatar " + subCommand + " requires --code <code>.");
+            }
+
+            var result = AvatarCodeDto.Parse(code);
+            WriteOutput(result, json, writer =>
+            {
+                writer.WriteLine("Avatar code items: " + result.Items.Count);
+                foreach (var item in result.Items)
+                {
+                    writer.WriteLine(item.Id + "\t" + item.Category);
+                }
+            });
+            return ExitSuccess;
+        }
+
+        private static int RunMap(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintMapHelp();
+                return ExitSuccess;
+            }
+
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            if (subCommand == "info")
+            {
+                return RunDomainInfo(args, "map");
+            }
+
+            if (subCommand != "objects" && subCommand != "portals" && subCommand != "life" && subCommand != "reactors")
+            {
+                throw new UsageException("Unknown map command: " + args.Positionals[0]);
+            }
+            string input = RequireInputAt(args, 1, "map " + subCommand + " <map-wz-file-or-dir> --id <map-id> [--json]");
+            string id = args.GetValue("id");
+            bool json = args.HasFlag("json");
+            if (string.IsNullOrEmpty(id))
+            {
+                throw new UsageException("map " + subCommand + " requires --id <map-id>.");
+            }
+
+            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            {
+                Wz_Node mapNode = DomainInfoFinder.FindDataNode(context.Root, "map", id);
+                if (mapNode == null)
+                {
+                    throw new UsageException("map id not found: " + id);
+                }
+
+                var result = MapMetadataDto.FromMapNode(id, mapNode, subCommand);
+                WriteOutput(result, json, writer =>
+                {
+                    writer.WriteLine("Map " + id);
+                    writer.WriteLine("Path: " + result.Path);
+                    writer.WriteLine("Portals: " + result.Portals.Count + " Life: " + result.Life.Count + " Reactors: " + result.Reactors.Count + " Objects: " + result.Objects.Count);
+                    foreach (var item in result.SelectedItems)
+                    {
+                        writer.WriteLine(item.Kind + "\t" + item.Index + "\t" + item.Path + FormatOptionalValue(item.Summary));
+                    }
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunLua(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintLuaHelp();
+                return ExitSuccess;
+            }
+
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            if (subCommand != "run")
+            {
+                throw new UsageException("Unknown lua command: " + args.Positionals[0]);
+            }
+            if (args.Positionals.Count < 2)
+            {
+                throw new UsageException("Usage: wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--json]");
+            }
+
+            string scriptPath = args.Positionals[1];
+            string wzInput = args.GetValue("wz");
+            bool json = args.HasFlag("json");
+            bool dryRun = args.HasFlag("dry-run");
+            int timeoutSeconds = args.GetInt("timeout", 30);
+
+            var result = LuaRunResultDto.Create(scriptPath, wzInput);
+            if (!File.Exists(result.ScriptPath))
+            {
+                throw new FileNotFoundException("Lua script not found: " + scriptPath);
+            }
+
+            if (!string.IsNullOrEmpty(wzInput))
+            {
+                using (var context = WzLoadContext.Load(wzInput, WzLoadOptions.FromArgs(args)))
+                {
+                    result.WzRootName = context.Root.Text;
+                    result.WzRootChildren = context.Root.Nodes.Count;
+                }
+            }
+
+            if (dryRun)
+            {
+                result.Mode = "dry-run";
+                result.ExitCode = 0;
+            }
+            else
+            {
+                LuaExternalRunner.Run(result, timeoutSeconds);
+            }
+
+            WriteOutput(result, json, writer =>
+            {
+                writer.WriteLine("Lua: " + result.ScriptPath);
+                writer.WriteLine("Mode: " + result.Mode + " ExitCode: " + result.ExitCode);
+                if (!string.IsNullOrEmpty(result.LuaExecutable))
+                {
+                    writer.WriteLine("Executable: " + result.LuaExecutable);
+                }
+                if (!string.IsNullOrEmpty(result.WzInputPath))
+                {
+                    writer.WriteLine("WZ: " + result.WzInputPath + " root=" + result.WzRootName);
+                }
+                if (!string.IsNullOrEmpty(result.Stdout))
+                {
+                    writer.WriteLine(result.Stdout);
+                }
+                if (!string.IsNullOrEmpty(result.Stderr))
+                {
+                    writer.WriteLine(result.Stderr);
+                }
+            });
+
+            return result.ExitCode == 0 ? ExitSuccess : ExitInternalError;
+        }
+
+        private static int RunNetwork(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintNetworkHelp();
+                return ExitSuccess;
+            }
+
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            bool json = args.HasFlag("json");
+            var result = NetworkCommandDto.FromArgs(subCommand, args);
+
+            if (subCommand == "server-info")
+            {
+                if (args.HasFlag("connect"))
+                {
+                    NetworkProbe.TryConnect(result, args.GetInt("timeout", 5));
+                }
+            }
+            else if (subCommand == "chat")
+            {
+                result.Message = "Interactive chat is not enabled in CLI yet; this command currently validates connection settings only.";
+            }
+            else if (subCommand == "send")
+            {
+                if (string.IsNullOrEmpty(args.GetValue("message")))
+                {
+                    throw new UsageException("network send requires --message <text>.");
+                }
+                result.Message = "Send dry-run prepared. Use the GUI network plugin for live chat until protocol handshakes are wired into CLI.";
+            }
+            else
+            {
+                throw new UsageException("Unknown network command: " + args.Positionals[0]);
+            }
+
+            WriteOutput(result, json, writer =>
+            {
+                writer.WriteLine("Network " + result.Command);
+                writer.WriteLine("Host: " + result.Host + " Port: " + result.Port);
+                writer.WriteLine("Mode: " + result.Mode);
+                if (!string.IsNullOrEmpty(result.Message))
+                {
+                    writer.WriteLine(result.Message);
+                }
+                if (!string.IsNullOrEmpty(result.Error))
+                {
+                    writer.WriteLine("Error: " + result.Error);
+                }
+            });
+
+            return result.Success ? ExitSuccess : ExitInternalError;
+        }
+
+        private static async System.Threading.Tasks.Task<int> RunUpdate(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintUpdateHelp();
+                return ExitSuccess;
+            }
+
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            if (subCommand != "check" && subCommand != "download" && subCommand != "apply")
+            {
+                throw new UsageException("Unknown update command: " + args.Positionals[0]);
+            }
+
+            if (subCommand == "download" && string.IsNullOrEmpty(args.GetValue("out")))
+            {
+                throw new UsageException("update download requires --out <dir>.");
+            }
+
+            string assetKind = args.GetValue("asset") ?? "net8";
+            if (!IsUpdateAssetKind(assetKind))
+            {
+                throw new UsageException("--asset must be net8, net10, net6, net462, or zip.");
+            }
+            var result = await UpdateClient.QueryLatestAsync(args).ConfigureAwait(false);
+            result.SelectedAsset = result.SelectAsset(assetKind);
+
+            if (subCommand == "download")
+            {
+                if (result.SelectedAsset == null)
+                {
+                    throw new UsageException("No update asset matched --asset " + assetKind + ".");
+                }
+
+                string outputPath = await UpdateClient.DownloadAssetAsync(result.SelectedAsset, args.GetValue("out"), args.HasFlag("force"), args.GetInt("timeout", 30)).ConfigureAwait(false);
+                var download = UpdateDownloadResultDto.FromRelease(result, outputPath);
+                WriteOutput(download, args.HasFlag("json"),
+                    writer =>
+                    {
+                        writer.WriteLine("Downloaded: " + download.OutputPath);
+                        writer.WriteLine("Asset: " + download.Asset.Name + " (" + download.Asset.Size + " bytes)");
+                    });
+                return ExitSuccess;
+            }
+
+            if (subCommand == "apply")
+            {
+                var plan = UpdateApplyPlanDto.FromRelease(result, args, assetKind);
+                if (args.HasFlag("execute"))
+                {
+                    await UpdateClient.ExecuteApplyAsync(plan, args.HasFlag("force"), args.GetInt("timeout", 30)).ConfigureAwait(false);
+                }
+
+                WriteOutput(plan, args.HasFlag("json"),
+                    writer =>
+                    {
+                        writer.WriteLine("Update apply mode: " + plan.Mode);
+                        writer.WriteLine("Release: " + plan.Release.TagName + " updateAvailable=" + FormatNullableBool(plan.Release.UpdateAvailable));
+                        writer.WriteLine("Asset: " + (plan.Asset == null ? "(none)" : plan.Asset.Name));
+                        writer.WriteLine("Updater: " + (plan.UpdaterPath ?? "(required for --execute)"));
+                        writer.WriteLine(plan.Message);
+                    });
+                return plan.Success ? ExitSuccess : ExitUsage;
+            }
+
+            WriteOutput(result, args.HasFlag("json"),
+                writer =>
+                {
+                    writer.WriteLine("Repository: " + result.Repository);
+                    writer.WriteLine("Current: " + (result.CurrentVersion ?? "(unknown)"));
+                    writer.WriteLine("Latest: " + (result.TagName ?? result.Name));
+                    writer.WriteLine("Update available: " + FormatNullableBool(result.UpdateAvailable));
+                    if (result.SelectedAsset != null)
+                    {
+                        writer.WriteLine("Selected asset: " + result.SelectedAsset.Name);
+                        writer.WriteLine("Download: " + result.SelectedAsset.BrowserDownloadUrl);
+                    }
+            });
+            return ExitSuccess;
+        }
+
+        private static int RunConfig(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintConfigHelp();
+                return ExitSuccess;
+            }
+
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            var store = CliConfigStore.Open(args.GetValue("config"));
+
+            switch (subCommand)
+            {
+                case "path":
+                {
+                    var result = ConfigPathDto.FromStore(store);
+                    WriteOutput(result, args.HasFlag("json"),
+                        writer =>
+                        {
+                            writer.WriteLine(result.Path);
+                            writer.WriteLine("exists=" + result.Exists.ToString().ToLowerInvariant());
+                        });
+                    return ExitSuccess;
+                }
+                case "list":
+                {
+                    var result = ConfigListDto.FromStore(store);
+                    WriteOutput(result, args.HasFlag("json"),
+                        writer =>
+                        {
+                            if (result.Values.Count == 0)
+                            {
+                                writer.WriteLine("(empty)");
+                                return;
+                            }
+
+                            foreach (var item in result.Values)
+                            {
+                                writer.WriteLine(item.Key + "=" + item.Value);
+                            }
+                        });
+                    return ExitSuccess;
+                }
+                case "get":
+                {
+                    if (args.Positionals.Count < 2)
+                    {
+                        throw new UsageException("Usage: wcr2 config get <key> [--json]");
+                    }
+
+                    string key = args.Positionals[1];
+                    var result = ConfigValueDto.FromStore(store, key);
+                    WriteOutput(result, args.HasFlag("json"),
+                        writer =>
+                        {
+                            if (result.Found)
+                            {
+                                writer.WriteLine(result.Value);
+                            }
+                            else
+                            {
+                                writer.WriteLine("Config key not found: " + key);
+                            }
+                        });
+                    return result.Found ? ExitSuccess : ExitNotFound;
+                }
+                case "set":
+                {
+                    if (args.Positionals.Count < 3)
+                    {
+                        throw new UsageException("Usage: wcr2 config set <key> <value> [--json]");
+                    }
+
+                    string key = args.Positionals[1];
+                    string value = args.Positionals[2];
+                    store.Set(key, value);
+                    store.Save();
+                    var result = ConfigValueDto.FromStore(store, key);
+                    WriteOutput(result, args.HasFlag("json"),
+                        writer => writer.WriteLine(result.Key + "=" + result.Value));
+                    return ExitSuccess;
+                }
+                case "unset":
+                {
+                    if (args.Positionals.Count < 2)
+                    {
+                        throw new UsageException("Usage: wcr2 config unset <key> [--json]");
+                    }
+
+                    string key = args.Positionals[1];
+                    bool removed = store.Unset(key);
+                    store.Save();
+                    var result = new ConfigUnsetDto
+                    {
+                        Path = store.Path,
+                        Key = key,
+                        Removed = removed,
+                        Count = store.Values.Count
+                    };
+                    WriteOutput(result, args.HasFlag("json"),
+                        writer => writer.WriteLine((removed ? "removed " : "not found ") + key));
+                    return ExitSuccess;
+                }
+                default:
+                    throw new UsageException("Unknown config command: " + args.Positionals[0]);
+            }
+        }
+
+        private static int RunPlugin(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintPluginHelp();
+                return ExitSuccess;
+            }
+
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            bool json = args.HasFlag("json");
+
+            switch (subCommand)
+            {
+                case "list":
+                {
+                    var result = CliPluginRegistry.Discover(args);
+                    WriteOutput(result, json,
+                        writer =>
+                        {
+                            writer.WriteLine("Plugin directories:");
+                            foreach (string directory in result.Directories)
+                            {
+                                writer.WriteLine("- " + directory);
+                            }
+                            writer.WriteLine("Plugins: " + result.Plugins.Count + " loadFailed=" + result.LoadFailedCount);
+                            foreach (var plugin in result.Plugins)
+                            {
+                                writer.WriteLine(plugin.Status + "\tcommands=" + plugin.Commands.Count + "\t" + plugin.Path);
+                                if (!string.IsNullOrEmpty(plugin.Error))
+                                {
+                                    writer.WriteLine("  error: " + plugin.Error);
+                                }
+                            }
+                        });
+                    return ExitSuccess;
+                }
+                case "inspect":
+                {
+                    if (args.Positionals.Count < 2)
+                    {
+                        throw new UsageException("Usage: wcr2 plugin inspect <assembly.dll> [--json]");
+                    }
+
+                    var result = CliPluginRegistry.InspectFile(args.Positionals[1]);
+                    WriteOutput(result, json,
+                        writer =>
+                        {
+                            writer.WriteLine(result.Status + "\t" + result.Path);
+                            writer.WriteLine("Assembly: " + (result.AssemblyName ?? "(unknown)"));
+                            writer.WriteLine("Version: " + (result.AssemblyVersion ?? "(unknown)"));
+                            writer.WriteLine("CLI providers: " + result.ProviderTypes.Count + " GUI entries: " + result.GuiPluginEntryTypes.Count);
+                            foreach (var command in result.Commands)
+                            {
+                                writer.WriteLine(command.Name + "\t" + command.ProviderType + FormatOptionalValue(command.Summary));
+                            }
+                            if (!string.IsNullOrEmpty(result.Error))
+                            {
+                                writer.WriteLine("Error: " + result.Error);
+                            }
+                        });
+                    return result.Success ? ExitSuccess : ExitInternalError;
+                }
+                case "commands":
+                {
+                    var result = CliPluginRegistry.Discover(args);
+                    var commands = result.Plugins
+                        .SelectMany(plugin => plugin.Commands.Select(command => new CliPluginCommandListItemDto
+                        {
+                            PluginPath = plugin.Path,
+                            ProviderType = command.ProviderType,
+                            Name = command.Name,
+                            Summary = command.Summary,
+                            Usage = command.Usage
+                        }))
+                        .OrderBy(command => command.Name, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(command => command.PluginPath, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    WriteOutput(commands, json,
+                        writer =>
+                        {
+                            if (commands.Count == 0)
+                            {
+                                writer.WriteLine("(no cli plugin commands)");
+                                return;
+                            }
+
+                            foreach (var command in commands)
+                            {
+                                writer.WriteLine(command.Name + "\t" + command.PluginPath + FormatOptionalValue(command.Summary));
+                            }
+                        });
+                    return ExitSuccess;
+                }
+                case "run":
+                {
+                    if (args.Positionals.Count < 2)
+                    {
+                        throw new UsageException("Usage: wcr2 plugin run <command> [args...] [--plugin-dir <dir>]");
+                    }
+
+                    string commandName = args.Positionals[1];
+                    var result = CliPluginRegistry.Execute(args, commandName, GetPluginCommandArguments(args));
+                    WriteOutput(result, json,
+                        writer =>
+                        {
+                            writer.WriteLine("Plugin command: " + result.Command);
+                            writer.WriteLine("Provider: " + (result.ProviderType ?? "(not found)"));
+                            writer.WriteLine("ExitCode: " + result.ExitCode);
+                            if (!string.IsNullOrEmpty(result.Message))
+                            {
+                                writer.WriteLine(result.Message);
+                            }
+                            if (!string.IsNullOrEmpty(result.Error))
+                            {
+                                writer.WriteLine("Error: " + result.Error);
+                            }
+                        });
+                    return result.ExitCode;
+                }
+                default:
+                    throw new UsageException("Unknown plugin command: " + args.Positionals[0]);
+            }
+        }
+
+        private static int RunPatch(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintPatchHelp();
+                return ExitSuccess;
+            }
+
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            switch (subCommand)
+            {
+                case "inspect":
+                    return RunPatchInspect(args);
+                case "dry-run":
+                    return RunPatchDryRun(args);
+                case "apply":
+                    return RunPatchApply(args);
+                default:
+                    throw new UsageException("Unknown patch command: " + subCommand);
+            }
+        }
+
+        private static int RunPatchInspect(ParsedArgs args)
+        {
+            if (args.Positionals.Count < 2)
+            {
+                throw new UsageException("Usage: wcr2 patch inspect <patch-file> [--json]");
+            }
+
+            string patchFile = args.Positionals[1];
+            bool json = args.HasFlag("json");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+
+            if (!File.Exists(patchFile))
+            {
+                throw new FileNotFoundException("Input path not found: " + patchFile);
+            }
+
+            using (var patcher = new WzPatcher(patchFile))
+            {
+                long dataPosition = patcher.PrePatch(CancellationToken.None);
+                var result = PatchInspectResultDto.FromPatcher(Path.GetFullPath(patchFile), dataPosition, patcher);
+                if (!string.IsNullOrEmpty(output))
+                {
+                    result.OutputPath = WriteJsonFile(result, output);
+                }
+
+                WriteOutput(result, json, writer =>
+                {
+                    writer.WriteLine("Patch: " + result.PatchFilePath);
+                    writer.WriteLine("Parts: " + result.PartCount + " Create: " + result.CreateCount + " Rebuild: " + result.RebuildCount + " Delete: " + result.DeleteCount);
+                    writer.WriteLine("KMST1125: " + FormatNullableBool(result.IsKmst1125Format));
+                    writer.WriteLine("Notice length: " + result.NoticeLength);
+                    if (!string.IsNullOrEmpty(result.OutputPath))
+                    {
+                        writer.WriteLine("Output: " + result.OutputPath);
+                    }
+                    foreach (var part in result.Parts)
+                    {
+                        writer.WriteLine(part.Type + "\t" + part.FileName + "\tnewLength=" + part.NewFileLength + "\toldChecksum=" + part.OldChecksum + "\tnewChecksum=" + part.NewChecksum);
+                    }
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunPatchDryRun(ParsedArgs args)
+        {
+            if (args.Positionals.Count < 2)
+            {
+                throw new UsageException("Usage: wcr2 patch dry-run <patch-file> --target <dir> [--json]");
+            }
+
+            string patchFile = args.Positionals[1];
+            string target = args.GetValue("target");
+            bool json = args.HasFlag("json");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+
+            if (string.IsNullOrEmpty(target))
+            {
+                throw new UsageException("patch dry-run requires --target <dir>.");
+            }
+            if (!File.Exists(patchFile))
+            {
+                throw new FileNotFoundException("Input path not found: " + patchFile);
+            }
+            if (!Directory.Exists(target))
+            {
+                throw new DirectoryNotFoundException("Target directory not found: " + target);
+            }
+
+            using (var patcher = new WzPatcher(patchFile))
+            {
+                long dataPosition = patcher.PrePatch(CancellationToken.None);
+                var inspect = PatchInspectResultDto.FromPatcher(Path.GetFullPath(patchFile), dataPosition, patcher);
+                var result = PatchDryRunResultDto.FromInspect(inspect, Path.GetFullPath(target), patcher.PatchParts);
+
+                if (!string.IsNullOrEmpty(output))
+                {
+                    result.OutputPath = WriteJsonFile(result, output);
+                }
+
+                WriteOutput(result, json, writer =>
+                {
+                    writer.WriteLine("Patch: " + result.PatchFilePath);
+                    writer.WriteLine("Target: " + result.TargetDirectory);
+                    writer.WriteLine("Actions: create=" + result.CreateCount + " rebuild=" + result.RebuildCount + " delete=" + result.DeleteCount);
+                    writer.WriteLine("Validation: ok=" + result.ValidCount + " missing=" + result.MissingCount + " mismatch=" + result.ChecksumMismatchCount + " unchecked=" + result.UncheckedCount);
+                    if (!string.IsNullOrEmpty(result.OutputPath))
+                    {
+                        writer.WriteLine("Output: " + result.OutputPath);
+                    }
+                    foreach (var action in result.Actions)
+                    {
+                        writer.WriteLine(action.Action + "\t" + action.Status + "\t" + action.FileName);
+                    }
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunPatchApply(ParsedArgs args)
+        {
+            if (args.Positionals.Count < 2)
+            {
+                throw new UsageException("Usage: wcr2 patch apply <patch-file> --target <dir> --out <dir> [--log <file>] [--json]");
+            }
+
+            string patchFile = args.Positionals[1];
+            string target = args.GetValue("target");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+            string logPath = args.GetValue("log");
+            bool json = args.HasFlag("json");
+
+            if (string.IsNullOrEmpty(target))
+            {
+                throw new UsageException("patch apply requires --target <dir>.");
+            }
+            if (string.IsNullOrEmpty(output))
+            {
+                throw new UsageException("patch apply requires --out <dir>.");
+            }
+            if (!File.Exists(patchFile))
+            {
+                throw new FileNotFoundException("Input path not found: " + patchFile);
+            }
+            if (!Directory.Exists(target))
+            {
+                throw new DirectoryNotFoundException("Target directory not found: " + target);
+            }
+
+            string targetFullPath = Path.GetFullPath(target);
+            string outputFullPath = Path.GetFullPath(output);
+            ValidatePatchOutputDirectory(targetFullPath, outputFullPath);
+
+            using (var patcher = new WzPatcher(patchFile))
+            {
+                long dataPosition = patcher.PrePatch(CancellationToken.None);
+                var inspect = PatchInspectResultDto.FromPatcher(Path.GetFullPath(patchFile), dataPosition, patcher);
+                var dryRun = PatchDryRunResultDto.FromInspect(inspect, targetFullPath, patcher.PatchParts);
+
+                Directory.CreateDirectory(outputFullPath);
+                var copyStats = CopyDirectory(targetFullPath, outputFullPath);
+
+                var result = PatchApplyResultDto.FromDryRun(dryRun, outputFullPath, copyStats);
+                var events = new List<PatchApplyEventDto>();
+                patcher.PatchingStateChanged += (sender, eventArgs) =>
+                {
+                    if (eventArgs != null)
+                    {
+                        events.Add(PatchApplyEventDto.FromEvent(eventArgs));
+                    }
+                };
+
+                patcher.Patch(outputFullPath, outputFullPath, CancellationToken.None);
+                result.Events = events;
+                result.EventCount = events.Count;
+
+                if (!string.IsNullOrEmpty(logPath))
+                {
+                    result.LogPath = WritePatchApplyLog(result, logPath);
+                }
+
+                WriteOutput(result, json, writer =>
+                {
+                    writer.WriteLine("Patch: " + result.PatchFilePath);
+                    writer.WriteLine("Target: " + result.TargetDirectory);
+                    writer.WriteLine("Output: " + result.OutputDirectory);
+                    writer.WriteLine("Copied files: " + result.CopiedFileCount + " bytes=" + result.CopiedBytes);
+                    writer.WriteLine("Patch parts: " + result.PartCount + " events=" + result.EventCount);
+                    if (!string.IsNullOrEmpty(result.LogPath))
+                    {
+                        writer.WriteLine("Log: " + result.LogPath);
+                    }
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static void ValidatePatchOutputDirectory(string targetFullPath, string outputFullPath)
+        {
+            if (PathsEqual(targetFullPath, outputFullPath)
+                || IsSubPathOf(outputFullPath, targetFullPath)
+                || IsSubPathOf(targetFullPath, outputFullPath))
+            {
+                throw new UsageException("--out must be separate from --target.");
+            }
+
+            if (Directory.Exists(outputFullPath) && Directory.EnumerateFileSystemEntries(outputFullPath).Any())
+            {
+                throw new UsageException("--out directory must not exist or must be empty.");
+            }
+        }
+
+        private static bool PathsEqual(string left, string right)
+        {
+            return string.Equals(TrimDirectorySeparator(left), TrimDirectorySeparator(right), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsSubPathOf(string path, string possibleParent)
+        {
+            string normalizedPath = TrimDirectorySeparator(path) + Path.DirectorySeparatorChar;
+            string normalizedParent = TrimDirectorySeparator(possibleParent) + Path.DirectorySeparatorChar;
+            return normalizedPath.StartsWith(normalizedParent, StringComparison.OrdinalIgnoreCase)
+                && !PathsEqual(path, possibleParent);
+        }
+
+        private static string TrimDirectorySeparator(string path)
+        {
+            return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        private static DirectoryCopyStats CopyDirectory(string sourceDirectory, string destinationDirectory)
+        {
+            var stats = new DirectoryCopyStats();
+            foreach (string directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+            {
+                string relative = Path.GetRelativePath(sourceDirectory, directory);
+                Directory.CreateDirectory(Path.Combine(destinationDirectory, relative));
+            }
+
+            foreach (string file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+            {
+                string relative = Path.GetRelativePath(sourceDirectory, file);
+                string destination = Path.Combine(destinationDirectory, relative);
+                string destinationParent = Path.GetDirectoryName(destination);
+                if (!string.IsNullOrEmpty(destinationParent))
+                {
+                    Directory.CreateDirectory(destinationParent);
+                }
+                File.Copy(file, destination, false);
+                stats.FileCount++;
+                stats.Bytes += new FileInfo(file).Length;
+            }
+
+            return stats;
+        }
+
+        private static string WritePatchApplyLog(PatchApplyResultDto result, string logPath)
+        {
+            string fullPath = Path.GetFullPath(logPath);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            using (var writer = new StreamWriter(fullPath))
+            {
+                writer.WriteLine("Patch: " + result.PatchFilePath);
+                writer.WriteLine("Target: " + result.TargetDirectory);
+                writer.WriteLine("Output: " + result.OutputDirectory);
+                writer.WriteLine("CopiedFiles: " + result.CopiedFileCount);
+                writer.WriteLine("CopiedBytes: " + result.CopiedBytes);
+                writer.WriteLine();
+                foreach (var evt in result.Events)
+                {
+                    writer.WriteLine(evt.State + "\t" + evt.FileName + "\t" + evt.CurrentFileLength);
+                }
+            }
+
+            return fullPath;
+        }
+
+        private static int RunCompare(ParsedArgs args)
+        {
+            if (args.Positionals.Count < 2)
+            {
+                throw new UsageException("Usage: wcr2 compare <old-file-or-dir> <new-file-or-dir> [--path <wz-path>] [--type added|removed|changed] [--out <json>] [--json]");
+            }
+
+            string oldInput = args.Positionals[0];
+            string newInput = args.Positionals[1];
+            string nodePath = args.GetValue("path");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+            string format = args.GetValue("format");
+            bool json = args.HasFlag("json");
+            bool extractImages = args.HasFlag("extract-images");
+            var options = CompareOptions.FromArgs(args);
+            string outputFormat = ResolveCompareOutputFormat(format, output);
+
+            using (var oldContext = WzLoadContext.Load(oldInput, WzLoadOptions.FromArgs(args)))
+            using (var newContext = WzLoadContext.Load(newInput, WzLoadOptions.FromArgs(args)))
+            {
+                Wz_Node oldNode = NodePath.Resolve(oldContext.Root, nodePath, extractImages);
+                Wz_Node newNode = NodePath.Resolve(newContext.Root, nodePath, extractImages);
+
+                if (oldNode == null && newNode == null)
+                {
+                    throw new UsageException("WZ path not found in either input: " + nodePath);
+                }
+
+                var result = CompareResultDto.Create(oldContext.InputPath, newContext.InputPath, nodePath);
+                result.MaxResults = options.MaxResults;
+                result.IgnoreImageBinary = options.IgnoreImageBinary;
+                CompareNodes(oldNode, newNode, options, result, extractImages);
+
+                if (!string.IsNullOrEmpty(output))
+                {
+                    result.OutputPath = WriteCompareFile(result, output, outputFormat);
+                }
+
+                if (string.IsNullOrEmpty(output) && IsMarkdownFormat(outputFormat))
+                {
+                    Console.WriteLine(FormatCompareMarkdown(result));
+                    return ExitSuccess;
+                }
+
+                WriteOutput(result, json, writer =>
+                {
+                    writer.WriteLine("Compared: " + result.OldInputPath);
+                    writer.WriteLine("With: " + result.NewInputPath);
+                    writer.WriteLine("Added: " + result.Added + " Removed: " + result.Removed + " Changed: " + result.Changed);
+                    if (!string.IsNullOrEmpty(result.OutputPath))
+                    {
+                        writer.WriteLine("Output: " + result.OutputPath);
+                    }
+                    if (result.Truncated)
+                    {
+                        writer.WriteLine("Results truncated at " + result.MaxResults + " item(s).");
+                    }
+                    foreach (var diff in result.Differences)
+                    {
+                        writer.WriteLine(diff.ChangeType + "\t" + diff.Path + "\t" + diff.OldType + " -> " + diff.NewType);
+                    }
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static string WriteJsonFile<T>(T value, string output)
+        {
+            string fullPath = Path.GetFullPath(output);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(fullPath, JsonSerializer.Serialize(value, JsonOptions));
+            return fullPath;
+        }
+
+        private static string WriteCompareFile(CompareResultDto result, string output, string format)
+        {
+            string fullPath = Path.GetFullPath(output);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            string content = IsMarkdownFormat(format)
+                ? FormatCompareMarkdown(result)
+                : JsonSerializer.Serialize(result, JsonOptions);
+            File.WriteAllText(fullPath, content);
+            return fullPath;
+        }
+
+        private static string ResolveCompareOutputFormat(string format, string output)
+        {
+            if (!string.IsNullOrEmpty(format))
+            {
+                if (IsMarkdownFormat(format) || string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
+                {
+                    return format;
+                }
+                throw new UsageException("Unsupported compare format: " + format);
+            }
+
+            string ext = string.IsNullOrEmpty(output) ? null : Path.GetExtension(output);
+            return string.Equals(ext, ".md", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(ext, ".markdown", StringComparison.OrdinalIgnoreCase)
+                ? "markdown"
+                : "json";
+        }
+
+        private static bool IsMarkdownFormat(string format)
+        {
+            return string.Equals(format, "md", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string FormatCompareMarkdown(CompareResultDto result)
+        {
+            var writer = new System.Text.StringBuilder();
+            writer.AppendLine("# WzComparerR2 Compare Report");
+            writer.AppendLine();
+            writer.AppendLine("- Old: `" + EscapeMarkdownInline(result.OldInputPath) + "`");
+            writer.AppendLine("- New: `" + EscapeMarkdownInline(result.NewInputPath) + "`");
+            if (!string.IsNullOrEmpty(result.Path))
+            {
+                writer.AppendLine("- Path: `" + EscapeMarkdownInline(result.Path) + "`");
+            }
+            writer.AppendLine("- Added: " + result.Added);
+            writer.AppendLine("- Removed: " + result.Removed);
+            writer.AppendLine("- Changed: " + result.Changed);
+            writer.AppendLine("- Truncated: " + result.Truncated.ToString().ToLowerInvariant());
+            writer.AppendLine();
+            writer.AppendLine("| Change | Path | Old | New |");
+            writer.AppendLine("| --- | --- | --- | --- |");
+
+            foreach (var diff in result.Differences)
+            {
+                writer.Append("| ");
+                writer.Append(EscapeMarkdownCell(diff.ChangeType));
+                writer.Append(" | `");
+                writer.Append(EscapeMarkdownInline(diff.Path));
+                writer.Append("` | ");
+                writer.Append(EscapeMarkdownCell(FormatCompareSide(diff.OldType, diff.OldValue)));
+                writer.Append(" | ");
+                writer.Append(EscapeMarkdownCell(FormatCompareSide(diff.NewType, diff.NewValue)));
+                writer.AppendLine(" |");
+            }
+
+            return writer.ToString();
+        }
+
+        private static string FormatCompareSide(string type, string value)
+        {
+            if (string.IsNullOrEmpty(type) && string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+            return string.IsNullOrEmpty(value) ? type : type + " " + value;
+        }
+
+        private static string EscapeMarkdownInline(string value)
+        {
+            return (value ?? string.Empty).Replace("`", "\\`");
+        }
+
+        private static string EscapeMarkdownCell(string value)
+        {
+            return (value ?? string.Empty)
+                .Replace("\\", "\\\\")
+                .Replace("|", "\\|")
+                .Replace("\r", " ")
+                .Replace("\n", " ");
+        }
+
+        private static int RunDump(ParsedArgs args)
+        {
+            string input = RequireInput(args, "dump <file-or-dir> --path <wz-path> [--format json|xml|raw]");
+            string nodePath = args.GetValue("path");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+            string format = args.GetValue("format") ?? "json";
+            int depth = args.GetInt("depth", 10);
+            int limit = args.GetInt("limit", 5000);
+
+            if (string.IsNullOrEmpty(nodePath))
+            {
+                throw new UsageException("dump requires --path <wz-path>.");
+            }
+
+            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            {
+                Wz_Node node = ResolveRequiredNode(context.Root, nodePath, true);
+                if (string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
+                {
+                    string json = JsonSerializer.Serialize(NodeDto.FromNode(node, depth, limit, true), JsonOptions);
+                    WriteDumpOutput(json, output);
+                }
+                else if (string.Equals(format, "xml", StringComparison.OrdinalIgnoreCase))
+                {
+                    string xml = DumpXmlToString(node);
+                    WriteDumpOutput(xml, output);
+                }
+                else if (string.Equals(format, "raw", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.IsNullOrEmpty(output))
+                    {
+                        throw new UsageException("dump --format raw requires --out <output-dir>.");
+                    }
+
+                    var result = ExtractResultDto.Create(input, node);
+                    result.Files.AddRange(ExtractExporter.ExportAuto(node, output, false));
+                    if (result.Files.Count == 0)
+                    {
+                        throw new UsageException("Selected node has no raw exportable value.");
+                    }
+
+                    WriteOutput(result, args.HasFlag("json"), writer =>
+                    {
+                        foreach (var file in result.Files)
+                        {
+                            writer.WriteLine(file.OutputPath);
+                        }
+                    });
+                }
+                else
+                {
+                    throw new UsageException("Unsupported dump format: " + format);
+                }
             }
 
             return ExitSuccess;
@@ -197,6 +1384,7 @@ namespace WzComparerR2.Cli
             bool recursive = args.HasFlag("recursive");
             bool json = args.HasFlag("json");
             string format = args.GetValue("format");
+            string manifest = args.GetValue("manifest");
 
             if (string.IsNullOrEmpty(nodePath))
             {
@@ -225,9 +1413,18 @@ namespace WzComparerR2.Cli
                     }
                 }
 
+                if (!string.IsNullOrEmpty(manifest))
+                {
+                    result.ManifestPath = ExtractExporter.WriteManifest(result, manifest);
+                }
+
                 WriteOutput(result, json, writer =>
                 {
                     writer.WriteLine("Extracted " + result.Files.Count + " file(s) from " + result.SourcePath);
+                    if (!string.IsNullOrEmpty(result.ManifestPath))
+                    {
+                        writer.WriteLine("Manifest: " + result.ManifestPath);
+                    }
                     foreach (var file in result.Files)
                     {
                         writer.WriteLine("- " + file.Type + "\t" + file.OutputPath);
@@ -238,13 +1435,74 @@ namespace WzComparerR2.Cli
             return ExitSuccess;
         }
 
+        private static void WriteDumpOutput(string content, string output)
+        {
+            if (string.IsNullOrEmpty(output))
+            {
+                Console.WriteLine(content);
+                return;
+            }
+
+            string fullPath = Path.GetFullPath(output);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+            File.WriteAllText(fullPath, content);
+            Console.WriteLine(fullPath);
+        }
+
+        private static string DumpXmlToString(Wz_Node node)
+        {
+            var settings = new XmlWriterSettings
+            {
+                Indent = true,
+                OmitXmlDeclaration = true
+            };
+            using (var writer = new StringWriter())
+            {
+                using (var xmlWriter = XmlWriter.Create(writer, settings))
+                {
+                    node.DumpAsXml(xmlWriter);
+                }
+                return writer.ToString();
+            }
+        }
+
         private static string RequireInput(ParsedArgs args, string usage)
         {
-            if (args.Positionals.Count == 0)
+            return RequireInputAt(args, 0, usage);
+        }
+
+        private static string RequireInputAt(ParsedArgs args, int positionalIndex, string usage)
+        {
+            if (args.Positionals.Count <= positionalIndex)
             {
+                string configuredInput = GetConfiguredInput(args);
+                if (!string.IsNullOrEmpty(configuredInput))
+                {
+                    return configuredInput;
+                }
+
                 throw new UsageException("Usage: wcr2 " + usage);
             }
-            return args.Positionals[0];
+            return args.Positionals[positionalIndex];
+        }
+
+        private static string GetConfiguredInput(ParsedArgs args)
+        {
+            var store = CliConfigStore.Open(args.GetValue("config"));
+            string value;
+            if (store.Values.TryGetValue("default-wz", out value))
+            {
+                return value;
+            }
+            if (store.Values.TryGetValue("wz", out value))
+            {
+                return value;
+            }
+            return null;
         }
 
         private static Wz_Node ResolveRequiredNode(Wz_Node root, string path, bool extractImages)
@@ -257,30 +1515,22 @@ namespace WzComparerR2.Cli
             return node;
         }
 
-        private static List<SearchResultDto> Search(Wz_Node root, string nameQuery, string valueQuery, int maxResults, bool extractImages)
+        private static List<SearchResultDto> Search(Wz_Node root, SearchOptions options)
         {
             var results = new List<SearchResultDto>();
             var stack = new Stack<Wz_Node>();
             stack.Push(root);
 
-            while (stack.Count > 0 && results.Count < maxResults)
+            while (stack.Count > 0 && results.Count < options.MaxResults)
             {
                 Wz_Node node = stack.Pop();
-                node = NodePath.ExtractImageNode(node, extractImages);
+                node = NodePath.ExtractImageNode(node, options.ExtractImages);
                 if (node == null)
                 {
                     continue;
                 }
 
-                string value = NodeDto.FormatValue(node.Value);
-                bool nameMatched = !string.IsNullOrEmpty(nameQuery)
-                    && node.Text != null
-                    && node.Text.IndexOf(nameQuery, StringComparison.OrdinalIgnoreCase) >= 0;
-                bool valueMatched = !string.IsNullOrEmpty(valueQuery)
-                    && value != null
-                    && value.IndexOf(valueQuery, StringComparison.OrdinalIgnoreCase) >= 0;
-
-                if (nameMatched || valueMatched)
+                if (options.Matches(node))
                 {
                     results.Add(SearchResultDto.FromNode(node));
                 }
@@ -293,6 +1543,79 @@ namespace WzComparerR2.Cli
             }
 
             return results;
+        }
+
+        private static void CompareNodes(Wz_Node oldNode, Wz_Node newNode, CompareOptions options, CompareResultDto result, bool extractImages)
+        {
+            var stack = new Stack<NodePair>();
+            stack.Push(new NodePair(oldNode, newNode));
+
+            while (stack.Count > 0)
+            {
+                NodePair pair = stack.Pop();
+                Wz_Node left = NodePath.ExtractImageNode(pair.OldNode, extractImages);
+                Wz_Node right = NodePath.ExtractImageNode(pair.NewNode, extractImages);
+
+                CompareChangeDto diff = CompareChangeDto.FromNodes(left, right);
+                if (diff != null)
+                {
+                    result.Count(diff.ChangeType);
+                    if (options.Includes(diff.ChangeType))
+                    {
+                        if (result.Differences.Count >= options.MaxResults)
+                        {
+                            result.Truncated = true;
+                            continue;
+                        }
+                        result.Differences.Add(diff);
+                    }
+                }
+
+                if (result.Truncated)
+                {
+                    continue;
+                }
+
+                foreach (var childPair in EnumerateChildPairs(left, right).Reverse())
+                {
+                    stack.Push(childPair);
+                }
+            }
+        }
+
+        private static IEnumerable<NodePair> EnumerateChildPairs(Wz_Node oldNode, Wz_Node newNode)
+        {
+            var oldChildren = BuildNodeMap(oldNode);
+            var newChildren = BuildNodeMap(newNode);
+            var names = new SortedSet<string>(oldChildren.Keys, StringComparer.OrdinalIgnoreCase);
+            names.UnionWith(newChildren.Keys);
+
+            foreach (string name in names)
+            {
+                Wz_Node oldChild;
+                Wz_Node newChild;
+                oldChildren.TryGetValue(name, out oldChild);
+                newChildren.TryGetValue(name, out newChild);
+                yield return new NodePair(oldChild, newChild);
+            }
+        }
+
+        private static Dictionary<string, Wz_Node> BuildNodeMap(Wz_Node node)
+        {
+            var map = new Dictionary<string, Wz_Node>(StringComparer.OrdinalIgnoreCase);
+            if (node == null)
+            {
+                return map;
+            }
+
+            foreach (Wz_Node child in node.Nodes)
+            {
+                if (!map.ContainsKey(child.Text))
+                {
+                    map.Add(child.Text, child);
+                }
+            }
+            return map;
         }
 
         private static void WriteTree(TextWriter writer, NodeDto node, int indent)
@@ -345,6 +1668,62 @@ namespace WzComparerR2.Cli
                 || string.Equals(arg, "-h", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsUpdateAssetKind(string value)
+        {
+            switch ((value ?? string.Empty).ToLowerInvariant())
+            {
+                case "net8":
+                case "net10":
+                case "net6":
+                case "net462":
+                case "zip":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static IReadOnlyList<string> GetPluginCommandArguments(ParsedArgs args)
+        {
+            var result = new List<string>();
+            var tail = args.GetTailArguments(2);
+            for (int i = 0; i < tail.Count; i++)
+            {
+                string arg = tail[i];
+                if (string.Equals(arg, "--", StringComparison.Ordinal))
+                {
+                    result.AddRange(tail.Skip(i + 1));
+                    break;
+                }
+
+                if (IsPluginHostOptionWithValue(arg))
+                {
+                    i++;
+                    continue;
+                }
+
+                if (IsPluginHostFlag(arg))
+                {
+                    continue;
+                }
+
+                result.Add(arg);
+            }
+            return result;
+        }
+
+        private static bool IsPluginHostOptionWithValue(string arg)
+        {
+            return string.Equals(arg, "--plugin-dir", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(arg, "--config", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPluginHostFlag(string arg)
+        {
+            return string.Equals(arg, "--json", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(arg, "--include-gui-plugin-dir", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void PrintHelp()
         {
             Console.WriteLine("wcr2 - WzComparerR2 command line tools");
@@ -355,7 +1734,32 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 list <file-or-dir> [--path <wz-path>] [--json]");
             Console.WriteLine("  wcr2 search <file-or-dir> --name <text> [--path <wz-path>] [--json]");
             Console.WriteLine("  wcr2 search <file-or-dir> --value <text> [--path <wz-path>] [--json]");
-            Console.WriteLine("  wcr2 extract <file-or-dir> --path <wz-path> --out <output-dir> [--recursive] [--json]");
+            Console.WriteLine("  wcr2 search <file-or-dir> --match-path <glob-or-regex> [--type <type>] [--json]");
+            Console.WriteLine("  wcr2 compare <old-file-or-dir> <new-file-or-dir> [--path <wz-path>] [--type added|removed|changed] [--format json|markdown] [--out <path>] [--json]");
+            Console.WriteLine("  wcr2 dump <file-or-dir> --path <wz-path> [--format json|xml|raw] [--out <path>]");
+            Console.WriteLine("  wcr2 extract <file-or-dir> --path <wz-path> --out <output-dir> [--recursive] [--manifest <json>] [--json]");
+            Console.WriteLine("  wcr2 skill info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 item info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 gear info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 map info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 map objects <map-wz-file-or-dir> --id <map-id> [--json]");
+            Console.WriteLine("  wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]");
+            Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
+            Console.WriteLine("  wcr2 avatar inspect --code <code> [--json]");
+            Console.WriteLine("  wcr2 avatar unpack --code <code>");
+            Console.WriteLine("  wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--json]");
+            Console.WriteLine("  wcr2 network server-info [--host <host>] [--port <port>] [--connect] [--json]");
+            Console.WriteLine("  wcr2 network send --message <text> [--host <host>] [--port <port>] [--json]");
+            Console.WriteLine("  wcr2 update check [--asset net8|net10|net6|net462|zip] [--json]");
+            Console.WriteLine("  wcr2 update download --out <dir> [--asset net8|net10|net6|net462|zip] [--json]");
+            Console.WriteLine("  wcr2 update apply [--asset net8|net10|net6|net462|zip] [--updater <path>] [--execute] [--json]");
+            Console.WriteLine("  wcr2 config list|get|set|unset|path [--config <path>] [--json]");
+            Console.WriteLine("  wcr2 plugin list|commands [--plugin-dir <dir>] [--json]");
+            Console.WriteLine("  wcr2 plugin inspect <assembly.dll> [--json]");
+            Console.WriteLine("  wcr2 plugin run <command> [args...] [--plugin-dir <dir>]");
+            Console.WriteLine("  wcr2 patch inspect <patch-file> [--json]");
+            Console.WriteLine("  wcr2 patch dry-run <patch-file> --target <dir> [--json]");
+            Console.WriteLine("  wcr2 patch apply <patch-file> --target <dir> --out <dir> [--log <file>] [--json]");
             Console.WriteLine();
             Console.WriteLine("Common options:");
             Console.WriteLine("  --use-base-wz       Load with Base.wz link behavior where supported.");
@@ -363,14 +1767,561 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  --extract-images    Extract image nodes while traversing.");
             Console.WriteLine("  --json              Emit JSON output.");
             Console.WriteLine("  --format xml        Export selected node as XML instead of loose files.");
+            Console.WriteLine("  --regex             Treat --match-path as a regular expression.");
+            Console.WriteLine("  --ignore-image-binary  Skip pixel-level image comparison where supported.");
             Console.WriteLine();
             Console.WriteLine("Examples:");
             Console.WriteLine("  wcr2 info Base.wz");
             Console.WriteLine("  wcr2 tree Base.wz --depth 2");
             Console.WriteLine("  wcr2 list Base.wz --path Character");
             Console.WriteLine("  wcr2 search String.wz --name Maple --json");
+            Console.WriteLine("  wcr2 search Base.wz --match-path \"*/Canvas\" --type png");
+            Console.WriteLine("  wcr2 compare old/Base.wz new/Base.wz --json");
             Console.WriteLine("  wcr2 extract Base.wz --path String --out out/string --recursive");
+            Console.WriteLine("  wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json");
+            Console.WriteLine("  wcr2 map portals Map.wz --id 100000000 --json");
+            Console.WriteLine("  wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand");
+            Console.WriteLine("  wcr2 avatar inspect --code \"1002140,1040036,1060026\"");
+            Console.WriteLine("  wcr2 lua run WzComparerR2.LuaConsole/Examples/DumpXml.lua --dry-run --json");
+            Console.WriteLine("  wcr2 network server-info --json");
+            Console.WriteLine("  wcr2 update check --asset net8 --json");
+            Console.WriteLine("  wcr2 update download --asset net8 --out downloads");
+            Console.WriteLine("  wcr2 config set default-wz /path/to/Base.wz");
+            Console.WriteLine("  wcr2 config list");
+            Console.WriteLine("  wcr2 plugin list --plugin-dir CliPlugin --json");
+            Console.WriteLine("  wcr2 plugin commands");
+            Console.WriteLine("  wcr2 patch inspect MaplePatch.patch --json");
+            Console.WriteLine("  wcr2 patch dry-run MaplePatch.patch --target MapleStory --json");
+            Console.WriteLine("  wcr2 patch apply MaplePatch.patch --target MapleStory --out MapleStory.patched --log patch.log");
         }
+
+        private static void PrintMapHelp()
+        {
+            Console.WriteLine("wcr2 map - map metadata tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 map info <map-wz-file-or-dir> --id <map-id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 map objects <map-wz-file-or-dir> --id <map-id> [--json]");
+            Console.WriteLine("  wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]");
+            Console.WriteLine("  wcr2 map life <map-wz-file-or-dir> --id <map-id> [--json]");
+            Console.WriteLine("  wcr2 map reactors <map-wz-file-or-dir> --id <map-id> [--json]");
+        }
+
+        private static void PrintDomainHelp(string kind)
+        {
+            Console.WriteLine("wcr2 " + kind + " - " + kind + " lookup tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 " + kind + " info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+        }
+
+        private static void PrintAnimateHelp()
+        {
+            Console.WriteLine("wcr2 animate - animation export tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
+        }
+
+        private static void PrintAvatarHelp()
+        {
+            Console.WriteLine("wcr2 avatar - avatar code tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 avatar inspect --code <code> [--json]");
+            Console.WriteLine("  wcr2 avatar unpack --code <code>");
+        }
+
+        private static void PrintLuaHelp()
+        {
+            Console.WriteLine("wcr2 lua - Lua script tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--timeout <seconds>] [--json]");
+        }
+
+        private static void PrintNetworkHelp()
+        {
+            Console.WriteLine("wcr2 network - network command tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 network server-info [--host <host>] [--port <port>] [--connect] [--json]");
+            Console.WriteLine("  wcr2 network chat [--host <host>] [--port <port>] [--json]");
+            Console.WriteLine("  wcr2 network send --message <text> [--host <host>] [--port <port>] [--json]");
+        }
+
+        private static void PrintUpdateHelp()
+        {
+            Console.WriteLine("wcr2 update - release update tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 update check [--repo <owner/name>] [--current-version <version>] [--asset net8|net10|net6|net462|zip] [--json]");
+            Console.WriteLine("  wcr2 update download --out <dir> [--repo <owner/name>] [--asset net8|net10|net6|net462|zip] [--force] [--json]");
+            Console.WriteLine("  wcr2 update apply [--repo <owner/name>] [--asset net8|net10|net6|net462|zip] [--updater <path>] [--download <zip>] [--execute] [--json]");
+            Console.WriteLine();
+            Console.WriteLine("Notes:");
+            Console.WriteLine("  update apply is dry-run unless --execute is provided.");
+            Console.WriteLine("  --execute requires an external WzComparerR2.Updater executable.");
+        }
+
+        private static void PrintConfigHelp()
+        {
+            Console.WriteLine("wcr2 config - CLI configuration tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 config path [--config <path>] [--json]");
+            Console.WriteLine("  wcr2 config list [--config <path>] [--json]");
+            Console.WriteLine("  wcr2 config get <key> [--config <path>] [--json]");
+            Console.WriteLine("  wcr2 config set <key> <value> [--config <path>] [--json]");
+            Console.WriteLine("  wcr2 config unset <key> [--config <path>] [--json]");
+            Console.WriteLine();
+            Console.WriteLine("Default path:");
+            Console.WriteLine("  Windows: %APPDATA%/WzComparerR2/wcr2.config.json");
+            Console.WriteLine("  Unix:    $XDG_CONFIG_HOME/wzcomparerr2/wcr2.config.json or ~/.config/wzcomparerr2/wcr2.config.json");
+        }
+
+        private static void PrintPluginHelp()
+        {
+            Console.WriteLine("wcr2 plugin - CLI plugin tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 plugin list [--plugin-dir <dir>] [--include-gui-plugin-dir] [--json]");
+            Console.WriteLine("  wcr2 plugin inspect <assembly.dll> [--json]");
+            Console.WriteLine("  wcr2 plugin commands [--plugin-dir <dir>] [--json]");
+            Console.WriteLine("  wcr2 plugin run <command> [args...] [--plugin-dir <dir>]");
+            Console.WriteLine();
+            Console.WriteLine("Discovery:");
+            Console.WriteLine("  Explicit --plugin-dir, config key plugin-dir, WCR2_CLI_PLUGIN_DIR, then CliPlugin beside the executable/current directory.");
+            Console.WriteLine("  GUI Plugin directories are scanned only with --include-gui-plugin-dir.");
+        }
+
+        private static void PrintPatchHelp()
+        {
+            Console.WriteLine("wcr2 patch - patch inspection tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 patch inspect <patch-file> [--json]");
+            Console.WriteLine("  wcr2 patch dry-run <patch-file> --target <dir> [--json]");
+            Console.WriteLine("  wcr2 patch apply <patch-file> --target <dir> --out <dir> [--log <file>] [--json]");
+        }
+
+        private static string FormatNullableBool(bool? value)
+        {
+            return value.HasValue ? value.Value.ToString().ToLowerInvariant() : "unknown";
+        }
+    }
+
+    public interface ICliCommandProvider
+    {
+        IEnumerable<CliCommandDescriptor> GetCommands();
+
+        int Execute(string commandName, IReadOnlyList<string> args, ICliCommandContext context);
+    }
+
+    public interface ICliCommandContext
+    {
+        TextWriter Output { get; }
+        TextWriter Error { get; }
+        string WorkingDirectory { get; }
+        string CliVersion { get; }
+        string GetConfigValue(string key);
+    }
+
+    public sealed class CliCommandDescriptor
+    {
+        public string Name { get; set; }
+        public string Summary { get; set; }
+        public string Usage { get; set; }
+    }
+
+    internal sealed class CliCommandContext : ICliCommandContext
+    {
+        private readonly CliConfigStore store;
+        private readonly TextWriter output;
+        private readonly TextWriter error;
+
+        public CliCommandContext(CliConfigStore store, TextWriter output, TextWriter error)
+        {
+            this.store = store;
+            this.output = output;
+            this.error = error;
+        }
+
+        public TextWriter Output => this.output;
+
+        public TextWriter Error => this.error;
+
+        public string WorkingDirectory => Directory.GetCurrentDirectory();
+
+        public string CliVersion => "0.1.0";
+
+        public string GetConfigValue(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                return null;
+            }
+
+            string value;
+            return this.store.Values.TryGetValue(key, out value) ? value : null;
+        }
+    }
+
+    internal sealed class CliPluginLoadContext : AssemblyLoadContext
+    {
+        private readonly AssemblyDependencyResolver resolver;
+
+        public CliPluginLoadContext(string pluginPath)
+            : base(isCollectible: true)
+        {
+            this.resolver = new AssemblyDependencyResolver(pluginPath);
+        }
+
+        protected override Assembly Load(AssemblyName assemblyName)
+        {
+            Assembly current = typeof(ICliCommandProvider).Assembly;
+            if (string.Equals(assemblyName.Name, current.GetName().Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return current;
+            }
+
+            string assemblyPath = this.resolver.ResolveAssemblyToPath(assemblyName);
+            return assemblyPath == null ? null : LoadFromAssemblyPath(assemblyPath);
+        }
+
+        protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
+        {
+            string libraryPath = this.resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+            return libraryPath == null ? IntPtr.Zero : LoadUnmanagedDllFromPath(libraryPath);
+        }
+    }
+
+    internal static class CliPluginRegistry
+    {
+        public static CliPluginDiscoveryDto Discover(ParsedArgs args)
+        {
+            var directories = ResolveDirectories(args);
+            var result = new CliPluginDiscoveryDto
+            {
+                Directories = directories,
+                Plugins = new List<CliPluginDto>()
+            };
+
+            foreach (string directory in directories)
+            {
+                if (!Directory.Exists(directory))
+                {
+                    continue;
+                }
+
+                foreach (string file in Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+                {
+                    result.Plugins.Add(InspectFile(file));
+                }
+            }
+
+            result.PluginCount = result.Plugins.Count;
+            result.LoadFailedCount = result.Plugins.Count(plugin => !plugin.Success);
+            return result;
+        }
+
+        public static CliPluginDto InspectFile(string file)
+        {
+            string fullPath = Path.GetFullPath(file);
+            var dto = new CliPluginDto
+            {
+                Path = fullPath,
+                Status = "failed",
+                ProviderTypes = new List<string>(),
+                GuiPluginEntryTypes = new List<string>(),
+                Commands = new List<CliPluginCommandDto>()
+            };
+
+            if (!File.Exists(fullPath))
+            {
+                dto.Error = "Plugin assembly not found.";
+                return dto;
+            }
+
+            try
+            {
+                AssemblyName name = AssemblyName.GetAssemblyName(fullPath);
+                dto.AssemblyName = name.Name;
+                dto.AssemblyVersion = name.Version?.ToString();
+            }
+            catch (Exception ex)
+            {
+                dto.Error = "Invalid assembly: " + ex.Message;
+                return dto;
+            }
+
+            var context = new CliPluginLoadContext(fullPath);
+            try
+            {
+                Assembly assembly = context.LoadFromAssemblyPath(fullPath);
+                var types = GetLoadableTypes(assembly, dto);
+                foreach (Type type in types)
+                {
+                    if (typeof(ICliCommandProvider).IsAssignableFrom(type) && !type.IsAbstract && type.GetConstructor(Type.EmptyTypes) != null)
+                    {
+                        dto.ProviderTypes.Add(type.FullName);
+                        AddCommands(dto, type);
+                    }
+                    else if (IsGuiPluginEntry(type))
+                    {
+                        dto.GuiPluginEntryTypes.Add(type.FullName);
+                    }
+                }
+
+                dto.Status = dto.ProviderTypes.Count > 0 ? "cli-plugin" : dto.GuiPluginEntryTypes.Count > 0 ? "gui-plugin" : "assembly";
+                dto.Success = true;
+                return dto;
+            }
+            catch (Exception ex)
+            {
+                dto.Error = ex.Message;
+                return dto;
+            }
+            finally
+            {
+                context.Unload();
+            }
+        }
+
+        public static CliPluginRunResultDto Execute(ParsedArgs args, string commandName, IReadOnlyList<string> commandArgs)
+        {
+            var discovery = Discover(args);
+            var result = new CliPluginRunResultDto
+            {
+                Command = commandName,
+                ExitCode = 1,
+                SearchedPluginCount = discovery.Plugins.Count
+            };
+
+            if (discovery.LoadFailedCount > 0)
+            {
+                result.Message = "Some plugin assemblies failed to load; continuing with available CLI providers.";
+            }
+
+            foreach (var plugin in discovery.Plugins.Where(plugin => plugin.Success && plugin.Commands.Any(command => CommandNameMatches(command.Name, commandName))))
+            {
+                string fullPath = plugin.Path;
+                var context = new CliPluginLoadContext(fullPath);
+                try
+                {
+                    Assembly assembly = context.LoadFromAssemblyPath(fullPath);
+                    foreach (Type type in GetLoadableTypes(assembly, null))
+                    {
+                        if (!typeof(ICliCommandProvider).IsAssignableFrom(type) || type.IsAbstract || type.GetConstructor(Type.EmptyTypes) == null)
+                        {
+                            continue;
+                        }
+
+                        var provider = (ICliCommandProvider)Activator.CreateInstance(type);
+                        var commands = SafeGetCommands(provider);
+                        if (!commands.Any(command => CommandNameMatches(command.Name, commandName)))
+                        {
+                            continue;
+                        }
+
+                        bool captureOutput = args.HasFlag("json");
+                        var outputWriter = captureOutput ? new StringWriter() : Console.Out;
+                        var errorWriter = captureOutput ? new StringWriter() : Console.Error;
+                        result.PluginPath = fullPath;
+                        result.ProviderType = type.FullName;
+                        result.ExitCode = provider.Execute(commandName, commandArgs, new CliCommandContext(CliConfigStore.Open(args.GetValue("config")), outputWriter, errorWriter));
+                        if (captureOutput)
+                        {
+                            result.Stdout = outputWriter.ToString();
+                            result.Stderr = errorWriter.ToString();
+                        }
+                        result.Success = result.ExitCode == 0;
+                        return result;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    result.PluginPath = fullPath;
+                    result.Error = ex.Message;
+                    result.ExitCode = 5;
+                    return result;
+                }
+                finally
+                {
+                    context.Unload();
+                }
+            }
+
+            result.Error = "CLI plugin command not found: " + commandName;
+            return result;
+        }
+
+        private static List<string> ResolveDirectories(ParsedArgs args)
+        {
+            var directories = new List<string>();
+            AddDirectory(directories, args.GetValue("plugin-dir"));
+
+            var store = CliConfigStore.Open(args.GetValue("config"));
+            string configured;
+            if (store.Values.TryGetValue("plugin-dir", out configured))
+            {
+                AddDirectory(directories, configured);
+            }
+
+            string env = Environment.GetEnvironmentVariable("WCR2_CLI_PLUGIN_DIR");
+            if (!string.IsNullOrWhiteSpace(env))
+            {
+                foreach (string item in env.Split(Path.PathSeparator))
+                {
+                    AddDirectory(directories, item);
+                }
+            }
+
+            AddDirectory(directories, Path.Combine(AppContext.BaseDirectory, "CliPlugin"));
+            AddDirectory(directories, Path.Combine(Directory.GetCurrentDirectory(), "CliPlugin"));
+
+            if (args.HasFlag("include-gui-plugin-dir"))
+            {
+                AddDirectory(directories, Path.Combine(AppContext.BaseDirectory, "Plugin"));
+                AddDirectory(directories, Path.Combine(Directory.GetCurrentDirectory(), "Plugin"));
+            }
+
+            return directories;
+        }
+
+        private static void AddDirectory(List<string> directories, string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            string fullPath = Path.GetFullPath(path);
+            if (!directories.Contains(fullPath, StringComparer.OrdinalIgnoreCase))
+            {
+                directories.Add(fullPath);
+            }
+        }
+
+        private static IEnumerable<Type> GetLoadableTypes(Assembly assembly, CliPluginDto dto)
+        {
+            try
+            {
+                return assembly.GetExportedTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                if (dto != null)
+                {
+                    dto.Error = string.Join(Environment.NewLine, ex.LoaderExceptions.Where(item => item != null).Select(item => item.Message));
+                }
+                return ex.Types.Where(type => type != null && type.IsPublic);
+            }
+        }
+
+        private static void AddCommands(CliPluginDto dto, Type providerType)
+        {
+            try
+            {
+                var provider = (ICliCommandProvider)Activator.CreateInstance(providerType);
+                foreach (var command in SafeGetCommands(provider))
+                {
+                    if (string.IsNullOrWhiteSpace(command.Name))
+                    {
+                        continue;
+                    }
+
+                    dto.Commands.Add(new CliPluginCommandDto
+                    {
+                        ProviderType = providerType.FullName,
+                        Name = command.Name,
+                        Summary = command.Summary,
+                        Usage = command.Usage
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                dto.Error = "Provider discovery failed for " + providerType.FullName + ": " + ex.Message;
+            }
+        }
+
+        private static List<CliCommandDescriptor> SafeGetCommands(ICliCommandProvider provider)
+        {
+            return (provider.GetCommands() ?? Enumerable.Empty<CliCommandDescriptor>())
+                .Where(command => command != null)
+                .ToList();
+        }
+
+        private static bool CommandNameMatches(string left, string right)
+        {
+            return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsGuiPluginEntry(Type type)
+        {
+            for (Type current = type.BaseType; current != null; current = current.BaseType)
+            {
+                if (string.Equals(current.FullName, "WzComparerR2.PluginBase.PluginEntry", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    internal sealed class CliPluginDiscoveryDto
+    {
+        public List<string> Directories { get; set; }
+        public int PluginCount { get; set; }
+        public int LoadFailedCount { get; set; }
+        public List<CliPluginDto> Plugins { get; set; }
+    }
+
+    internal sealed class CliPluginDto
+    {
+        public string Path { get; set; }
+        public string AssemblyName { get; set; }
+        public string AssemblyVersion { get; set; }
+        public string Status { get; set; }
+        public bool Success { get; set; }
+        public string Error { get; set; }
+        public List<string> ProviderTypes { get; set; }
+        public List<string> GuiPluginEntryTypes { get; set; }
+        public List<CliPluginCommandDto> Commands { get; set; }
+    }
+
+    internal sealed class CliPluginCommandDto
+    {
+        public string ProviderType { get; set; }
+        public string Name { get; set; }
+        public string Summary { get; set; }
+        public string Usage { get; set; }
+    }
+
+    internal sealed class CliPluginCommandListItemDto
+    {
+        public string PluginPath { get; set; }
+        public string ProviderType { get; set; }
+        public string Name { get; set; }
+        public string Summary { get; set; }
+        public string Usage { get; set; }
+    }
+
+    internal sealed class CliPluginRunResultDto
+    {
+        public string Command { get; set; }
+        public bool Success { get; set; }
+        public int ExitCode { get; set; }
+        public int SearchedPluginCount { get; set; }
+        public string PluginPath { get; set; }
+        public string ProviderType { get; set; }
+        public string Message { get; set; }
+        public string Error { get; set; }
+        public string Stdout { get; set; }
+        public string Stderr { get; set; }
     }
 
     internal sealed class ParsedArgs
@@ -381,20 +2332,32 @@ namespace WzComparerR2.Cli
         private ParsedArgs()
         {
             this.Positionals = new List<string>();
+            this.RawArguments = new List<string>();
             this.values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             this.flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
         public List<string> Positionals { get; private set; }
+        public List<string> RawArguments { get; private set; }
 
         public static ParsedArgs Parse(IEnumerable<string> args)
         {
             var parsed = new ParsedArgs();
             var list = args.ToList();
+            parsed.RawArguments.AddRange(list);
 
             for (int i = 0; i < list.Count; i++)
             {
                 string arg = list[i];
+                if (string.Equals(arg, "--", StringComparison.Ordinal))
+                {
+                    for (int j = i + 1; j < list.Count; j++)
+                    {
+                        parsed.Positionals.Add(list[j]);
+                    }
+                    break;
+                }
+
                 if (arg.StartsWith("--", StringComparison.Ordinal))
                 {
                     string key = arg.Substring(2);
@@ -419,6 +2382,39 @@ namespace WzComparerR2.Cli
             }
 
             return parsed;
+        }
+
+        public IReadOnlyList<string> GetTailArguments(int positionalCount)
+        {
+            if (positionalCount <= 0)
+            {
+                return this.RawArguments.ToList();
+            }
+
+            int seen = 0;
+            for (int i = 0; i < this.RawArguments.Count; i++)
+            {
+                string arg = this.RawArguments[i];
+                if (string.Equals(arg, "--", StringComparison.Ordinal))
+                {
+                    return this.RawArguments.Skip(i + 1).ToList();
+                }
+
+                if (!arg.StartsWith("--", StringComparison.Ordinal))
+                {
+                    seen++;
+                    if (seen == positionalCount)
+                    {
+                        return this.RawArguments.Skip(i + 1).ToList();
+                    }
+                }
+                else if (i + 1 < this.RawArguments.Count && !this.RawArguments[i + 1].StartsWith("--", StringComparison.Ordinal))
+                {
+                    i++;
+                }
+            }
+
+            return Array.Empty<string>();
         }
 
         public string GetValue(string key)
@@ -550,6 +2546,126 @@ namespace WzComparerR2.Cli
         public void Dispose()
         {
             this.Structure.Clear();
+        }
+    }
+
+    internal sealed class SearchOptions
+    {
+        private Regex pathRegex;
+
+        public string NameQuery { get; set; }
+        public string ValueQuery { get; set; }
+        public string PathQuery { get; private set; }
+        public string Type { get; private set; }
+        public int MaxResults { get; private set; }
+        public bool ExtractImages { get; set; }
+
+        public static SearchOptions FromArgs(ParsedArgs args)
+        {
+            var options = new SearchOptions
+            {
+                PathQuery = args.GetValue("match-path"),
+                Type = args.GetValue("type"),
+                MaxResults = args.GetInt("max-results", 100)
+            };
+
+            if (!string.IsNullOrEmpty(options.PathQuery))
+            {
+                string pattern = args.HasFlag("regex")
+                    ? options.PathQuery
+                    : GlobToRegexPattern(options.PathQuery);
+                try
+                {
+                    options.pathRegex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new UsageException("Invalid --match-path pattern: " + ex.Message);
+                }
+            }
+
+            return options;
+        }
+
+        public bool Matches(Wz_Node node)
+        {
+            if (!string.IsNullOrEmpty(this.Type) && !TypeMatches(node, this.Type))
+            {
+                return false;
+            }
+
+            string value = NodeDto.FormatValue(node.Value);
+            bool nameMatched = !string.IsNullOrEmpty(this.NameQuery)
+                && node.Text != null
+                && node.Text.IndexOf(this.NameQuery, StringComparison.OrdinalIgnoreCase) >= 0;
+            bool valueMatched = !string.IsNullOrEmpty(this.ValueQuery)
+                && value != null
+                && value.IndexOf(this.ValueQuery, StringComparison.OrdinalIgnoreCase) >= 0;
+            bool pathMatched = this.pathRegex != null
+                && this.pathRegex.IsMatch(NormalizePath(node.FullPath));
+
+            return nameMatched || valueMatched || pathMatched;
+        }
+
+        private static bool TypeMatches(Wz_Node node, string type)
+        {
+            string nodeType = NodeDto.GetTypeName(node.Value);
+            if (string.Equals(nodeType, type, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(type, "file", StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(nodeType, "wz-file", StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (string.Equals(type, "dir", StringComparison.OrdinalIgnoreCase))
+            {
+                return node.Value == null;
+            }
+
+            if (string.Equals(type, "string", StringComparison.OrdinalIgnoreCase))
+            {
+                return node.Value is string;
+            }
+
+            return false;
+        }
+
+        private static string NormalizePath(string path)
+        {
+            return string.IsNullOrEmpty(path) ? string.Empty : path.Replace('\\', '/');
+        }
+
+        private static string GlobToRegexPattern(string glob)
+        {
+            bool hasWildcard = glob.IndexOf('*') >= 0 || glob.IndexOf('?') >= 0;
+            if (!hasWildcard)
+            {
+                return Regex.Escape(NormalizePath(glob));
+            }
+
+            string normalized = NormalizePath(glob);
+            var builder = new System.Text.StringBuilder();
+            builder.Append('^');
+            foreach (char ch in normalized)
+            {
+                switch (ch)
+                {
+                    case '*':
+                        builder.Append(".*");
+                        break;
+                    case '?':
+                        builder.Append('.');
+                        break;
+                    default:
+                        builder.Append(Regex.Escape(ch.ToString()));
+                        break;
+                }
+            }
+            builder.Append('$');
+            return builder.ToString();
         }
     }
 
@@ -756,6 +2872,10 @@ namespace WzComparerR2.Cli
             {
                 return "raw";
             }
+            if (value is Wz_Video)
+            {
+                return "video";
+            }
             return value.GetType().Name;
         }
 
@@ -825,6 +2945,455 @@ namespace WzComparerR2.Cli
         }
     }
 
+    internal sealed class CompareOptions
+    {
+        public string ChangeType { get; private set; }
+        public int MaxResults { get; private set; }
+        public bool IgnoreImageBinary { get; private set; }
+
+        public static CompareOptions FromArgs(ParsedArgs args)
+        {
+            string changeType = args.GetValue("type");
+            if (!string.IsNullOrEmpty(changeType)
+                && !string.Equals(changeType, "added", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(changeType, "removed", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(changeType, "changed", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new UsageException("--type must be added, removed, or changed.");
+            }
+
+            return new CompareOptions
+            {
+                ChangeType = changeType,
+                MaxResults = args.GetInt("max-results", 1000),
+                IgnoreImageBinary = args.HasFlag("ignore-image-binary")
+            };
+        }
+
+        public bool Includes(string changeType)
+        {
+            return string.IsNullOrEmpty(this.ChangeType)
+                || string.Equals(this.ChangeType, changeType, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    internal sealed class CompareResultDto
+    {
+        public string OldInputPath { get; set; }
+        public string NewInputPath { get; set; }
+        public string OutputPath { get; set; }
+        public string Path { get; set; }
+        public int Added { get; set; }
+        public int Removed { get; set; }
+        public int Changed { get; set; }
+        public int MaxResults { get; set; }
+        public bool IgnoreImageBinary { get; set; }
+        public bool Truncated { get; set; }
+        public List<CompareChangeDto> Differences { get; set; }
+
+        public static CompareResultDto Create(string oldInputPath, string newInputPath, string path)
+        {
+            return new CompareResultDto
+            {
+                OldInputPath = oldInputPath,
+                NewInputPath = newInputPath,
+                Path = path,
+                MaxResults = 1000,
+                Differences = new List<CompareChangeDto>()
+            };
+        }
+
+        public void Count(string changeType)
+        {
+            if (string.Equals(changeType, "added", StringComparison.OrdinalIgnoreCase))
+            {
+                this.Added++;
+            }
+            else if (string.Equals(changeType, "removed", StringComparison.OrdinalIgnoreCase))
+            {
+                this.Removed++;
+            }
+            else if (string.Equals(changeType, "changed", StringComparison.OrdinalIgnoreCase))
+            {
+                this.Changed++;
+            }
+        }
+    }
+
+    internal sealed class CompareChangeDto
+    {
+        public string Path { get; set; }
+        public string ChangeType { get; set; }
+        public string OldType { get; set; }
+        public string NewType { get; set; }
+        public string OldValue { get; set; }
+        public string NewValue { get; set; }
+
+        public static CompareChangeDto FromNodes(Wz_Node oldNode, Wz_Node newNode)
+        {
+            if (oldNode == null && newNode == null)
+            {
+                return null;
+            }
+
+            if (oldNode == null)
+            {
+                return Create(newNode.FullPath, "added", null, newNode);
+            }
+
+            if (newNode == null)
+            {
+                return Create(oldNode.FullPath, "removed", oldNode, null);
+            }
+
+            string oldType = NodeDto.GetTypeName(oldNode.Value);
+            string newType = NodeDto.GetTypeName(newNode.Value);
+            string oldValue = NodeDto.FormatValue(oldNode.Value);
+            string newValue = NodeDto.FormatValue(newNode.Value);
+            if (string.Equals(oldType, newType, StringComparison.Ordinal)
+                && string.Equals(oldValue, newValue, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return new CompareChangeDto
+            {
+                Path = newNode.FullPath ?? oldNode.FullPath,
+                ChangeType = "changed",
+                OldType = oldType,
+                NewType = newType,
+                OldValue = oldValue,
+                NewValue = newValue
+            };
+        }
+
+        private static CompareChangeDto Create(string path, string changeType, Wz_Node oldNode, Wz_Node newNode)
+        {
+            return new CompareChangeDto
+            {
+                Path = path,
+                ChangeType = changeType,
+                OldType = oldNode == null ? null : NodeDto.GetTypeName(oldNode.Value),
+                NewType = newNode == null ? null : NodeDto.GetTypeName(newNode.Value),
+                OldValue = oldNode == null ? null : NodeDto.FormatValue(oldNode.Value),
+                NewValue = newNode == null ? null : NodeDto.FormatValue(newNode.Value)
+            };
+        }
+    }
+
+    internal struct NodePair
+    {
+        public NodePair(Wz_Node oldNode, Wz_Node newNode)
+        {
+            this.OldNode = oldNode;
+            this.NewNode = newNode;
+        }
+
+        public Wz_Node OldNode { get; private set; }
+        public Wz_Node NewNode { get; private set; }
+    }
+
+    internal sealed class PatchInspectResultDto
+    {
+        public string PatchFilePath { get; set; }
+        public string OutputPath { get; set; }
+        public long DataPosition { get; set; }
+        public bool? IsKmst1125Format { get; set; }
+        public int PartCount { get; set; }
+        public int CreateCount { get; set; }
+        public int RebuildCount { get; set; }
+        public int DeleteCount { get; set; }
+        public int OldFileHashCount { get; set; }
+        public int NoticeLength { get; set; }
+        public string NoticeText { get; set; }
+        public List<PatchPartDto> Parts { get; set; }
+
+        public static PatchInspectResultDto FromPatcher(string patchFilePath, long dataPosition, WzPatcher patcher)
+        {
+            var parts = patcher.PatchParts == null
+                ? new List<PatchPartDto>()
+                : patcher.PatchParts.Select(PatchPartDto.FromPart).ToList();
+
+            return new PatchInspectResultDto
+            {
+                PatchFilePath = patchFilePath,
+                DataPosition = dataPosition,
+                IsKmst1125Format = patcher.IsKMST1125Format,
+                PartCount = parts.Count,
+                CreateCount = parts.Count(part => part.Type == "create"),
+                RebuildCount = parts.Count(part => part.Type == "rebuild"),
+                DeleteCount = parts.Count(part => part.Type == "delete"),
+                OldFileHashCount = patcher.OldFileHash == null ? 0 : patcher.OldFileHash.Count,
+                NoticeLength = patcher.NoticeText == null ? 0 : patcher.NoticeText.Length,
+                NoticeText = patcher.NoticeText,
+                Parts = parts
+            };
+        }
+    }
+
+    internal sealed class PatchPartDto
+    {
+        public string FileName { get; set; }
+        public string Type { get; set; }
+        public string WzType { get; set; }
+        public long Offset { get; set; }
+        public int? OldFileLength { get; set; }
+        public int NewFileLength { get; set; }
+        public string OldChecksum { get; set; }
+        public string NewChecksum { get; set; }
+
+        public static PatchPartDto FromPart(PatchPartContext part)
+        {
+            return new PatchPartDto
+            {
+                FileName = part.FileName,
+                Type = GetPatchTypeName(part.Type),
+                WzType = part.WzType.ToString(),
+                Offset = part.Offset,
+                OldFileLength = part.OldFileLength,
+                NewFileLength = part.NewFileLength,
+                OldChecksum = part.OldChecksum.HasValue ? "0x" + part.OldChecksum.Value.ToString("x8") : null,
+                NewChecksum = "0x" + part.NewChecksum.ToString("x8")
+            };
+        }
+
+        private static string GetPatchTypeName(int type)
+        {
+            switch (type)
+            {
+                case 0:
+                    return "create";
+                case 1:
+                    return "rebuild";
+                case 2:
+                    return "delete";
+                default:
+                    return "unknown";
+            }
+        }
+    }
+
+    internal sealed class PatchDryRunResultDto
+    {
+        public string PatchFilePath { get; set; }
+        public string TargetDirectory { get; set; }
+        public string OutputPath { get; set; }
+        public bool? IsKmst1125Format { get; set; }
+        public int PartCount { get; set; }
+        public int CreateCount { get; set; }
+        public int RebuildCount { get; set; }
+        public int DeleteCount { get; set; }
+        public int ValidCount { get; set; }
+        public int MissingCount { get; set; }
+        public int ChecksumMismatchCount { get; set; }
+        public int UncheckedCount { get; set; }
+        public List<PatchDryRunActionDto> Actions { get; set; }
+
+        public static PatchDryRunResultDto FromInspect(PatchInspectResultDto inspect, string targetDirectory, List<PatchPartContext> parts)
+        {
+            var actions = parts == null
+                ? new List<PatchDryRunActionDto>()
+                : parts.Select(part => PatchDryRunActionDto.FromPart(part, targetDirectory)).ToList();
+
+            return new PatchDryRunResultDto
+            {
+                PatchFilePath = inspect.PatchFilePath,
+                TargetDirectory = targetDirectory,
+                IsKmst1125Format = inspect.IsKmst1125Format,
+                PartCount = actions.Count,
+                CreateCount = actions.Count(action => action.Action == "create"),
+                RebuildCount = actions.Count(action => action.Action == "rebuild"),
+                DeleteCount = actions.Count(action => action.Action == "delete"),
+                ValidCount = actions.Count(action => action.Status == "valid"),
+                MissingCount = actions.Count(action => action.Status == "missing"),
+                ChecksumMismatchCount = actions.Count(action => action.Status == "checksum-mismatch"),
+                UncheckedCount = actions.Count(action => action.Status == "unchecked" || action.Status == "exists" || action.Status == "absent"),
+                Actions = actions
+            };
+        }
+    }
+
+    internal sealed class PatchDryRunActionDto
+    {
+        public string FileName { get; set; }
+        public string TargetPath { get; set; }
+        public string Action { get; set; }
+        public string Status { get; set; }
+        public bool Exists { get; set; }
+        public long? ExistingLength { get; set; }
+        public int? NewFileLength { get; set; }
+        public string ExpectedOldChecksum { get; set; }
+        public string ActualOldChecksum { get; set; }
+        public string NewChecksum { get; set; }
+        public string Message { get; set; }
+
+        public static PatchDryRunActionDto FromPart(PatchPartContext part, string targetDirectory)
+        {
+            string targetPath = Path.Combine(targetDirectory, NormalizePatchPath(part.FileName));
+            bool isDirectory = part.FileName.EndsWith("\\", StringComparison.Ordinal) || part.FileName.EndsWith("/", StringComparison.Ordinal);
+            bool exists = isDirectory ? Directory.Exists(targetPath) : File.Exists(targetPath);
+            var dto = new PatchDryRunActionDto
+            {
+                FileName = part.FileName,
+                TargetPath = targetPath,
+                Action = GetActionName(part.Type),
+                Exists = exists,
+                NewFileLength = part.NewFileLength,
+                ExpectedOldChecksum = part.OldChecksum.HasValue ? FormatChecksum(part.OldChecksum.Value) : null,
+                NewChecksum = FormatChecksum(part.NewChecksum)
+            };
+
+            if (!isDirectory && exists)
+            {
+                dto.ExistingLength = new FileInfo(targetPath).Length;
+            }
+
+            switch (part.Type)
+            {
+                case 0:
+                    dto.Status = exists ? "exists" : "absent";
+                    dto.Message = exists ? "Target already exists; create would overwrite if applied." : "Target does not exist; create can add it.";
+                    break;
+                case 1:
+                    ValidateExistingFile(dto, part, targetPath, exists);
+                    break;
+                case 2:
+                    dto.Status = exists ? "exists" : "missing";
+                    dto.Message = exists ? "Target exists and would be deleted." : "Target is already missing.";
+                    break;
+                default:
+                    dto.Status = "unknown";
+                    dto.Message = "Unknown patch action type.";
+                    break;
+            }
+
+            return dto;
+        }
+
+        private static void ValidateExistingFile(PatchDryRunActionDto dto, PatchPartContext part, string targetPath, bool exists)
+        {
+            if (!exists)
+            {
+                dto.Status = "missing";
+                dto.Message = "Required old file is missing.";
+                return;
+            }
+
+            if (!part.OldChecksum.HasValue)
+            {
+                dto.Status = "unchecked";
+                dto.Message = "No old checksum is available in this patch part.";
+                return;
+            }
+
+            try
+            {
+                using (var stream = new FileStream(targetPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    uint actual = CheckSum.ComputeHash(stream, stream.Length, CancellationToken.None);
+                    dto.ActualOldChecksum = FormatChecksum(actual);
+                    if (actual == part.OldChecksum.Value)
+                    {
+                        dto.Status = "valid";
+                        dto.Message = "Old checksum matches.";
+                    }
+                    else
+                    {
+                        dto.Status = "checksum-mismatch";
+                        dto.Message = "Old checksum does not match.";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                dto.Status = "read-error";
+                dto.Message = ex.Message;
+            }
+        }
+
+        private static string NormalizePatchPath(string fileName)
+        {
+            string path = fileName ?? string.Empty;
+            return path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+        }
+
+        private static string GetActionName(int type)
+        {
+            switch (type)
+            {
+                case 0:
+                    return "create";
+                case 1:
+                    return "rebuild";
+                case 2:
+                    return "delete";
+                default:
+                    return "unknown";
+            }
+        }
+
+        private static string FormatChecksum(uint checksum)
+        {
+            return "0x" + checksum.ToString("x8");
+        }
+    }
+
+    internal sealed class DirectoryCopyStats
+    {
+        public int FileCount { get; set; }
+        public long Bytes { get; set; }
+    }
+
+    internal sealed class PatchApplyResultDto
+    {
+        public string PatchFilePath { get; set; }
+        public string TargetDirectory { get; set; }
+        public string OutputDirectory { get; set; }
+        public string LogPath { get; set; }
+        public int PartCount { get; set; }
+        public int CreateCount { get; set; }
+        public int RebuildCount { get; set; }
+        public int DeleteCount { get; set; }
+        public int CopiedFileCount { get; set; }
+        public long CopiedBytes { get; set; }
+        public int EventCount { get; set; }
+        public List<PatchApplyEventDto> Events { get; set; }
+
+        public static PatchApplyResultDto FromDryRun(PatchDryRunResultDto dryRun, string outputDirectory, DirectoryCopyStats copyStats)
+        {
+            return new PatchApplyResultDto
+            {
+                PatchFilePath = dryRun.PatchFilePath,
+                TargetDirectory = dryRun.TargetDirectory,
+                OutputDirectory = outputDirectory,
+                PartCount = dryRun.PartCount,
+                CreateCount = dryRun.CreateCount,
+                RebuildCount = dryRun.RebuildCount,
+                DeleteCount = dryRun.DeleteCount,
+                CopiedFileCount = copyStats.FileCount,
+                CopiedBytes = copyStats.Bytes,
+                Events = new List<PatchApplyEventDto>()
+            };
+        }
+    }
+
+    internal sealed class PatchApplyEventDto
+    {
+        public string State { get; set; }
+        public string FileName { get; set; }
+        public long CurrentFileLength { get; set; }
+
+        public static PatchApplyEventDto FromEvent(PatchingEventArgs args)
+        {
+            return new PatchApplyEventDto
+            {
+                State = args.State.ToString(),
+                FileName = args.Part == null ? null : args.Part.FileName,
+                CurrentFileLength = args.CurrentFileLength
+            };
+        }
+    }
+
     internal static class ExtractExporter
     {
         public static List<ExtractedFileDto> ExportAuto(Wz_Node node, string outputDirectory, bool recursive)
@@ -881,6 +3450,17 @@ namespace WzComparerR2.Cli
                 Type = "xml",
                 Bytes = new FileInfo(fullOutput).Length
             };
+        }
+
+        public static string WriteManifest(ExtractResultDto result, string manifestPath)
+        {
+            string fullPath = Path.GetFullPath(manifestPath);
+            EnsureParentDirectory(fullPath);
+            File.WriteAllText(fullPath, JsonSerializer.Serialize(result, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            }));
+            return fullPath;
         }
 
         private static IEnumerable<Wz_Node> Traverse(Wz_Node root)
@@ -1081,6 +3661,7 @@ namespace WzComparerR2.Cli
     {
         public string InputPath { get; set; }
         public string SourcePath { get; set; }
+        public string ManifestPath { get; set; }
         public List<ExtractedFileDto> Files { get; set; }
 
         public static ExtractResultDto Create(string inputPath, Wz_Node node)
@@ -1100,6 +3681,1470 @@ namespace WzComparerR2.Cli
         public string OutputPath { get; set; }
         public string Type { get; set; }
         public long Bytes { get; set; }
+    }
+
+    internal static class DomainInfoFinder
+    {
+        public static Wz_Node FindDataNode(Wz_Node root, string kind, string id)
+        {
+            var candidates = BuildIdCandidates(kind, id);
+            foreach (Wz_Node node in Traverse(root, true))
+            {
+                if (MatchesAny(node.Text, candidates))
+                {
+                    if (IsPreferredDomainPath(node, kind))
+                    {
+                        return node;
+                    }
+                }
+            }
+
+            foreach (Wz_Node node in Traverse(root, true))
+            {
+                if (MatchesAny(node.Text, candidates))
+                {
+                    return node;
+                }
+            }
+
+            return null;
+        }
+
+        public static DomainStringInfo FindStringInfo(Wz_Node root, string kind, string id)
+        {
+            var candidates = BuildIdCandidates(kind, id);
+            foreach (Wz_Node node in Traverse(root, true))
+            {
+                if (!MatchesAny(node.Text, candidates))
+                {
+                    continue;
+                }
+
+                var info = DomainStringInfo.FromNode(node);
+                if (info.HasValues)
+                {
+                    return info;
+                }
+            }
+
+            return null;
+        }
+
+        private static List<string> BuildIdCandidates(string kind, string id)
+        {
+            var candidates = new List<string>();
+            AddUnique(candidates, id);
+            AddUnique(candidates, id + ".img");
+
+            int numericId;
+            if (int.TryParse(id, out numericId))
+            {
+                if (string.Equals(kind, "map", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddUnique(candidates, numericId.ToString("d9"));
+                    AddUnique(candidates, numericId.ToString("d9") + ".img");
+                }
+                else
+                {
+                    AddUnique(candidates, numericId.ToString("d8"));
+                    AddUnique(candidates, numericId.ToString("d8") + ".img");
+                }
+            }
+
+            return candidates;
+        }
+
+        private static void AddUnique(List<string> list, string value)
+        {
+            if (!string.IsNullOrEmpty(value) && !list.Any(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase)))
+            {
+                list.Add(value);
+            }
+        }
+
+        private static bool MatchesAny(string text, List<string> candidates)
+        {
+            return candidates.Any(candidate => string.Equals(text, candidate, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsPreferredDomainPath(Wz_Node node, string kind)
+        {
+            string path = NormalizePath(node.FullPath);
+            if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase))
+            {
+                kind = "item";
+            }
+
+            if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("/skill", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (string.Equals(kind, "item", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("/item", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.IndexOf("/character", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (string.Equals(kind, "map", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("/map", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            return true;
+        }
+
+        private static string NormalizePath(string path)
+        {
+            return string.IsNullOrEmpty(path) ? string.Empty : path.Replace('\\', '/');
+        }
+
+        private static IEnumerable<Wz_Node> Traverse(Wz_Node root, bool extractImages)
+        {
+            if (root == null)
+            {
+                yield break;
+            }
+
+            var stack = new Stack<Wz_Node>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                Wz_Node node = NodePath.ExtractImageNode(stack.Pop(), extractImages);
+                if (node == null)
+                {
+                    continue;
+                }
+
+                yield return node;
+
+                var children = node.Nodes.ToList();
+                for (int i = children.Count - 1; i >= 0; i--)
+                {
+                    stack.Push(children[i]);
+                }
+            }
+        }
+    }
+
+    internal sealed class DomainStringInfo
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public Dictionary<string, string> Values { get; set; }
+
+        public bool HasValues
+        {
+            get
+            {
+                return !string.IsNullOrEmpty(this.Name)
+                    || !string.IsNullOrEmpty(this.Description)
+                    || (this.Values != null && this.Values.Count > 0);
+            }
+        }
+
+        public static DomainStringInfo FromNode(Wz_Node node)
+        {
+            var info = new DomainStringInfo
+            {
+                Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            };
+
+            foreach (Wz_Node child in node.Nodes)
+            {
+                string value = NodeDto.FormatValue(child.Value);
+                if (string.IsNullOrEmpty(value))
+                {
+                    continue;
+                }
+
+                info.Values[child.Text] = value;
+                if (string.Equals(child.Text, "name", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(child.Text, "mapName", StringComparison.OrdinalIgnoreCase))
+                {
+                    info.Name = value;
+                }
+                else if (string.Equals(child.Text, "desc", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(child.Text, "h", StringComparison.OrdinalIgnoreCase))
+                {
+                    info.Description = value;
+                }
+            }
+
+            if (string.IsNullOrEmpty(info.Name))
+            {
+                string streetName;
+                string mapName;
+                if (info.Values.TryGetValue("streetName", out streetName)
+                    && info.Values.TryGetValue("mapName", out mapName))
+                {
+                    info.Name = streetName + " - " + mapName;
+                }
+            }
+
+            return info;
+        }
+    }
+
+    internal sealed class DomainInfoDto
+    {
+        public string Kind { get; set; }
+        public string Id { get; set; }
+        public string Path { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public int ChildrenCount { get; set; }
+        public int? LevelCount { get; set; }
+        public int? MaxLevel { get; set; }
+        public Dictionary<string, string> Properties { get; set; }
+        public Dictionary<string, string> StringProperties { get; set; }
+        public List<string> IconPaths { get; set; }
+
+        public static DomainInfoDto FromNode(string kind, string id, Wz_Node node, DomainStringInfo stringInfo)
+        {
+            var dto = new DomainInfoDto
+            {
+                Kind = kind,
+                Id = id,
+                Path = node.FullPath,
+                Name = stringInfo == null ? null : stringInfo.Name,
+                Description = stringInfo == null ? null : stringInfo.Description,
+                ChildrenCount = node.Nodes.Count,
+                Properties = CollectImmediateProperties(node),
+                StringProperties = stringInfo == null ? new Dictionary<string, string>() : stringInfo.Values,
+                IconPaths = CollectIconPaths(node)
+            };
+
+            ApplyLevelInfo(dto, node);
+            return dto;
+        }
+
+        private static Dictionary<string, string> CollectImmediateProperties(Wz_Node node)
+        {
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Wz_Node child in node.Nodes)
+            {
+                string value = NodeDto.FormatValue(child.Value);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    properties[child.Text] = value;
+                }
+            }
+            return properties;
+        }
+
+        private static List<string> CollectIconPaths(Wz_Node node)
+        {
+            var paths = new List<string>();
+            var stack = new Stack<Wz_Node>();
+            stack.Push(node);
+            while (stack.Count > 0)
+            {
+                Wz_Node current = NodePath.ExtractImageNode(stack.Pop(), true);
+                if (current == null)
+                {
+                    continue;
+                }
+
+                if (current.Value is Wz_Png
+                    && current.Text != null
+                    && current.Text.IndexOf("icon", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    paths.Add(current.FullPath);
+                }
+
+                var children = current.Nodes.ToList();
+                for (int i = children.Count - 1; i >= 0; i--)
+                {
+                    stack.Push(children[i]);
+                }
+            }
+            return paths;
+        }
+
+        private static void ApplyLevelInfo(DomainInfoDto dto, Wz_Node node)
+        {
+            Wz_Node level = FindChild(node, "level");
+            if (level == null)
+            {
+                return;
+            }
+
+            dto.LevelCount = level.Nodes.Count;
+            int maxLevel = 0;
+            foreach (Wz_Node child in level.Nodes)
+            {
+                int parsed;
+                if (int.TryParse(child.Text, out parsed) && parsed > maxLevel)
+                {
+                    maxLevel = parsed;
+                }
+            }
+            if (maxLevel > 0)
+            {
+                dto.MaxLevel = maxLevel;
+            }
+        }
+
+        private static Wz_Node FindChild(Wz_Node node, string name)
+        {
+            foreach (Wz_Node child in node.Nodes)
+            {
+                if (string.Equals(child.Text, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return NodePath.ExtractImageNode(child, true);
+                }
+            }
+            return null;
+        }
+    }
+
+    internal static class AnimationFrameExporter
+    {
+        public static AnimationFramesResultDto ExportFrames(Wz_Node node, string outputDirectory)
+        {
+            string fullOutputDirectory = Path.GetFullPath(outputDirectory);
+            Directory.CreateDirectory(fullOutputDirectory);
+
+            var result = new AnimationFramesResultDto
+            {
+                SourcePath = node.FullPath,
+                OutputDirectory = fullOutputDirectory,
+                Frames = new List<AnimationFrameDto>()
+            };
+
+            var frameNodes = GetFrameNodes(node);
+            foreach (var frameNode in frameNodes)
+            {
+                string frameDirectory = Path.Combine(fullOutputDirectory, frameNode.Index.ToString("d4"));
+                var files = ExtractExporter.ExportAuto(frameNode.Node, frameDirectory, true);
+                result.Frames.Add(new AnimationFrameDto
+                {
+                    Index = frameNode.Index,
+                    SourcePath = frameNode.Node.FullPath,
+                    Delay = ReadDelay(frameNode.Node),
+                    Files = files
+                });
+            }
+
+            result.FrameCount = result.Frames.Count;
+            result.ManifestPath = Path.Combine(fullOutputDirectory, "frames.json");
+            File.WriteAllText(result.ManifestPath, JsonSerializer.Serialize(result, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            }));
+            return result;
+        }
+
+        private static List<AnimationFrameNode> GetFrameNodes(Wz_Node node)
+        {
+            var frames = new List<AnimationFrameNode>();
+            foreach (Wz_Node child in node.Nodes)
+            {
+                int index;
+                if (int.TryParse(child.Text, out index))
+                {
+                    frames.Add(new AnimationFrameNode(index, NodePath.ExtractImageNode(child, true)));
+                }
+            }
+
+            if (frames.Count == 0)
+            {
+                frames.Add(new AnimationFrameNode(0, node));
+            }
+
+            return frames.OrderBy(frame => frame.Index).ToList();
+        }
+
+        private static int? ReadDelay(Wz_Node frameNode)
+        {
+            foreach (Wz_Node child in frameNode.Nodes)
+            {
+                if (string.Equals(child.Text, "delay", StringComparison.OrdinalIgnoreCase))
+                {
+                    int delay;
+                    string value = NodeDto.FormatValue(child.Value);
+                    if (int.TryParse(value, out delay))
+                    {
+                        return delay;
+                    }
+                }
+            }
+            return null;
+        }
+
+        private struct AnimationFrameNode
+        {
+            public AnimationFrameNode(int index, Wz_Node node)
+            {
+                this.Index = index;
+                this.Node = node;
+            }
+
+            public int Index { get; private set; }
+            public Wz_Node Node { get; private set; }
+        }
+    }
+
+    internal sealed class AnimationFramesResultDto
+    {
+        public string SourcePath { get; set; }
+        public string OutputDirectory { get; set; }
+        public string ManifestPath { get; set; }
+        public int FrameCount { get; set; }
+        public List<AnimationFrameDto> Frames { get; set; }
+    }
+
+    internal sealed class AnimationFrameDto
+    {
+        public int Index { get; set; }
+        public string SourcePath { get; set; }
+        public int? Delay { get; set; }
+        public List<ExtractedFileDto> Files { get; set; }
+    }
+
+    internal sealed class AvatarCodeDto
+    {
+        public string RawCode { get; set; }
+        public bool IsValid { get; set; }
+        public List<AvatarItemDto> Items { get; set; }
+        public List<string> Warnings { get; set; }
+
+        public static AvatarCodeDto Parse(string code)
+        {
+            var dto = new AvatarCodeDto
+            {
+                RawCode = code,
+                Items = new List<AvatarItemDto>(),
+                Warnings = new List<string>()
+            };
+
+            foreach (Match match in Regex.Matches(code ?? string.Empty, @"\d{4,}"))
+            {
+                if (dto.Items.Any(item => item.Id == match.Value))
+                {
+                    continue;
+                }
+
+                dto.Items.Add(AvatarItemDto.FromId(match.Value));
+            }
+
+            dto.IsValid = dto.Items.Count > 0;
+            if (!dto.IsValid)
+            {
+                dto.Warnings.Add("No item ids were found in the avatar code.");
+            }
+            if (dto.Items.Any(item => item.Category == "unknown"))
+            {
+                dto.Warnings.Add("Some ids could not be classified by MapleStory item id prefix.");
+            }
+
+            return dto;
+        }
+    }
+
+    internal sealed class AvatarItemDto
+    {
+        public string Id { get; set; }
+        public string Category { get; set; }
+        public string SlotGuess { get; set; }
+
+        public static AvatarItemDto FromId(string id)
+        {
+            int numericId;
+            int.TryParse(id, out numericId);
+            int prefix = numericId / 10000;
+
+            string slot = GuessEquipmentSlot(prefix);
+            return new AvatarItemDto
+            {
+                Id = id,
+                Category = slot == "unknown" ? GuessGeneralCategory(prefix) : "equipment",
+                SlotGuess = slot
+            };
+        }
+
+        private static string GuessEquipmentSlot(int prefix)
+        {
+            switch (prefix)
+            {
+                case 100:
+                    return "cap";
+                case 101:
+                    return "face-accessory";
+                case 102:
+                    return "eye-accessory";
+                case 103:
+                    return "earrings";
+                case 104:
+                    return "coat";
+                case 105:
+                    return "longcoat";
+                case 106:
+                    return "pants";
+                case 107:
+                    return "shoes";
+                case 108:
+                    return "glove";
+                case 109:
+                    return "shield";
+                case 110:
+                    return "cape";
+                case 111:
+                    return "ring";
+                case 112:
+                    return "pendant";
+                case 113:
+                    return "belt";
+                case 114:
+                    return "medal";
+                case 115:
+                    return "shoulder";
+                case 116:
+                    return "pocket";
+                case 118:
+                    return "badge";
+                case 119:
+                    return "emblem";
+                case 120:
+                    return "totem";
+            }
+
+            if (prefix >= 121 && prefix <= 170)
+            {
+                return "weapon";
+            }
+
+            return "unknown";
+        }
+
+        private static string GuessGeneralCategory(int prefix)
+        {
+            if (prefix >= 200 && prefix <= 245)
+            {
+                return "use";
+            }
+            if (prefix >= 300 && prefix <= 399)
+            {
+                return "install";
+            }
+            if (prefix >= 400 && prefix <= 499)
+            {
+                return "etc";
+            }
+            if (prefix >= 500 && prefix <= 599)
+            {
+                return "cash";
+            }
+            return "unknown";
+        }
+    }
+
+    internal sealed class MapMetadataDto
+    {
+        public string Id { get; set; }
+        public string Path { get; set; }
+        public List<MapSectionItemDto> Portals { get; set; }
+        public List<MapSectionItemDto> Life { get; set; }
+        public List<MapSectionItemDto> Reactors { get; set; }
+        public List<MapSectionItemDto> Objects { get; set; }
+        public List<MapSectionItemDto> SelectedItems { get; set; }
+
+        public static MapMetadataDto FromMapNode(string id, Wz_Node mapNode, string selectedSection)
+        {
+            var dto = new MapMetadataDto
+            {
+                Id = id,
+                Path = mapNode.FullPath,
+                Portals = CollectSection(mapNode, "portal", "portal"),
+                Life = CollectSection(mapNode, "life", "life"),
+                Reactors = CollectSection(mapNode, "reactor", "reactor"),
+                Objects = CollectObjects(mapNode)
+            };
+
+            switch (selectedSection)
+            {
+                case "portals":
+                    dto.SelectedItems = dto.Portals;
+                    break;
+                case "life":
+                    dto.SelectedItems = dto.Life;
+                    break;
+                case "reactors":
+                    dto.SelectedItems = dto.Reactors;
+                    break;
+                default:
+                    dto.SelectedItems = dto.Objects;
+                    break;
+            }
+
+            return dto;
+        }
+
+        private static List<MapSectionItemDto> CollectSection(Wz_Node mapNode, string sectionName, string kind)
+        {
+            var result = new List<MapSectionItemDto>();
+            Wz_Node section = FindChild(mapNode, sectionName);
+            if (section == null)
+            {
+                return result;
+            }
+
+            foreach (Wz_Node item in section.Nodes)
+            {
+                result.Add(MapSectionItemDto.FromNode(kind, null, item));
+            }
+            return result;
+        }
+
+        private static List<MapSectionItemDto> CollectObjects(Wz_Node mapNode)
+        {
+            var result = new List<MapSectionItemDto>();
+            foreach (Wz_Node layer in mapNode.Nodes)
+            {
+                int layerNo;
+                if (!int.TryParse(layer.Text, out layerNo))
+                {
+                    continue;
+                }
+
+                AddLayerItems(result, layer, layerNo, "obj", "object");
+                AddLayerItems(result, layer, layerNo, "tile", "tile");
+            }
+            return result;
+        }
+
+        private static void AddLayerItems(List<MapSectionItemDto> result, Wz_Node layer, int layerNo, string sectionName, string kind)
+        {
+            Wz_Node section = FindChild(layer, sectionName);
+            if (section == null)
+            {
+                return;
+            }
+
+            foreach (Wz_Node item in section.Nodes)
+            {
+                result.Add(MapSectionItemDto.FromNode(kind, layerNo, item));
+            }
+        }
+
+        private static Wz_Node FindChild(Wz_Node node, string name)
+        {
+            foreach (Wz_Node child in node.Nodes)
+            {
+                if (string.Equals(child.Text, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return NodePath.ExtractImageNode(child, true);
+                }
+            }
+            return null;
+        }
+    }
+
+    internal sealed class MapSectionItemDto
+    {
+        public string Kind { get; set; }
+        public string Index { get; set; }
+        public int? Layer { get; set; }
+        public string Path { get; set; }
+        public string Summary { get; set; }
+        public Dictionary<string, string> Properties { get; set; }
+
+        public static MapSectionItemDto FromNode(string kind, int? layer, Wz_Node node)
+        {
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Wz_Node child in node.Nodes)
+            {
+                string value = NodeDto.FormatValue(child.Value);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    properties[child.Text] = value;
+                }
+            }
+
+            return new MapSectionItemDto
+            {
+                Kind = kind,
+                Index = node.Text,
+                Layer = layer,
+                Path = node.FullPath,
+                Properties = properties,
+                Summary = BuildSummary(properties)
+            };
+        }
+
+        private static string BuildSummary(Dictionary<string, string> properties)
+        {
+            string[] keys = { "id", "type", "x", "y", "tm", "tn", "pn", "rx0", "rx1", "mobTime", "reactorTime" };
+            var parts = new List<string>();
+            foreach (string key in keys)
+            {
+                string value;
+                if (properties.TryGetValue(key, out value))
+                {
+                    parts.Add(key + "=" + value);
+                }
+            }
+            return string.Join(" ", parts);
+        }
+    }
+
+    internal sealed class LuaRunResultDto
+    {
+        public string ScriptPath { get; set; }
+        public string WzInputPath { get; set; }
+        public string WzRootName { get; set; }
+        public int WzRootChildren { get; set; }
+        public string Mode { get; set; }
+        public string LuaExecutable { get; set; }
+        public int ExitCode { get; set; }
+        public string Stdout { get; set; }
+        public string Stderr { get; set; }
+        public int LineCount { get; set; }
+
+        public static LuaRunResultDto Create(string scriptPath, string wzInput)
+        {
+            string fullScriptPath = Path.GetFullPath(scriptPath);
+            return new LuaRunResultDto
+            {
+                ScriptPath = fullScriptPath,
+                WzInputPath = string.IsNullOrEmpty(wzInput) ? null : Path.GetFullPath(wzInput),
+                Mode = "external-lua",
+                LineCount = File.Exists(fullScriptPath) ? File.ReadLines(fullScriptPath).Count() : 0
+            };
+        }
+    }
+
+    internal static class LuaExternalRunner
+    {
+        public static void Run(LuaRunResultDto result, int timeoutSeconds)
+        {
+            string executable = FindExecutable("lua")
+                ?? FindExecutable("lua5.4")
+                ?? FindExecutable("lua5.3")
+                ?? FindExecutable("luajit");
+
+            if (string.IsNullOrEmpty(executable))
+            {
+                result.Mode = "missing-executable";
+                result.ExitCode = 1;
+                result.Stderr = "No lua executable was found on PATH. Re-run with --dry-run to validate only.";
+                return;
+            }
+
+            result.LuaExecutable = executable;
+            var psi = new ProcessStartInfo(executable)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                WorkingDirectory = Path.GetDirectoryName(result.ScriptPath)
+            };
+            psi.ArgumentList.Add(result.ScriptPath);
+            if (!string.IsNullOrEmpty(result.WzInputPath))
+            {
+                psi.Environment["WCR2_WZ_INPUT"] = result.WzInputPath;
+                psi.Environment["WCR2_WZ_ROOT"] = result.WzRootName ?? string.Empty;
+            }
+
+            using (var process = new Process())
+            {
+                process.StartInfo = psi;
+                process.Start();
+                if (!process.WaitForExit(Math.Max(1, timeoutSeconds) * 1000))
+                {
+                    try
+                    {
+                        process.Kill();
+                    }
+                    catch
+                    {
+                    }
+                    result.Mode = "timeout";
+                    result.ExitCode = 1;
+                    result.Stderr = "Lua process timed out.";
+                    return;
+                }
+
+                result.Stdout = process.StandardOutput.ReadToEnd();
+                result.Stderr = process.StandardError.ReadToEnd();
+                result.ExitCode = process.ExitCode;
+            }
+        }
+
+        private static string FindExecutable(string name)
+        {
+            string pathValue = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+            foreach (string directory in pathValue.Split(Path.PathSeparator))
+            {
+                if (string.IsNullOrWhiteSpace(directory))
+                {
+                    continue;
+                }
+
+                string path = Path.Combine(directory, name);
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+            }
+            return null;
+        }
+    }
+
+    internal sealed class CliConfigStore
+    {
+        private CliConfigStore(string path, Dictionary<string, string> values)
+        {
+            Path = path;
+            Values = values;
+        }
+
+        public string Path { get; private set; }
+        public Dictionary<string, string> Values { get; private set; }
+
+        public static CliConfigStore Open(string explicitPath)
+        {
+            string path = ResolvePath(explicitPath);
+            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (File.Exists(path))
+            {
+                try
+                {
+                    string json = File.ReadAllText(path);
+                    var loaded = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                    if (loaded != null)
+                    {
+                        foreach (var item in loaded)
+                        {
+                            values[item.Key] = item.Value;
+                        }
+                    }
+                }
+                catch (JsonException ex)
+                {
+                    throw new UsageException("Config file is not valid JSON: " + ex.Message);
+                }
+            }
+
+            return new CliConfigStore(path, values);
+        }
+
+        public void Set(string key, string value)
+        {
+            ValidateKey(key);
+            Values[key] = value ?? string.Empty;
+        }
+
+        public bool Unset(string key)
+        {
+            ValidateKey(key);
+            return Values.Remove(key);
+        }
+
+        public void Save()
+        {
+            string directory = System.IO.Path.GetDirectoryName(Path);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var sorted = Values
+                .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+            File.WriteAllText(Path, JsonSerializer.Serialize(sorted, ProgramJsonOptions));
+        }
+
+        private static string ResolvePath(string explicitPath)
+        {
+            if (!string.IsNullOrWhiteSpace(explicitPath))
+            {
+                return System.IO.Path.GetFullPath(explicitPath);
+            }
+
+            string envPath = Environment.GetEnvironmentVariable("WCR2_CLI_CONFIG");
+            if (!string.IsNullOrWhiteSpace(envPath))
+            {
+                return System.IO.Path.GetFullPath(envPath);
+            }
+
+            string baseDirectory;
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                baseDirectory = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                if (string.IsNullOrEmpty(baseDirectory))
+                {
+                    baseDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                }
+                return System.IO.Path.Combine(baseDirectory, "WzComparerR2", "wcr2.config.json");
+            }
+
+            baseDirectory = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+            if (string.IsNullOrWhiteSpace(baseDirectory))
+            {
+                baseDirectory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+            }
+            return System.IO.Path.Combine(baseDirectory, "wzcomparerr2", "wcr2.config.json");
+        }
+
+        private static void ValidateKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key) || !Regex.IsMatch(key, @"^[A-Za-z0-9_.:-]+$"))
+            {
+                throw new UsageException("Config key may contain only letters, numbers, dot, colon, underscore, and dash.");
+            }
+        }
+
+        private static JsonSerializerOptions ProgramJsonOptions
+        {
+            get
+            {
+                return new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                };
+            }
+        }
+    }
+
+    internal sealed class ConfigPathDto
+    {
+        public string Path { get; set; }
+        public bool Exists { get; set; }
+        public int Count { get; set; }
+
+        public static ConfigPathDto FromStore(CliConfigStore store)
+        {
+            return new ConfigPathDto
+            {
+                Path = store.Path,
+                Exists = File.Exists(store.Path),
+                Count = store.Values.Count
+            };
+        }
+    }
+
+    internal sealed class ConfigListDto
+    {
+        public string Path { get; set; }
+        public List<ConfigItemDto> Values { get; set; }
+
+        public static ConfigListDto FromStore(CliConfigStore store)
+        {
+            return new ConfigListDto
+            {
+                Path = store.Path,
+                Values = store.Values
+                    .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(item => new ConfigItemDto { Key = item.Key, Value = item.Value })
+                    .ToList()
+            };
+        }
+    }
+
+    internal sealed class ConfigItemDto
+    {
+        public string Key { get; set; }
+        public string Value { get; set; }
+    }
+
+    internal sealed class ConfigValueDto
+    {
+        public string Path { get; set; }
+        public string Key { get; set; }
+        public string Value { get; set; }
+        public bool Found { get; set; }
+
+        public static ConfigValueDto FromStore(CliConfigStore store, string key)
+        {
+            string value;
+            bool found = store.Values.TryGetValue(key, out value);
+            return new ConfigValueDto
+            {
+                Path = store.Path,
+                Key = key,
+                Value = value,
+                Found = found
+            };
+        }
+    }
+
+    internal sealed class ConfigUnsetDto
+    {
+        public string Path { get; set; }
+        public string Key { get; set; }
+        public bool Removed { get; set; }
+        public int Count { get; set; }
+    }
+
+    internal sealed class UpdateReleaseDto
+    {
+        public string Repository { get; set; }
+        public string ApiUrl { get; set; }
+        public string CurrentVersion { get; set; }
+        public string Name { get; set; }
+        public string TagName { get; set; }
+        public string Body { get; set; }
+        public string CreatedAt { get; set; }
+        public string HtmlUrl { get; set; }
+        public bool? UpdateAvailable { get; set; }
+        public List<UpdateAssetDto> Assets { get; set; }
+        public UpdateAssetDto SelectedAsset { get; set; }
+
+        public UpdateAssetDto SelectAsset(string assetKind)
+        {
+            string kind = string.IsNullOrWhiteSpace(assetKind) ? "net8" : assetKind.ToLowerInvariant();
+            if (Assets == null || Assets.Count == 0)
+            {
+                return null;
+            }
+
+            return Assets.FirstOrDefault(asset => string.Equals(asset.Kind, kind, StringComparison.OrdinalIgnoreCase))
+                ?? Assets.FirstOrDefault(asset => asset.Name != null && asset.Name.IndexOf(kind, StringComparison.OrdinalIgnoreCase) >= 0)
+                ?? Assets.FirstOrDefault(asset => string.Equals(asset.Kind, "zip", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    internal sealed class UpdateAssetDto
+    {
+        public string Kind { get; set; }
+        public string Name { get; set; }
+        public string Label { get; set; }
+        public string ContentType { get; set; }
+        public string BrowserDownloadUrl { get; set; }
+        public long Size { get; set; }
+
+        public static UpdateAssetDto FromJson(JsonElement asset)
+        {
+            string name = GetString(asset, "name");
+            return new UpdateAssetDto
+            {
+                Kind = DetectKind(name),
+                Name = name,
+                Label = GetString(asset, "label"),
+                ContentType = GetString(asset, "content_type"),
+                BrowserDownloadUrl = GetString(asset, "browser_download_url"),
+                Size = GetLong(asset, "size")
+            };
+        }
+
+        private static string DetectKind(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return "zip";
+            }
+
+            string lower = name.ToLowerInvariant();
+            if (lower.Contains("net10"))
+            {
+                return "net10";
+            }
+            if (lower.Contains("net8"))
+            {
+                return "net8";
+            }
+            if (lower.Contains("net6"))
+            {
+                return "net6";
+            }
+            if (lower.Contains("net462"))
+            {
+                return "net462";
+            }
+            return lower.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ? "zip" : "asset";
+        }
+
+        private static string GetString(JsonElement element, string propertyName)
+        {
+            JsonElement value;
+            return element.TryGetProperty(propertyName, out value) && value.ValueKind != JsonValueKind.Null
+                ? value.GetString()
+                : null;
+        }
+
+        private static long GetLong(JsonElement element, string propertyName)
+        {
+            JsonElement value;
+            return element.TryGetProperty(propertyName, out value) && value.TryGetInt64(out long result)
+                ? result
+                : 0;
+        }
+    }
+
+    internal sealed class UpdateDownloadResultDto
+    {
+        public UpdateReleaseDto Release { get; set; }
+        public UpdateAssetDto Asset { get; set; }
+        public string OutputPath { get; set; }
+
+        public static UpdateDownloadResultDto FromRelease(UpdateReleaseDto release, string outputPath)
+        {
+            return new UpdateDownloadResultDto
+            {
+                Release = release,
+                Asset = release.SelectedAsset,
+                OutputPath = outputPath
+            };
+        }
+    }
+
+    internal sealed class UpdateApplyPlanDto
+    {
+        public string Mode { get; set; }
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public UpdateReleaseDto Release { get; set; }
+        public UpdateAssetDto Asset { get; set; }
+        public string AssetKind { get; set; }
+        public string DownloadPath { get; set; }
+        public string UpdaterPath { get; set; }
+        public string UpdaterVersionArg { get; set; }
+        public bool ProcessStarted { get; set; }
+        public int? ProcessId { get; set; }
+
+        public static UpdateApplyPlanDto FromRelease(UpdateReleaseDto release, ParsedArgs args, string assetKind)
+        {
+            bool execute = args.HasFlag("execute");
+            var plan = new UpdateApplyPlanDto
+            {
+                Mode = execute ? "execute" : "dry-run",
+                Success = true,
+                Release = release,
+                Asset = release.SelectedAsset,
+                AssetKind = assetKind,
+                DownloadPath = args.GetValue("download"),
+                UpdaterPath = args.GetValue("updater"),
+                UpdaterVersionArg = GetUpdaterVersionArg(assetKind)
+            };
+
+            if (plan.Asset == null)
+            {
+                plan.Success = false;
+                plan.Message = "No update asset matched --asset " + assetKind + ".";
+            }
+            else if (execute && string.IsNullOrEmpty(plan.UpdaterPath))
+            {
+                plan.Success = false;
+                plan.Message = "update apply --execute requires --updater <path>.";
+            }
+            else if (execute && string.IsNullOrEmpty(plan.UpdaterVersionArg))
+            {
+                plan.Success = false;
+                plan.Message = "The existing external updater only supports net462, net6, and net8 assets.";
+            }
+            else if (execute)
+            {
+                plan.Message = "External updater will be launched after the asset is downloaded.";
+            }
+            else
+            {
+                plan.Message = "Dry-run only. Re-run with --execute --updater <path> to launch the external updater.";
+            }
+
+            return plan;
+        }
+
+        private static string GetUpdaterVersionArg(string kind)
+        {
+            switch ((kind ?? string.Empty).ToLowerInvariant())
+            {
+                case "net462":
+                    return "4";
+                case "net6":
+                    return "6";
+                case "net8":
+                    return "8";
+                default:
+                    return null;
+            }
+        }
+    }
+
+    internal static class UpdateClient
+    {
+        private const string DefaultRepository = "seotbeo/WzComparerR2";
+
+        public static async System.Threading.Tasks.Task<UpdateReleaseDto> QueryLatestAsync(ParsedArgs args)
+        {
+            string repository = args.GetValue("repo") ?? DefaultRepository;
+            if (!Regex.IsMatch(repository, @"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))
+            {
+                throw new UsageException("--repo must use owner/name format.");
+            }
+
+            string apiUrl = "https://api.github.com/repos/" + repository + "/releases/latest";
+            int timeoutSeconds = args.GetInt("timeout", 15);
+            using (var client = new HttpClient())
+            using (var request = new HttpRequestMessage(HttpMethod.Get, apiUrl))
+            {
+                client.Timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds));
+                request.Headers.Accept.ParseAdd("application/vnd.github+json");
+                request.Headers.UserAgent.ParseAdd("wcr2-cli/" + ProgramVersion);
+
+                using (var response = await client.SendAsync(request).ConfigureAwait(false))
+                {
+                    response.EnsureSuccessStatusCode();
+                    string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    using (var document = JsonDocument.Parse(json))
+                    {
+                        JsonElement root = document.RootElement;
+                        string currentVersion = args.GetValue("current-version") ?? GetDefaultCurrentVersion();
+                        var release = new UpdateReleaseDto
+                        {
+                            Repository = repository,
+                            ApiUrl = apiUrl,
+                            CurrentVersion = currentVersion,
+                            Name = GetString(root, "name"),
+                            TagName = GetString(root, "tag_name"),
+                            Body = GetString(root, "body"),
+                            CreatedAt = GetString(root, "created_at"),
+                            HtmlUrl = GetString(root, "html_url"),
+                            Assets = new List<UpdateAssetDto>()
+                        };
+                        release.UpdateAvailable = IsUpdateAvailable(currentVersion, release.TagName ?? release.Name);
+
+                        JsonElement assets;
+                        if (root.TryGetProperty("assets", out assets) && assets.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (JsonElement asset in assets.EnumerateArray())
+                            {
+                                release.Assets.Add(UpdateAssetDto.FromJson(asset));
+                            }
+                        }
+
+                        return release;
+                    }
+                }
+            }
+        }
+
+        public static async System.Threading.Tasks.Task<string> DownloadAssetAsync(UpdateAssetDto asset, string outputDirectory, bool force, int timeoutSeconds)
+        {
+            if (asset == null || string.IsNullOrEmpty(asset.BrowserDownloadUrl))
+            {
+                throw new UsageException("Selected update asset has no download URL.");
+            }
+
+            string directory = Path.GetFullPath(outputDirectory);
+            Directory.CreateDirectory(directory);
+            string fileName = string.IsNullOrEmpty(asset.Name) ? "update.zip" : asset.Name;
+            string outputPath = Path.Combine(directory, fileName);
+            await DownloadAssetToFileAsync(asset, outputPath, force, timeoutSeconds).ConfigureAwait(false);
+            return outputPath;
+        }
+
+        public static async System.Threading.Tasks.Task ExecuteApplyAsync(UpdateApplyPlanDto plan, bool force, int timeoutSeconds)
+        {
+            if (!plan.Success)
+            {
+                throw new UsageException(plan.Message);
+            }
+
+            string updaterPath = Path.GetFullPath(plan.UpdaterPath);
+            if (!File.Exists(updaterPath))
+            {
+                throw new FileNotFoundException("Updater executable not found: " + updaterPath);
+            }
+
+            string downloadPath = plan.DownloadPath;
+            if (string.IsNullOrEmpty(downloadPath))
+            {
+                downloadPath = Path.Combine(Path.GetTempPath(), "wcr2-update-" + Guid.NewGuid().ToString("N") + ".zip");
+            }
+            downloadPath = Path.GetFullPath(downloadPath);
+
+            if (!File.Exists(downloadPath))
+            {
+                string directory = Path.GetDirectoryName(downloadPath);
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                await DownloadAssetToFileAsync(plan.Asset, downloadPath, force, timeoutSeconds).ConfigureAwait(false);
+            }
+
+            var psi = new ProcessStartInfo(updaterPath)
+            {
+                UseShellExecute = false,
+                WorkingDirectory = Path.GetDirectoryName(updaterPath)
+            };
+            psi.ArgumentList.Add(downloadPath);
+            psi.ArgumentList.Add(plan.UpdaterVersionArg);
+
+            var process = Process.Start(psi);
+            plan.DownloadPath = downloadPath;
+            plan.ProcessStarted = process != null;
+            plan.ProcessId = process == null ? (int?)null : process.Id;
+            plan.Message = process == null ? "Failed to start updater process." : "Updater process started.";
+            plan.Success = process != null;
+        }
+
+        private static async System.Threading.Tasks.Task DownloadAssetToFileAsync(UpdateAssetDto asset, string outputPath, bool force, int timeoutSeconds)
+        {
+            if (File.Exists(outputPath))
+            {
+                if (!force)
+                {
+                    throw new UsageException("Output file already exists. Use --force to overwrite: " + outputPath);
+                }
+                File.Delete(outputPath);
+            }
+
+            using (var client = new HttpClient())
+            using (var request = new HttpRequestMessage(HttpMethod.Get, asset.BrowserDownloadUrl))
+            {
+                client.Timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds));
+                if (!string.IsNullOrEmpty(asset.ContentType))
+                {
+                    request.Headers.Accept.ParseAdd(asset.ContentType);
+                }
+                request.Headers.UserAgent.ParseAdd("wcr2-cli/" + ProgramVersion);
+
+                using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
+                {
+                    response.EnsureSuccessStatusCode();
+                    bool fileCreated = false;
+                    try
+                    {
+                        using (var responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        using (var fileStream = File.Create(outputPath))
+                        {
+                            fileCreated = true;
+                            await responseStream.CopyToAsync(fileStream).ConfigureAwait(false);
+                        }
+                    }
+                    catch
+                    {
+                        if (fileCreated && File.Exists(outputPath))
+                        {
+                            File.Delete(outputPath);
+                        }
+                        throw;
+                    }
+                }
+            }
+        }
+
+        private static string ProgramVersion
+        {
+            get { return "0.1.0"; }
+        }
+
+        private static string GetDefaultCurrentVersion()
+        {
+            var assembly = Assembly.GetEntryAssembly();
+            var informational = assembly == null
+                ? null
+                : assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            return string.IsNullOrEmpty(informational) ? ProgramVersion : informational;
+        }
+
+        private static string GetString(JsonElement element, string propertyName)
+        {
+            JsonElement value;
+            return element.TryGetProperty(propertyName, out value) && value.ValueKind != JsonValueKind.Null
+                ? value.GetString()
+                : null;
+        }
+
+        private static bool? IsUpdateAvailable(string currentVersion, string latestVersion)
+        {
+            Version currentBuild;
+            Version latestBuild;
+            if (TryParseBuildVersion(currentVersion, out currentBuild) && TryParseBuildVersion(latestVersion, out latestBuild))
+            {
+                return latestBuild.Build > currentBuild.Build
+                    || (latestBuild.Build == currentBuild.Build && latestBuild.Revision > currentBuild.Revision);
+            }
+
+            Version current;
+            Version latest;
+            if (TryParseVersion(currentVersion, out current) && TryParseVersion(latestVersion, out latest))
+            {
+                return latest > current;
+            }
+
+            return null;
+        }
+
+        private static bool TryParseBuildVersion(string value, out Version result)
+        {
+            var match = Regex.Match(value ?? string.Empty, @"(\d{6})(\d{2})$");
+            if (match.Success
+                && int.TryParse(match.Groups[1].Value, out int build)
+                && int.TryParse(match.Groups[2].Value, out int revision))
+            {
+                result = new Version(0, 0, build, revision);
+                return true;
+            }
+
+            result = null;
+            return false;
+        }
+
+        private static bool TryParseVersion(string value, out Version result)
+        {
+            string normalized = (value ?? string.Empty).Trim();
+            if (normalized.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = normalized.Substring(1);
+            }
+
+            return Version.TryParse(normalized, out result);
+        }
+    }
+
+    internal sealed class NetworkCommandDto
+    {
+        public string Command { get; set; }
+        public string Host { get; set; }
+        public int Port { get; set; }
+        public string Mode { get; set; }
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public string Error { get; set; }
+        public string ChatMessage { get; set; }
+
+        public static NetworkCommandDto FromArgs(string command, ParsedArgs args)
+        {
+            return new NetworkCommandDto
+            {
+                Command = command,
+                Host = args.GetValue("host") ?? "wc.kagamia.com",
+                Port = args.GetInt("port", 2100),
+                Mode = args.HasFlag("connect") ? "tcp-probe" : "dry-run",
+                Success = true,
+                ChatMessage = args.GetValue("message")
+            };
+        }
+    }
+
+    internal static class NetworkProbe
+    {
+        public static void TryConnect(NetworkCommandDto result, int timeoutSeconds)
+        {
+            try
+            {
+                using (var client = new TcpClient())
+                {
+                    var task = client.ConnectAsync(result.Host, result.Port);
+                    if (!task.Wait(Math.Max(1, timeoutSeconds) * 1000))
+                    {
+                        result.Success = false;
+                        result.Error = "TCP probe timed out.";
+                        return;
+                    }
+                    result.Success = client.Connected;
+                    result.Message = client.Connected ? "TCP connection succeeded." : "TCP connection failed.";
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Success = false;
+                result.Error = ex.Message;
+            }
+        }
     }
 
     internal sealed class UsageException : Exception
