@@ -124,6 +124,8 @@ More workflow examples are available in:
 - `samples/cli/compare-report.sh`: generate JSON and Markdown compare reports.
 - `samples/cli/avatar-metadata.sh`: export avatar-code metadata.
 - `samples/cli/map-metadata.sh`: export map portal/life/object/reactor metadata.
+- `samples/cli/windows-maple-smoke.ps1`: Windows smoke test script for a real MapleStory client folder.
+- `docs/windows-cli-test-checklist.md`: Windows manual checklist and report template.
 
 ## First Run
 
@@ -176,6 +178,20 @@ Common result shapes:
 ```
 
 Exit codes are part of the automation contract; text messages may change as help text improves.
+
+## Testing
+
+The CLI test harness intentionally avoids external test framework packages.
+It builds as a console project and runs the compiled CLI as a child process.
+
+```bash
+dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Debug --no-restore
+dotnet build WzComparerR2.Cli.Tests/WzComparerR2.Cli.Tests.csproj -c Debug --no-restore
+DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Debug/net8.0/wcr2-tests.dll --cli WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll
+```
+
+The current automated tests cover CLI help/version, usage errors, config, avatar metadata, Lua dry-run, network dry-run, update validation, and CLI plugin discovery/execution.
+Full WZ happy-path golden tests still require sample `.wz`/`.img` fixtures.
 
 `extract`는 PNG, sound, raw data, video blob, scalar 값을 자동으로 파일로 내보냅니다.
 컨테이너 노드를 선택하면 `--recursive`가 필요합니다.

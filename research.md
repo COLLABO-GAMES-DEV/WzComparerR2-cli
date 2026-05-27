@@ -249,6 +249,7 @@ WZ/MS 파일 포맷을 다루는 가장 낮은 레벨입니다.
 - 기존 `WzComparerR2.PluginBase.PluginEntry`는 생성자부터 `PluginContext`를 요구하고, `PluginContext`는 `Form`, `DotNetBarManager`, ribbon/tab 추가 API, 선택 노드 이벤트에 묶여 있습니다. 따라서 CLI 플러그인은 GUI `PluginEntry`를 재사용하지 않고 `WzComparerR2.Cli.ICliCommandProvider` public contract로 분리했습니다.
 - CLI plugin discovery는 GUI `Plugin/`과 충돌하지 않도록 기본 경로를 `CliPlugin/`로 정했습니다. 명시 경로는 `--plugin-dir`, config key `plugin-dir`, `WCR2_CLI_PLUGIN_DIR`가 우선이고, GUI `Plugin/`은 `--include-gui-plugin-dir`가 있을 때만 inspect 대상으로 스캔합니다.
 - CLI plugin load는 `AssemblyDependencyResolver` 기반의 별도 `AssemblyLoadContext`를 사용하고, `WzComparerR2.Cli` assembly만 현재 실행 assembly로 되돌려 provider interface identity를 맞춥니다. 깨진 DLL이나 GUI 전용 DLL은 CLI 전체를 죽이지 않고 plugin 결과의 `Error`로 남깁니다.
+- `WzComparerR2.Cli.Tests`는 외부 test framework 없이 CLI process를 직접 실행하는 console harness입니다. 현재 저장소에 WZ 샘플이 없으므로 help/version/error/config/avatar/lua dry-run/network dry-run/update validation/plugin discovery 같은 fixture-free 계약을 먼저 고정하고, 실제 WZ golden/export 테스트는 sample fixture 확보 후 추가해야 합니다.
 - `WzComparerR2.MapRender`는 MonoGame `Game`, graphics device, EmptyKeys UI, Bass/Native dependency와 강하게 연결되어 있습니다. CLI에서는 screenshot render보다 WZ metadata export를 먼저 제공하는 것이 현실적입니다.
 - `Avatar`와 `CharaSim` 계열은 실제 렌더링/툴팁으로 갈수록 WinForms/GDI/Common renderer 의존이 커집니다. 현재 CLI의 id/prefix 기반 정보 출력은 “탐색용 metadata” 수준이며 GUI와 동일한 결과물은 아닙니다.
 
