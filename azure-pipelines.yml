@@ -52,6 +52,14 @@ steps:
     projects: '$(solution)'
     arguments: '/p:Platform="$(buildPlatform_anycpu)" -c $(buildConfiguration)'
 
+- task: CmdLine@2
+  displayName: Run CLI tests
+  inputs:
+    script: |
+      set DOTNET_ROLL_FORWARD=Major
+      set DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1
+      dotnet run --project WzComparerR2.Cli.Tests/WzComparerR2.Cli.Tests.csproj -c $(buildConfiguration) --no-build -- --cli WzComparerR2.Cli/bin/$(buildConfiguration)/net8.0/wcr2.dll
+
 - task: DotNetCoreCLI@2
   displayName: Build x86
   inputs:

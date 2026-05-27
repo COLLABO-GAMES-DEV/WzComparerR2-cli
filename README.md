@@ -62,7 +62,15 @@ dotnet WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll extract Base.wz --path String 
 
 Full CLI usage is documented in [`docs/cli.md`](docs/cli.md).
 GUI-to-CLI workflow examples are in [`docs/cli-migration.md`](docs/cli-migration.md).
+Windows Maple client validation steps are in [`docs/windows-cli-test-checklist.md`](docs/windows-cli-test-checklist.md).
 Reusable shell examples are under [`samples/cli`](samples/cli).
+
+Run CLI smoke tests:
+
+```sh
+dotnet build WzComparerR2.Cli.Tests/WzComparerR2.Cli.Tests.csproj -c Debug --no-restore
+DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Debug/net8.0/wcr2-tests.dll --cli WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll
+```
 
 # Credits and Acknowledgement
 - **Fiel** ([Southperry](http://www.southperry.net))  wz文件读取代码改造自WzExtract 以及WzPatcher

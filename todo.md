@@ -506,40 +506,51 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 ## Phase 18. 테스트 전략
 
-- [ ] CLI 단위 테스트 프로젝트 추가
-  - `WzComparerR2.Cli.Tests`
-- [ ] parser 자체를 검증하기보다 CLI service와 output contract를 검증한다.
+- [x] CLI 단위 테스트 프로젝트 추가
+  - `WzComparerR2.Cli.Tests`: 외부 test framework 없이 실행되는 CLI process 기반 smoke/error test harness
+- [x] parser 자체를 검증하기보다 CLI service와 output contract를 검증한다.
+  - CLI 바이너리를 실제 process로 실행하고 exit code, stdout/stderr, JSON field를 검증한다.
 - [ ] golden output 테스트 추가
-  - tree JSON
-  - search JSON
-  - compare JSON
+  - [x] 현재 샘플 없이 검증 가능한 JSON contract: `avatar`, `config`, `lua --dry-run`, `network`, `plugin`
+  - [ ] 실제 WZ sample 기반 tree JSON
+  - [ ] 실제 WZ sample 기반 search JSON
+  - [ ] 실제 WZ sample 기반 compare JSON
 - [ ] export 검증 추가
-  - PNG dimensions
-  - sound file exists/hash
-  - manifest
+  - [ ] PNG dimensions: 실제 WZ image sample 필요
+  - [ ] sound file exists/hash: 실제 WZ sound sample 필요
+  - [ ] manifest: 실제 WZ extract sample 필요
 - [x] error case 테스트 추가
   - 파일 없음
-  - path 없음
-  - unsupported value type
-  - corrupt WZ
-- [ ] Windows CI에 CLI test 단계 추가
-- [ ] macOS/Linux에서 가능한 pure library test와 Windows-only test를 분리한다.
+  - invalid regex
+  - missing config key
+  - invalid update asset
+  - corrupt plugin assembly
+  - path 없음/unsupported value type/corrupt WZ는 실제 WZ fixture 확보 후 추가
+- [x] Windows CI에 CLI test 단계 추가
+  - Azure pipeline `Build anycpu` 직후 Release CLI 바이너리 대상으로 `WzComparerR2.Cli.Tests` 실행
+- [x] macOS/Linux에서 가능한 pure library test와 Windows-only test를 분리한다.
+  - 현재 test harness는 WZ 샘플 없이 macOS/Linux/Windows에서 실행 가능한 CLI smoke/error tests에 한정한다.
+  - GUI/렌더링/실제 WZ happy path는 fixture 확보 후 별도 테스트로 추가한다.
 
 완료 기준:
 
 - [ ] CLI 명령별 최소 happy path와 error path 테스트가 있음
-- [ ] CI에서 CLI 빌드와 테스트가 실행됨
+  - 현재 WZ 샘플 불필요 명령의 happy/error path는 자동화 완료.
+  - WZ 샘플 기반 `info/tree/list/search/compare/dump/extract` happy path는 미완료.
+- [x] CI에서 CLI 빌드와 테스트가 실행됨
 
 ## Phase 19. 패키징/배포
 
-- [ ] CLI binary artifact 이름 결정
-  - `wcr2.exe`
-  - `wcr2-net8-win-x64.zip`
-- [ ] self-contained publish 여부 결정
-- [ ] native DLL 포함 규칙 정리
+- [x] CLI binary artifact 이름 결정
+  - 실행 파일: `wcr2.exe`
+  - 현재 수동 산출물: `artifacts/wcr2-win-x64-self-contained.zip`
+- [x] self-contained publish 여부 결정
+  - Windows 현장 테스트용은 `win-x64 --self-contained true`로 런타임 포함 publish.
+- [x] native DLL 포함 규칙 정리
   - `Lib/x86`
   - `Lib/x64`
   - `Lib/ARM64`
+  - CLI는 현재 WzLib 중심 기능이라 GUI native `Lib/*`를 별도로 포함하지 않는다. self-contained publish는 .NET runtime/native runtime 파일을 publish 폴더에 포함한다.
 - [ ] Azure pipeline에 CLI artifact 추가
 - [ ] release note에 CLI 사용 예시 추가
 - [ ] 기존 GUI artifact와 CLI artifact를 분리한다.
@@ -548,6 +559,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 - [ ] CI 산출물에 CLI zip이 포함됨
 - [ ] zip만 풀어서 `wcr2 --help` 실행 가능
+  - macOS에서 `wcr2.exe`가 Windows x64 PE executable인 것은 확인. 실제 실행은 Windows에서 `docs/windows-cli-test-checklist.md`로 검증 필요.
 
 ## 권장 구현 순서
 
@@ -620,6 +632,15 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `/tmp` 테스트 플러그인이 `ICliCommandProvider`로 `hello` 명령을 등록하고 `plugin commands --plugin-dir <tmp> --json`에서 탐지되는지 확인
 - [x] `/tmp` 테스트 플러그인을 `plugin run hello Codex --plugin-dir <tmp> --json`으로 실행하고 stdout이 JSON `Stdout` 필드에 캡처되는지 확인
 - [x] Phase 17 문서화: README CLI 섹션, `docs/cli-migration.md`, `samples/cli/*.sh`, `docs/cli.md` first-run/JSON contract 추가
+- [x] Phase 18 테스트 프로젝트 추가: `WzComparerR2.Cli.Tests`
+- [x] Debug test harness 실행: 13개 통과
+- [x] Release test harness 실행: 13개 통과
+- [x] Azure pipeline에 `Run CLI tests` 단계 추가
+- [x] Windows x64 self-contained CLI publish 생성: `artifacts/wcr2-win-x64-self-contained/`
+- [x] Windows x64 CLI zip 생성: `artifacts/wcr2-win-x64-self-contained.zip`
+- [x] `wcr2.exe`가 Windows x64 PE console executable인지 확인
+- [x] Windows 실클라 테스트 체크리스트 작성: `docs/windows-cli-test-checklist.md`
+- [x] Windows 실클라 smoke script 작성: `samples/cli/windows-maple-smoke.ps1`
 - [x] `dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Debug --no-restore -p:UseSharedCompilation=false -p:UseAppHost=false -v:minimal` 재검증 통과
 - [x] `git diff --check` 공백 오류 없음
 - [x] 현재 저장소 안에서 `.wz`, `.img`, `.ms`, `.patch` 샘플 파일을 찾지 못함

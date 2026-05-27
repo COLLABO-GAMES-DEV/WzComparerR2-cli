@@ -204,3 +204,7 @@ OldVer/
 WzComparerR2/BuildInfo.cs
 
 .DS_Store
+artifacts/
+
+.omc
+.omx
