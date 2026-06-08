@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Xml;
@@ -64,7 +65,7 @@ namespace WzComparerR2.Cli
                     case "patch":
                         return RunPatch(parsed);
                     case "skill":
-                        return RunDomainInfo(parsed, "skill");
+                        return RunSkill(parsed);
                     case "item":
                     case "gear":
                         return RunDomainInfo(parsed, command);
@@ -281,6 +282,91 @@ namespace WzComparerR2.Cli
                     }
                     writer.WriteLine("Children: " + dto.ChildrenCount + " Properties: " + dto.Properties.Count);
                 });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunSkill(ParsedArgs args)
+        {
+            if (args.Positionals.Count == 0 || IsHelp(args.Positionals[0]))
+            {
+                PrintSkillHelp();
+                return ExitSuccess;
+            }
+
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            if (subCommand == "info")
+            {
+                return RunDomainInfo(args, "skill");
+            }
+            if (subCommand == "full" || subCommand == "detail")
+            {
+                return RunSkillFull(args);
+            }
+
+            throw new UsageException("Unknown skill command: " + args.Positionals[0]);
+        }
+
+        private static int RunSkillFull(ParsedArgs args)
+        {
+            string input = RequireInputAt(args, 1, "skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
+            string id = args.GetValue("id");
+            if (string.IsNullOrEmpty(id))
+            {
+                throw new UsageException("skill full requires --id <id>.");
+            }
+
+            string format = args.GetValue("format") ?? (args.HasFlag("json") ? "json" : "text");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+            string stringWz = args.GetValue("string-wz");
+            int? level = null;
+            string levelText = args.GetValue("level");
+            if (!string.IsNullOrEmpty(levelText))
+            {
+                int parsedLevel;
+                if (!int.TryParse(levelText, out parsedLevel) || parsedLevel < 0)
+                {
+                    throw new UsageException("skill full --level must be a non-negative integer.");
+                }
+                level = parsedLevel;
+            }
+
+            DomainStringInfo stringInfo = null;
+            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            {
+                WzLoadContext stringContext = null;
+                try
+                {
+                    if (!string.IsNullOrEmpty(stringWz))
+                    {
+                        stringContext = WzLoadContext.Load(stringWz, WzLoadOptions.FromArgs(args));
+                        stringInfo = DomainInfoFinder.FindStringInfo(stringContext.Root, "skill", id);
+                    }
+
+                    Wz_Node dataNode = DomainInfoFinder.FindDataNode(context.Root, "skill", id);
+                    if (dataNode == null)
+                    {
+                        if (args.HasFlag("allow-string-only") && stringInfo != null)
+                        {
+                            var stringOnly = SkillFullDto.FromStringOnly(id, stringInfo);
+                            WriteSkillFullOutput(stringOnly, format, output);
+                            return ExitSuccess;
+                        }
+
+                        throw new UsageException("skill id not found: " + id);
+                    }
+
+                    var dto = SkillFullDto.FromNode(id, dataNode, stringInfo, level);
+                    WriteSkillFullOutput(dto, format, output);
+                }
+                finally
+                {
+                    if (stringContext != null)
+                    {
+                        stringContext.Dispose();
+                    }
+                }
             }
 
             return ExitSuccess;
@@ -1656,6 +1742,79 @@ namespace WzComparerR2.Cli
             }
         }
 
+        private static void WriteSkillFullOutput(SkillFullDto dto, string format, string output)
+        {
+            string normalizedFormat = string.IsNullOrEmpty(format) ? "text" : format.ToLowerInvariant();
+            if (normalizedFormat == "json")
+            {
+                WriteDumpOutput(JsonSerializer.Serialize(dto, JsonOptions), output);
+                return;
+            }
+            if (normalizedFormat == "xml")
+            {
+                WriteDumpOutput(SkillFullXmlWriter.ToXml(dto), output);
+                return;
+            }
+            if (normalizedFormat != "text" && normalizedFormat != "txt")
+            {
+                throw new UsageException("Unsupported skill full format: " + format);
+            }
+
+            if (string.IsNullOrEmpty(output))
+            {
+                WriteSkillFullText(Console.Out, dto);
+                return;
+            }
+
+            using (var writer = new StreamWriter(CreateOutputFile(output), false, Encoding.UTF8))
+            {
+                WriteSkillFullText(writer, dto);
+            }
+        }
+
+        private static void WriteSkillFullText(TextWriter writer, SkillFullDto dto)
+        {
+            writer.WriteLine("skill " + dto.Id);
+            writer.WriteLine("Mode: " + dto.Mode);
+            if (!string.IsNullOrEmpty(dto.DataPath))
+            {
+                writer.WriteLine("Path: " + dto.DataPath);
+            }
+            if (!string.IsNullOrEmpty(dto.Name))
+            {
+                writer.WriteLine("Name: " + dto.Name);
+            }
+            if (!string.IsNullOrEmpty(dto.Description))
+            {
+                writer.WriteLine("Description: " + dto.Description);
+            }
+            if (dto.Level.HasValue)
+            {
+                writer.WriteLine("Level: " + dto.Level + " / " + (dto.MaxLevel.HasValue ? dto.MaxLevel.ToString() : "?"));
+            }
+            if (!string.IsNullOrEmpty(dto.ResolvedSummary))
+            {
+                writer.WriteLine("Summary: " + dto.ResolvedSummary);
+            }
+            writer.WriteLine("Common: " + dto.Common.Count + " Effective: " + dto.EffectiveProperties.Count + " LevelSets: " + dto.LevelProperties.Count);
+            writer.WriteLine("Actions: " + dto.Actions.Count + " Icons: " + dto.Icons.Count + " Requirements: " + dto.RequiredSkills.Count);
+            foreach (string diagnostic in dto.Diagnostics)
+            {
+                writer.WriteLine("Diagnostic: " + diagnostic);
+            }
+        }
+
+        private static string CreateOutputFile(string output)
+        {
+            string fullPath = Path.GetFullPath(output);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+            return fullPath;
+        }
+
         private static string FormatOptionalValue(string value)
         {
             return string.IsNullOrEmpty(value) ? string.Empty : "\tvalue=" + value;
@@ -1739,6 +1898,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 dump <file-or-dir> --path <wz-path> [--format json|xml|raw] [--out <path>]");
             Console.WriteLine("  wcr2 extract <file-or-dir> --path <wz-path> --out <output-dir> [--recursive] [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 skill info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
             Console.WriteLine("  wcr2 item info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             Console.WriteLine("  wcr2 gear info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             Console.WriteLine("  wcr2 map info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
@@ -1779,6 +1939,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 compare old/Base.wz new/Base.wz --json");
             Console.WriteLine("  wcr2 extract Base.wz --path String --out out/string --recursive");
             Console.WriteLine("  wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json");
+            Console.WriteLine("  wcr2 skill full Skill.wz --id 3001004 --string-wz String.wz --format json");
             Console.WriteLine("  wcr2 map portals Map.wz --id 100000000 --json");
             Console.WriteLine("  wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand");
             Console.WriteLine("  wcr2 avatar inspect --code \"1002140,1040036,1060026\"");
@@ -1807,12 +1968,28 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 map reactors <map-wz-file-or-dir> --id <map-id> [--json]");
         }
 
+        private static void PrintSkillHelp()
+        {
+            Console.WriteLine("wcr2 skill - skill lookup tools");
+            Console.WriteLine();
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  wcr2 skill info <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
+            Console.WriteLine();
+            Console.WriteLine("Options:");
+            Console.WriteLine("  --allow-string-only  Emit string metadata when the skill id exists only in String.wz.");
+        }
+
         private static void PrintDomainHelp(string kind)
         {
             Console.WriteLine("wcr2 " + kind + " - " + kind + " lookup tools");
             Console.WriteLine();
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 " + kind + " info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  wcr2 skill full <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text]");
+            }
         }
 
         private static void PrintAnimateHelp()
@@ -3721,6 +3898,20 @@ namespace WzComparerR2.Cli
                 }
 
                 var info = DomainStringInfo.FromNode(node);
+                if (info.HasValues && IsPreferredStringPath(node, kind))
+                {
+                    return info;
+                }
+            }
+
+            foreach (Wz_Node node in Traverse(root, true))
+            {
+                if (!MatchesAny(node.Text, candidates))
+                {
+                    continue;
+                }
+
+                var info = DomainStringInfo.FromNode(node);
                 if (info.HasValues)
                 {
                     return info;
@@ -3792,6 +3983,36 @@ namespace WzComparerR2.Cli
             return true;
         }
 
+        private static bool IsPreferredStringPath(Wz_Node node, string kind)
+        {
+            string path = NormalizePath(node.FullPath);
+            if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase))
+            {
+                kind = "item";
+            }
+
+            if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("skill.img/", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.EndsWith("/skill.img", StringComparison.OrdinalIgnoreCase);
+            }
+            if (string.Equals(kind, "item", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("cash.img/", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.IndexOf("consume.img/", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.IndexOf("eqp.img/", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.IndexOf("etc.img/", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.IndexOf("ins.img/", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.IndexOf("pet.img/", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (string.Equals(kind, "map", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("map.img/", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            return true;
+        }
+
         private static string NormalizePath(string path)
         {
             return string.IsNullOrEmpty(path) ? string.Empty : path.Replace('\\', '/');
@@ -3847,6 +4068,7 @@ namespace WzComparerR2.Cli
             {
                 Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             };
+            info.Values["__path"] = node.FullPath;
 
             foreach (Wz_Node child in node.Nodes)
             {
@@ -3995,6 +4217,844 @@ namespace WzComparerR2.Cli
             }
             return null;
         }
+    }
+
+    internal sealed class SkillFullDto
+    {
+        public string Kind { get; set; }
+        public string Id { get; set; }
+        public string Mode { get; set; }
+        public bool FoundData { get; set; }
+        public string DataPath { get; set; }
+        public string StringPath { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string PassiveDescription { get; set; }
+        public int? Level { get; set; }
+        public int? MaxLevel { get; set; }
+        public int? MasterLevel { get; set; }
+        public int? LevelCount { get; set; }
+        public bool PreBigBangSkill { get; set; }
+        public string RawSummary { get; set; }
+        public string ResolvedSummary { get; set; }
+        public Dictionary<string, string> Common { get; set; }
+        public Dictionary<string, string> EffectiveProperties { get; set; }
+        public List<SkillLevelPropertiesDto> LevelProperties { get; set; }
+        public Dictionary<string, string> PvpCommon { get; set; }
+        public Dictionary<string, string> StringProperties { get; set; }
+        public Dictionary<string, bool> Flags { get; set; }
+        public Dictionary<string, string> SpecialProperties { get; set; }
+        public Dictionary<string, int> RequiredSkills { get; set; }
+        public int? RequiredLevel { get; set; }
+        public int? RequiredAmount { get; set; }
+        public List<string> Actions { get; set; }
+        public List<SkillIconDto> Icons { get; set; }
+        public List<SkillVectorDto> Vectors { get; set; }
+        public Dictionary<string, List<SkillExtraPropertyDto>> AttackInfo { get; set; }
+        public List<SkillSummaryVariantDto> SummaryVariants { get; set; }
+        public List<string> Diagnostics { get; set; }
+
+        public static SkillFullDto FromStringOnly(string id, DomainStringInfo stringInfo)
+        {
+            var skillString = SkillStringInfo.FromDomainStringInfo(stringInfo);
+            return new SkillFullDto
+            {
+                Kind = "skill",
+                Id = id,
+                Mode = "string-only",
+                FoundData = false,
+                StringPath = stringInfo == null ? null : stringInfo.Values.GetValueOrDefault("__path"),
+                Name = skillString.Name,
+                Description = skillString.Description,
+                PassiveDescription = skillString.PassiveDescription,
+                StringProperties = skillString.Values,
+                Common = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                EffectiveProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                LevelProperties = new List<SkillLevelPropertiesDto>(),
+                PvpCommon = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                Flags = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase),
+                SpecialProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                RequiredSkills = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
+                Actions = new List<string>(),
+                Icons = new List<SkillIconDto>(),
+                Vectors = new List<SkillVectorDto>(),
+                AttackInfo = new Dictionary<string, List<SkillExtraPropertyDto>>(StringComparer.OrdinalIgnoreCase),
+                SummaryVariants = skillString.BuildVariants(),
+                Diagnostics = new List<string> { "No matching skill data node was found; output contains String.wz metadata only." }
+            };
+        }
+
+        public static SkillFullDto FromNode(string id, Wz_Node node, DomainStringInfo stringInfo, int? requestedLevel)
+        {
+            var model = HeadlessSkillModel.FromNode(node);
+            var skillString = SkillStringInfo.FromDomainStringInfo(stringInfo);
+            int selectedLevel = ResolveLevel(model, requestedLevel);
+            var effective = model.GetEffectiveProperties(selectedLevel);
+            var diagnostics = new List<string>();
+            string rawSummary = skillString.SelectSummary(model.PreBigBangSkill, selectedLevel);
+            string resolvedSummary = CliSkillSummaryResolver.Resolve(rawSummary, selectedLevel, effective, diagnostics);
+
+            if (stringInfo == null)
+            {
+                diagnostics.Add("No --string-wz was provided or no String.wz skill entry was found.");
+            }
+            if (string.IsNullOrEmpty(rawSummary))
+            {
+                diagnostics.Add("No skill summary template was found in string metadata.");
+            }
+
+            return new SkillFullDto
+            {
+                Kind = "skill",
+                Id = id,
+                Mode = "charasim-headless",
+                FoundData = true,
+                DataPath = node.FullPath,
+                Name = skillString.Name,
+                Description = skillString.Description,
+                PassiveDescription = skillString.PassiveDescription,
+                Level = selectedLevel,
+                MaxLevel = model.MaxLevel > 0 ? (int?)model.MaxLevel : null,
+                MasterLevel = model.MasterLevel > 0 ? (int?)model.MasterLevel : null,
+                LevelCount = model.LevelProperties.Count > 0 ? (int?)model.LevelProperties.Count : null,
+                PreBigBangSkill = model.PreBigBangSkill,
+                RawSummary = rawSummary,
+                ResolvedSummary = resolvedSummary,
+                Common = model.Common,
+                EffectiveProperties = effective,
+                LevelProperties = model.LevelProperties
+                    .Select(item => new SkillLevelPropertiesDto { Level = item.Key, Properties = item.Value })
+                    .ToList(),
+                PvpCommon = model.PvpCommon,
+                StringProperties = skillString.Values,
+                Flags = model.Flags,
+                SpecialProperties = model.SpecialProperties,
+                RequiredSkills = model.RequiredSkills,
+                RequiredLevel = model.RequiredLevel,
+                RequiredAmount = model.RequiredAmount,
+                Actions = model.Actions,
+                Icons = model.Icons,
+                Vectors = model.Vectors,
+                AttackInfo = model.AttackInfo,
+                SummaryVariants = skillString.BuildVariants(),
+                Diagnostics = diagnostics
+            };
+        }
+
+        private static int ResolveLevel(HeadlessSkillModel model, int? requestedLevel)
+        {
+            if (requestedLevel.HasValue)
+            {
+                return requestedLevel.Value;
+            }
+            if (model.MaxLevel > 0)
+            {
+                return model.MaxLevel;
+            }
+            if (model.LevelProperties.Count > 0)
+            {
+                return model.LevelProperties.Keys.Max();
+            }
+            return 1;
+        }
+    }
+
+    internal sealed class HeadlessSkillModel
+    {
+        public Dictionary<string, string> Common { get; private set; }
+        public SortedDictionary<int, Dictionary<string, string>> LevelProperties { get; private set; }
+        public Dictionary<string, string> PvpCommon { get; private set; }
+        public Dictionary<string, bool> Flags { get; private set; }
+        public Dictionary<string, string> SpecialProperties { get; private set; }
+        public Dictionary<string, int> RequiredSkills { get; private set; }
+        public int? RequiredLevel { get; private set; }
+        public int? RequiredAmount { get; private set; }
+        public int MasterLevel { get; private set; }
+        public int MaxLevel { get; private set; }
+        public bool PreBigBangSkill { get; private set; }
+        public List<string> Actions { get; private set; }
+        public List<SkillIconDto> Icons { get; private set; }
+        public List<SkillVectorDto> Vectors { get; private set; }
+        public Dictionary<string, List<SkillExtraPropertyDto>> AttackInfo { get; private set; }
+
+        private HeadlessSkillModel()
+        {
+            Common = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            LevelProperties = new SortedDictionary<int, Dictionary<string, string>>();
+            PvpCommon = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Flags = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            SpecialProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            RequiredSkills = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            Actions = new List<string>();
+            Icons = new List<SkillIconDto>();
+            Vectors = new List<SkillVectorDto>();
+            AttackInfo = new Dictionary<string, List<SkillExtraPropertyDto>>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HeadlessSkillModel FromNode(Wz_Node node)
+        {
+            var model = new HeadlessSkillModel();
+            foreach (Wz_Node child in node.Nodes)
+            {
+                string name = child.Text;
+                switch (name)
+                {
+                    case "icon":
+                    case "iconMouseOver":
+                    case "iconDisabled":
+                        model.Icons.Add(SkillIconDto.FromNode(name, child));
+                        break;
+                    case "common":
+                        model.ReadCommon(child);
+                        break;
+                    case "PVPcommon":
+                        model.PvpCommon = CollectScalarProperties(child);
+                        break;
+                    case "level":
+                        model.ReadLevels(child);
+                        break;
+                    case "req":
+                        model.ReadRequirements(child);
+                        break;
+                    case "action":
+                        model.ReadActions(child);
+                        break;
+                    case "masterLevel":
+                        model.MasterLevel = child.GetValue<int>();
+                        model.SpecialProperties[name] = model.MasterLevel.ToString();
+                        break;
+                    case "reqLev":
+                        model.RequiredLevel = child.GetValue<int>();
+                        model.SpecialProperties[name] = model.RequiredLevel.ToString();
+                        break;
+                    case "hyper":
+                    case "vSkill":
+                    case "vehicleID":
+                        model.SpecialProperties[name] = NodeDto.FormatValue(child.Value);
+                        break;
+                    case "hyperStat":
+                    case "invisible":
+                    case "combatOrders":
+                    case "notRemoved":
+                    case "origin":
+                    case "ascent":
+                    case "timeLimited":
+                    case "isPetAutoBuff":
+                    case "isSequenceOn":
+                    case "disableNextLevelInfo":
+                        model.Flags[name] = child.GetValue<int>() != 0;
+                        break;
+                    case "relationSkill":
+                    case "addAttack":
+                    case "assistSkillLink":
+                        model.SpecialProperties[name] = SummarizeChildValues(child);
+                        break;
+                    default:
+                        string value = NodeDto.FormatValue(child.Value);
+                        if (!string.IsNullOrEmpty(value))
+                        {
+                            model.SpecialProperties[name] = value;
+                        }
+                        break;
+                }
+            }
+
+            model.MaxLevel = model.ResolveMaxLevel();
+            model.PreBigBangSkill = model.LevelProperties.Count > 0
+                && (model.Common.Count == 0 || model.Common.ContainsKey("maxLevel"));
+            return model;
+        }
+
+        public Dictionary<string, string> GetEffectiveProperties(int level)
+        {
+            if (PreBigBangSkill && level > 0)
+            {
+                Dictionary<string, string> props;
+                if (LevelProperties.TryGetValue(level, out props))
+                {
+                    return new Dictionary<string, string>(props, StringComparer.OrdinalIgnoreCase);
+                }
+            }
+            return new Dictionary<string, string>(Common, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void ReadCommon(Wz_Node commonNode)
+        {
+            foreach (Wz_Node prop in commonNode.Nodes)
+            {
+                if (string.Equals(prop.Text, "attackInfo", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadAttackInfo(prop);
+                    continue;
+                }
+
+                var vector = prop.Value as Wz_Vector;
+                if (vector != null)
+                {
+                    Vectors.Add(new SkillVectorDto { Name = prop.Text, X = vector.X, Y = vector.Y, Path = prop.FullPath });
+                    continue;
+                }
+
+                string value = NodeDto.FormatValue(prop.Value);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    Common[prop.Text] = value;
+                }
+            }
+        }
+
+        private void ReadLevels(Wz_Node levelNode)
+        {
+            foreach (Wz_Node child in levelNode.Nodes)
+            {
+                int level;
+                if (!int.TryParse(child.Text, out level))
+                {
+                    continue;
+                }
+                LevelProperties[level] = CollectScalarProperties(child);
+            }
+        }
+
+        private void ReadRequirements(Wz_Node reqNode)
+        {
+            foreach (Wz_Node child in reqNode.Nodes)
+            {
+                if (string.Equals(child.Text, "level", StringComparison.OrdinalIgnoreCase))
+                {
+                    RequiredLevel = child.GetValue<int>();
+                }
+                else if (string.Equals(child.Text, "reqAmount", StringComparison.OrdinalIgnoreCase))
+                {
+                    RequiredAmount = child.GetValue<int>();
+                }
+                else
+                {
+                    int skillId;
+                    if (int.TryParse(child.Text, out skillId))
+                    {
+                        RequiredSkills[child.Text] = child.GetValue<int>();
+                    }
+                }
+            }
+        }
+
+        private void ReadActions(Wz_Node actionNode)
+        {
+            foreach (Wz_Node child in actionNode.Nodes.OrderBy(item => ParseIntOrMax(item.Text)))
+            {
+                string value = NodeDto.FormatValue(child.Value);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    Actions.Add(value);
+                }
+            }
+        }
+
+        private void ReadAttackInfo(Wz_Node attackInfoNode)
+        {
+            foreach (Wz_Node jobNode in attackInfoNode.Nodes)
+            {
+                var props = new List<SkillExtraPropertyDto>();
+                foreach (Wz_Node prop in jobNode.Nodes)
+                {
+                    props.Add(new SkillExtraPropertyDto
+                    {
+                        Name = prop.Text,
+                        Value = NodeDto.FormatValue(prop.Value)
+                    });
+                }
+                AttackInfo[jobNode.Text] = props;
+            }
+        }
+
+        private int ResolveMaxLevel()
+        {
+            string maxLevel;
+            if (Common.TryGetValue("maxLevel", out maxLevel))
+            {
+                int parsed;
+                if (int.TryParse(maxLevel, out parsed))
+                {
+                    return parsed;
+                }
+            }
+            return LevelProperties.Count > 0 ? LevelProperties.Keys.Max() : 0;
+        }
+
+        private static Dictionary<string, string> CollectScalarProperties(Wz_Node node)
+        {
+            var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Wz_Node child in node.Nodes)
+            {
+                if (child.Value is Wz_Vector)
+                {
+                    continue;
+                }
+                string value = NodeDto.FormatValue(child.Value);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    props[child.Text] = value;
+                }
+            }
+            return props;
+        }
+
+        private static string SummarizeChildValues(Wz_Node node)
+        {
+            var parts = new List<string>();
+            foreach (Wz_Node child in node.Nodes)
+            {
+                string value = NodeDto.FormatValue(child.Value);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    parts.Add(child.Text + "=" + value);
+                }
+            }
+            return string.Join(" ", parts);
+        }
+
+        private static int ParseIntOrMax(string value)
+        {
+            int parsed;
+            return int.TryParse(value, out parsed) ? parsed : int.MaxValue;
+        }
+    }
+
+    internal sealed class SkillStringInfo
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string PassiveDescription { get; set; }
+        public Dictionary<string, string> Values { get; set; }
+        public List<string> SkillH { get; private set; }
+        public List<string> PassiveH { get; private set; }
+        public List<string> HyperChangedH { get; private set; }
+        public SortedDictionary<int, string> ExtraH { get; private set; }
+
+        private SkillStringInfo()
+        {
+            Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            SkillH = new List<string>();
+            PassiveH = new List<string>();
+            HyperChangedH = new List<string>();
+            ExtraH = new SortedDictionary<int, string>();
+        }
+
+        public static SkillStringInfo FromDomainStringInfo(DomainStringInfo info)
+        {
+            var result = new SkillStringInfo();
+            if (info == null)
+            {
+                return result;
+            }
+
+            result.Values = new Dictionary<string, string>(info.Values ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+            result.Name = Get(result.Values, "name") ?? info.Name;
+            result.Description = Get(result.Values, "desc") ?? info.Description;
+            result.PassiveDescription = Get(result.Values, "pdesc");
+
+            string h = Get(result.Values, "h");
+            if (!string.IsNullOrEmpty(h))
+            {
+                result.SkillH.Add(h);
+            }
+            else
+            {
+                for (int i = 1; ; i++)
+                {
+                    h = Get(result.Values, "h" + i);
+                    if (string.IsNullOrEmpty(h))
+                    {
+                        break;
+                    }
+                    result.SkillH.Add(h);
+                }
+            }
+
+            AddIfNotNull(result.PassiveH, Get(result.Values, "ph"));
+            AddIfNotNull(result.HyperChangedH, Get(result.Values, "hch"));
+            foreach (var item in result.Values)
+            {
+                if (item.Key.StartsWith("h_", StringComparison.OrdinalIgnoreCase))
+                {
+                    int level;
+                    if (int.TryParse(item.Key.Substring(2), out level) && level > 0)
+                    {
+                        result.ExtraH[level] = item.Value;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        public string SelectSummary(bool preBigBangSkill, int level)
+        {
+            if (preBigBangSkill)
+            {
+                if (SkillH.Count >= level && level > 0)
+                {
+                    return SkillH[level - 1];
+                }
+                if (SkillH.Count == 1)
+                {
+                    return SkillH[0];
+                }
+                return null;
+            }
+
+            string h = SkillH.Count > 0 ? SkillH[0] : null;
+            foreach (var item in ExtraH)
+            {
+                if (level < item.Key)
+                {
+                    break;
+                }
+                h = item.Value;
+            }
+            return h;
+        }
+
+        public List<SkillSummaryVariantDto> BuildVariants()
+        {
+            var variants = new List<SkillSummaryVariantDto>();
+            for (int i = 0; i < SkillH.Count; i++)
+            {
+                variants.Add(new SkillSummaryVariantDto { Kind = "h", Level = SkillH.Count == 1 ? (int?)null : i + 1, Text = SkillH[i] });
+            }
+            foreach (string text in PassiveH)
+            {
+                variants.Add(new SkillSummaryVariantDto { Kind = "ph", Text = text });
+            }
+            foreach (string text in HyperChangedH)
+            {
+                variants.Add(new SkillSummaryVariantDto { Kind = "hch", Text = text });
+            }
+            foreach (var item in ExtraH)
+            {
+                variants.Add(new SkillSummaryVariantDto { Kind = "h_", Level = item.Key, Text = item.Value });
+            }
+            return variants;
+        }
+
+        private static string Get(Dictionary<string, string> values, string key)
+        {
+            string value;
+            return values != null && values.TryGetValue(key, out value) ? value : null;
+        }
+
+        private static void AddIfNotNull(List<string> values, string value)
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                values.Add(value);
+            }
+        }
+    }
+
+    internal static class CliSkillSummaryResolver
+    {
+        private static readonly Dictionary<string, string> GlobalVariableMapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "comboConAran", "aranComboCon" }
+        };
+
+        public static string Resolve(string template, int level, Dictionary<string, string> properties, List<string> diagnostics)
+        {
+            if (template == null)
+            {
+                return null;
+            }
+
+            var output = new StringBuilder();
+            int index = 0;
+            while (index < template.Length)
+            {
+                if (template[index] == '#')
+                {
+                    int length = ReadPlaceholderLength(template, index + 1);
+                    if (index + 1 < template.Length && template[index + 1] == 'c')
+                    {
+                        index += 2;
+                        continue;
+                    }
+                    if (length > 0)
+                    {
+                        string key = template.Substring(index + 1, length);
+                        string value;
+                        if (TryGetValue(properties, key, out value)
+                            || TryGetMappedValue(properties, key, out value))
+                        {
+                            output.Append(EvaluateValue(key, value, level, diagnostics));
+                            index += length + 1;
+                            continue;
+                        }
+
+                        diagnostics.Add("Unresolved summary placeholder: #" + key);
+                        output.Append("#").Append(key);
+                        index += length + 1;
+                        continue;
+                    }
+
+                    index++;
+                    continue;
+                }
+
+                if (template[index] == '\\' && index + 1 < template.Length)
+                {
+                    switch (template[index + 1])
+                    {
+                        case 'r':
+                            output.Append('\r');
+                            break;
+                        case 'n':
+                            output.Append('\n');
+                            break;
+                        case '\\':
+                            output.Append('\\');
+                            break;
+                        default:
+                            output.Append(template[index + 1]);
+                            break;
+                    }
+                    index += 2;
+                    continue;
+                }
+
+                output.Append(template[index]);
+                index++;
+            }
+
+            return output.ToString().Replace("\t", string.Empty).TrimEnd('\r', '\n');
+        }
+
+        private static string EvaluateValue(string key, string value, int level, List<string> diagnostics)
+        {
+            try
+            {
+                decimal parsed = WzComparerR2.Calculator.Parse(value.ToLowerInvariant(), level);
+                if (string.Equals(key, "cooltimeMS", StringComparison.Ordinal))
+                {
+                    return (parsed / 1000).ToString("0.##");
+                }
+                if (key.EndsWith("PerM", StringComparison.Ordinal))
+                {
+                    return (parsed / 100).ToString("0.#");
+                }
+                return parsed.ToString();
+            }
+            catch (Exception ex)
+            {
+                diagnostics.Add("Failed to evaluate #" + key + "='" + value + "': " + ex.Message);
+                return value;
+            }
+        }
+
+        private static bool TryGetMappedValue(Dictionary<string, string> properties, string key, out string value)
+        {
+            string mapped;
+            if (GlobalVariableMapping.TryGetValue(key, out mapped) && !string.IsNullOrEmpty(mapped))
+            {
+                return TryGetValue(properties, mapped, out value);
+            }
+            value = null;
+            return false;
+        }
+
+        private static bool TryGetValue(Dictionary<string, string> properties, string key, out string value)
+        {
+            if (properties != null)
+            {
+                foreach (var item in properties)
+                {
+                    if (string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = item.Value;
+                        return true;
+                    }
+                }
+            }
+            value = null;
+            return false;
+        }
+
+        private static int ReadPlaceholderLength(string text, int start)
+        {
+            int length = 0;
+            while (start + length < text.Length)
+            {
+                char ch = text[start + length];
+                if (ch == '_'
+                    || (ch >= 'a' && ch <= 'z')
+                    || (ch >= 'A' && ch <= 'Z')
+                    || (length > 0 && ch >= '0' && ch <= '9'))
+                {
+                    length++;
+                    continue;
+                }
+                break;
+            }
+            return length;
+        }
+    }
+
+    internal sealed class SkillFullXmlWriter
+    {
+        public static string ToXml(SkillFullDto dto)
+        {
+            var settings = new XmlWriterSettings
+            {
+                Indent = true,
+                OmitXmlDeclaration = true
+            };
+            using (var stringWriter = new StringWriter())
+            {
+                using (var writer = XmlWriter.Create(stringWriter, settings))
+                {
+                    writer.WriteStartElement("skill");
+                    writer.WriteAttributeString("id", dto.Id);
+                    writer.WriteAttributeString("mode", dto.Mode);
+                    writer.WriteAttributeString("foundData", dto.FoundData.ToString().ToLowerInvariant());
+                    WriteElement(writer, "name", dto.Name);
+                    WriteElement(writer, "description", dto.Description);
+                    WriteElement(writer, "passiveDescription", dto.PassiveDescription);
+                    writer.WriteStartElement("summary");
+                    if (dto.Level.HasValue)
+                    {
+                        writer.WriteAttributeString("level", dto.Level.Value.ToString());
+                    }
+                    WriteElement(writer, "raw", dto.RawSummary);
+                    WriteElement(writer, "resolved", dto.ResolvedSummary);
+                    writer.WriteEndElement();
+                    WriteDictionary(writer, "common", "property", dto.Common);
+                    WriteDictionary(writer, "effectiveProperties", "property", dto.EffectiveProperties);
+                    WriteDictionary(writer, "pvpCommon", "property", dto.PvpCommon);
+                    WriteDictionary(writer, "strings", "property", dto.StringProperties);
+                    WriteDictionary(writer, "flags", "flag", dto.Flags.ToDictionary(item => item.Key, item => item.Value.ToString().ToLowerInvariant(), StringComparer.OrdinalIgnoreCase));
+                    WriteDictionary(writer, "specialProperties", "property", dto.SpecialProperties);
+                    WriteDictionary(writer, "requiredSkills", "skill", dto.RequiredSkills.ToDictionary(item => item.Key, item => item.Value.ToString(), StringComparer.OrdinalIgnoreCase));
+                    writer.WriteStartElement("levels");
+                    foreach (var level in dto.LevelProperties)
+                    {
+                        writer.WriteStartElement("level");
+                        writer.WriteAttributeString("value", level.Level.ToString());
+                        WriteDictionaryItems(writer, "property", level.Properties);
+                        writer.WriteEndElement();
+                    }
+                    writer.WriteEndElement();
+                    writer.WriteStartElement("actions");
+                    foreach (string action in dto.Actions)
+                    {
+                        WriteElement(writer, "action", action);
+                    }
+                    writer.WriteEndElement();
+                    writer.WriteStartElement("icons");
+                    foreach (var icon in dto.Icons)
+                    {
+                        writer.WriteStartElement("icon");
+                        writer.WriteAttributeString("name", icon.Name);
+                        writer.WriteAttributeString("path", icon.Path);
+                        writer.WriteAttributeString("type", icon.Type);
+                        if (icon.Width.HasValue) writer.WriteAttributeString("width", icon.Width.Value.ToString());
+                        if (icon.Height.HasValue) writer.WriteAttributeString("height", icon.Height.Value.ToString());
+                        writer.WriteEndElement();
+                    }
+                    writer.WriteEndElement();
+                    writer.WriteStartElement("diagnostics");
+                    foreach (string diagnostic in dto.Diagnostics)
+                    {
+                        WriteElement(writer, "diagnostic", diagnostic);
+                    }
+                    writer.WriteEndElement();
+                    writer.WriteEndElement();
+                }
+                return stringWriter.ToString();
+            }
+        }
+
+        private static void WriteDictionary(XmlWriter writer, string rootName, string itemName, Dictionary<string, string> values)
+        {
+            writer.WriteStartElement(rootName);
+            WriteDictionaryItems(writer, itemName, values);
+            writer.WriteEndElement();
+        }
+
+        private static void WriteDictionaryItems(XmlWriter writer, string itemName, Dictionary<string, string> values)
+        {
+            foreach (var item in values ?? new Dictionary<string, string>())
+            {
+                writer.WriteStartElement(itemName);
+                writer.WriteAttributeString("name", item.Key);
+                writer.WriteAttributeString("value", item.Value);
+                writer.WriteEndElement();
+            }
+        }
+
+        private static void WriteElement(XmlWriter writer, string name, string value)
+        {
+            if (value == null)
+            {
+                return;
+            }
+            writer.WriteStartElement(name);
+            writer.WriteString(value);
+            writer.WriteEndElement();
+        }
+    }
+
+    internal sealed class SkillLevelPropertiesDto
+    {
+        public int Level { get; set; }
+        public Dictionary<string, string> Properties { get; set; }
+    }
+
+    internal sealed class SkillIconDto
+    {
+        public string Name { get; set; }
+        public string Path { get; set; }
+        public string Type { get; set; }
+        public int? Width { get; set; }
+        public int? Height { get; set; }
+        public string Format { get; set; }
+        public int? Pages { get; set; }
+
+        public static SkillIconDto FromNode(string name, Wz_Node node)
+        {
+            Wz_Node extracted = NodePath.ExtractImageNode(node, true) ?? node;
+            var png = extracted.Value as Wz_Png;
+            return new SkillIconDto
+            {
+                Name = name,
+                Path = extracted.FullPath,
+                Type = NodeDto.GetTypeName(extracted.Value),
+                Width = png == null ? null : (int?)png.Width,
+                Height = png == null ? null : (int?)png.Height,
+                Format = png == null ? null : png.Format.ToString(),
+                Pages = png == null ? null : (int?)png.ActualPages
+            };
+        }
+    }
+
+    internal sealed class SkillVectorDto
+    {
+        public string Name { get; set; }
+        public int X { get; set; }
+        public int Y { get; set; }
+        public string Path { get; set; }
+    }
+
+    internal sealed class SkillExtraPropertyDto
+    {
+        public string Name { get; set; }
+        public string Value { get; set; }
+    }
+
+    internal sealed class SkillSummaryVariantDto
+    {
+        public string Kind { get; set; }
+        public int? Level { get; set; }
+        public string Text { get; set; }
     }
 
     internal static class AnimationFrameExporter

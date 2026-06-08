@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\WzComparerR2.Common\Calculator.cs" Link="Common\Calculator.cs" />
     <Compile Include="..\WzComparerR2\Patcher\WzPatcher.cs" Link="Patcher\WzPatcher.cs" />
     <Compile Include="..\WzComparerR2\Patcher\PatchPartContext.cs" Link="Patcher\PatchPartContext.cs" />
     <Compile Include="..\WzComparerR2\Patcher\PatchingEventArgs.cs" Link="Patcher\PatchingEventArgs.cs" />

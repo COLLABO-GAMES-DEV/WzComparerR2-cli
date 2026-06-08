@@ -29,6 +29,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> [--path <wz-path>] [--type adde
 wcr2 dump <file-or-dir> --path <wz-path> [--format json|xml|raw] [--out <path>]
 wcr2 extract <file-or-dir> --path <wz-path> --out <output-dir> [--recursive] [--manifest <json>] [--json]
 wcr2 skill info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
+wcr2 skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text] [--out <path>]
 wcr2 item info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
 wcr2 gear info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
 wcr2 map info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
@@ -89,6 +90,8 @@ wcr2 extract Base.wz --path String --out out/string --recursive
 wcr2 extract Base.wz --path String --out out/string --recursive --manifest out/string/manifest.json
 wcr2 extract Base.wz --path String --out out/string.xml --format xml
 wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json
+wcr2 skill full Data/Skill --id 11001025 --string-wz Data/String --format json --out out/skill-11001025.json
+wcr2 skill full Data/Skill --id 1001004 --string-wz Data/String --allow-string-only --format xml --out out/power-strike.xml
 wcr2 item info Item.wz --id 2000000 --string-wz String.wz
 wcr2 gear info Character.wz --id 1002140 --string-wz String.wz --json
 wcr2 map info Map.wz --id 100000000 --string-wz String.wz
@@ -201,6 +204,12 @@ If `String.wz`, `Map.wz`, `Skill.wz`, or similar root files load but do not cont
 
 `skill/item/gear/map info`는 먼저 데이터 WZ에서 id 노드를 찾고, `--string-wz`가 있으면 String.wz의 이름/설명 값을 추가합니다.
 현재는 텍스트/JSON 메타데이터 조회가 중심이며, tooltip image 렌더링은 아직 포함하지 않습니다.
+
+`skill full`은 렌더링 없이 CharaSim 스타일의 headless 스킬 해석 결과를 내보냅니다.
+출력에는 `common`, `PVPcommon`, `level`, 요구 스킬, 액션, 플래그, 아이콘 메타데이터, 원문 요약과 `resolvedSummary`, 미해결 placeholder 진단이 포함됩니다.
+`--format json|xml|text`와 `--out <path>`를 지원합니다.
+실제 skill node가 없고 `String/Skill.img` 문자열만 있는 ID는 기본적으로 실패하지만, `--allow-string-only`를 주면 `Mode: string-only` 결과로 이름/설명/문자열 속성을 확인할 수 있습니다.
+툴팁 PNG 렌더링은 아직 포함하지 않으며 Windows-only 후속 단계로 분리되어 있습니다.
 
 `map objects/portals/life/reactors`는 map `.img` 안의 해당 섹션을 읽어 좌표, id, 이동 대상 같은 scalar property를 JSON으로 내보냅니다.
 MonoGame 기반 screenshot 렌더링은 아직 CLI에 포함하지 않습니다.

@@ -304,10 +304,11 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 작업:
 
-- [ ] Headless CharaSim core 분리 방식을 결정한다.
+- [x] Headless CharaSim core 분리 방식을 결정한다.
   - 후보 A: `WzComparerR2.Common`에 `net8.0` non-windows target을 추가하고 순수 CharaSim 파일만 조건부 빌드한다.
   - 후보 B: 새 프로젝트 `WzComparerR2.CharaSimCore`를 만들고 `Skill`, `StringResult`, `StringLinker`, `SummaryParser`, `SummaryParams`, `Calculator`를 이동/공유한다.
   - 후보 C: CLI 프로젝트에 필요한 파일만 링크한다. 빠르지만 장기 유지보수 비용이 커서 임시 방안으로만 사용한다.
+  - 결정: Phase 8A에서는 후보 C를 선택했다. `Calculator.cs`만 링크하고, GUI/GDI 의존 없이 스킬 headless DTO/요약 파서를 CLI에 둔다.
 - [ ] CLI용 WZ repository/find service를 만든다.
   - `PluginManager.FindWz` 이벤트/WinForms 의존 없이 `FindWz("Skill/1100.img/skill/11001025")` 같은 경로 조회를 제공한다.
   - 입력 후보: `--skill-wz`, `--string-wz`, `--item-wz`, `--etc-wz`, `--quest-wz`, `--base-wz`, `--data-dir`.
@@ -315,19 +316,21 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [ ] `StringLinker` 초기화를 CLI에서 수행한다.
   - [x] 현재 `--string-wz` 단일 보강은 구현됨.
   - [ ] `StringLinker.Load(stringNode, itemNode, etcNode, questNode)`와 호환되는 입력 로딩을 제공한다.
-  - [ ] string-only 상태와 full-linker 상태를 출력에 명확히 표시한다.
-- [ ] `skill full` 또는 `skill detail` 명령을 추가한다.
+  - [x] `skill full --allow-string-only`에서 string-only 상태를 출력에 명확히 표시한다.
+  - [ ] full-linker 상태를 출력에 명확히 표시한다.
+- [x] `skill full` 또는 `skill detail` 명령을 추가한다.
   - 예: `wcr2 skill full <skill-wz> --id 11001025 --string-wz <string> --level max --json`
   - 출력: raw path, name, desc, h/ph/hch, common, pvpCommon, levelCommon, reqSkill, reqLevel, actions, flags, icon paths, maxLevel, masterLevel.
-  - 출력: `resolvedSummary`, `nextLevelSummary`, `unresolvedPlaceholders`.
+  - 출력: `resolvedSummary`, `unresolvedPlaceholders`.
+  - 남은 항목: `nextLevelSummary`.
   - 기존 `skill info`는 호환성 유지용 얕은 metadata 명령으로 남긴다.
-- [ ] `skill full --format json|xml|text`를 지원한다.
+- [x] `skill full --format json|xml|text`를 지원한다.
   - XML은 raw WZ dump가 아니라 CharaSim 해석 결과 XML로 정의한다.
   - 예: `<skill id="11001025" name="라이징 선"><common>...</common><summary level="...">...</summary></skill>`.
-- [ ] `1001004` 같은 string-only 스킬 상태를 명확히 처리한다.
+- [x] `1001004` 같은 string-only 스킬 상태를 명확히 처리한다.
   - `String/Skill.img/1001004`는 존재하지만 `Data/Skill` 실제 skill node가 없으면 exit 실패 대신 `Status: string-only` 옵션을 제공할지 결정한다.
   - 기본은 기존 CLI 호환을 위해 `skill full`에서만 풍부한 진단을 제공한다.
-- [ ] 실제 WZ 기반 golden 샘플을 추가한다.
+- [x] 실제 WZ 기반 golden 샘플을 추가한다.
   - macOS CrossOver 실클라에서 확인한 후보: `10000074`, `11001025`, `11100027`.
   - 검증 포인트: 이름 한글 정상 디코딩, common/level 존재 여부, summary placeholder 치환 여부, string-only 진단.
   - fixture가 없을 때는 자동 테스트를 skip/gate 처리한다.
@@ -338,12 +341,12 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 완료 기준:
 
-- [ ] `skill info` 기존 JSON/text 계약이 깨지지 않는다.
-- [ ] `skill full`이 실제 개별 스킬 3개 이상에서 CharaSim model fields를 출력한다.
+- [x] `skill info` 기존 JSON/text 계약이 깨지지 않는다.
+- [x] `skill full`이 실제 개별 스킬 3개 이상에서 CharaSim model fields를 출력한다.
 - [ ] `SummaryParser` 기반 resolved summary가 common 값이 있는 스킬에서 placeholder를 실제 값으로 치환한다.
-- [ ] `1001004`처럼 실제 skill node가 없는 경우 string-only 상태 또는 명확한 진단을 제공한다.
-- [ ] macOS에서도 JSON/XML/text 출력은 동작한다.
-- [ ] PNG tooltip export는 Windows-only 또는 별도 제한으로 문서화된다.
+- [x] `1001004`처럼 실제 skill node가 없는 경우 string-only 상태 또는 명확한 진단을 제공한다.
+- [x] macOS에서도 JSON/XML/text 출력은 동작한다.
+- [x] PNG tooltip export는 Windows-only 또는 별도 제한으로 문서화된다.
 
 ## Phase 9. 애니메이션/GIF 생성 CLI화
 

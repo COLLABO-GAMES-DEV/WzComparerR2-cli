@@ -253,6 +253,10 @@ WZ/MS 파일 포맷을 다루는 가장 낮은 레벨입니다.
 - Windows 실클라 검증에서 최신 Maple client는 root `String.wz`/`Skill.wz`/`Map.wz` 등이 실제 데이터가 아닌 얇은 root/link 파일처럼 동작했고, 실제 조회는 `Data\String`, `Data\Skill`, `Data\Item`, `Data\Character\Cap`, `Data\Map\Map\Map1\Map1_000.wz`, `Data\Mob_Canvas` 같은 데이터 폴더/샤드 입력에서 성공했습니다. 따라서 Windows smoke 문서는 split `Data` layout을 기본 후보로 포함해야 합니다.
 - `WzComparerR2.MapRender`는 MonoGame `Game`, graphics device, EmptyKeys UI, Bass/Native dependency와 강하게 연결되어 있습니다. CLI에서는 screenshot render보다 WZ metadata export를 먼저 제공하는 것이 현실적입니다.
 - `Avatar`와 `CharaSim` 계열은 실제 렌더링/툴팁으로 갈수록 WinForms/GDI/Common renderer 의존이 커집니다. 현재 CLI의 id/prefix 기반 정보 출력은 “탐색용 metadata” 수준이며 GUI와 동일한 결과물은 아닙니다.
+- Phase 8A에서 `skill full`을 추가했습니다. 이 명령은 `Skill.CreateFromNode` 전체를 직접 참조하지 않고 CLI 내부 headless DTO로 `common`, `PVPcommon`, `level`, `req`, `action`, 플래그, 아이콘 메타데이터, 원문/해석 요약, 진단을 JSON/XML/text로 출력합니다. 수식 계산은 기존 `WzComparerR2.Common/Calculator.cs`를 CLI 프로젝트에 링크해 재사용합니다.
+- `String.wz`에서 문자열을 ID만으로 찾으면 같은 숫자 ID가 `Npc.img`, `Eqp.img`, `Skill.img`에 동시에 존재할 수 있습니다. 실제로 `3001004`는 skill data node가 있지만 string 검색은 NPC 문자열을 먼저 잡을 수 있었고, `1001004`는 장비 문자열을 먼저 잡을 수 있었습니다. 따라서 도메인 문자열 조회는 `skill`이면 `Skill.img`, `item/gear`이면 `Cash.img`/`Consume.img`/`Eqp.img` 등 도메인별 String 파일을 우선해야 합니다.
+- macOS CrossOver 실클라 `Data/Skill`에서는 `11001025`, `11100027` 같은 일부 실제 skill node가 아이콘과 문자열 중심으로 구성되어 `common`/`maxLevel`이 비어 있었습니다. 이 경우 `skill full`은 `resolvedSummary`에 치환 가능한 값만 반영하고, 남은 `#x`, `#indiePMdR` 같은 placeholder를 `Diagnostics`에 남깁니다. 이는 CLI 파싱 실패라기보다 현재 입력 shard에 수치 property가 없다는 신호로 보아야 합니다.
+- `String/Skill.img/1001004`의 “파워 스트라이크” 문자열은 확인되지만 현재 `Data/Skill`에서는 실제 skill node가 검색되지 않았습니다. `skill full --allow-string-only`는 이 케이스를 `Mode = string-only`, `FoundData = false`로 출력합니다.
 
 ## 처음 작업할 때 주의할 점
 
