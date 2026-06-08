@@ -349,10 +349,10 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 ## Phase 9. 애니메이션/GIF 생성 CLI화
 
-- [ ] `WzComparerR2.Common/Gif*`, `Animation/`, `Encoders/` 구조를 분석한다.
+- [x] `WzComparerR2.Common/Gif*`, `Animation/`, `Encoders/` 구조를 분석한다.
 - [x] animation frame 추출 명령 구현
   - `animate frames --path <wz-path> --out <dir>`
-- [ ] GIF/APNG export 명령 구현
+- [x] GIF/APNG export 명령 구현
   - [x] `animate gif`
   - [x] `animate apng`
 - [ ] overlay 옵션을 CLI 인자로 설계한다.
