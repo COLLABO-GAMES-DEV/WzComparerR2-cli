@@ -193,6 +193,9 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Debug/net8.0/wcr2-te
 The current automated tests cover CLI help/version, usage errors, config, avatar metadata, Lua dry-run, network dry-run, update validation, and CLI plugin discovery/execution.
 Full WZ happy-path golden tests still require sample `.wz`/`.img` fixtures.
 
+Real Maple clients can use a split `Data` layout.
+If `String.wz`, `Map.wz`, `Skill.wz`, or similar root files load but do not contain the expected path/id, try the data-bearing folder or shard instead, for example `Data\String`, `Data\Skill`, `Data\Character\Cap`, `Data\Map\Map\Map1\Map1_000.wz`, or `Data\Mob_Canvas`.
+
 `extract`는 PNG, sound, raw data, video blob, scalar 값을 자동으로 파일로 내보냅니다.
 컨테이너 노드를 선택하면 `--recursive`가 필요합니다.
 

@@ -56,7 +56,7 @@ On Windows:
 
 - Windows 10/11 x64.
 - PowerShell 5+.
-- A MapleStory client folder that contains WZ files such as `Base.wz`, `String.wz`, `Map.wz`, `Skill.wz`, `Item.wz`, `Character.wz`, and `Mob.wz`.
+- A MapleStory client folder that contains either classic root WZ files or modern split data folders under `Data\`.
 - Optional: a second MapleStory client folder for real old/new compare testing.
 
 Common Maple install locations to check:
@@ -85,18 +85,50 @@ Set the Maple client path:
 
 ```powershell
 $Maple = "C:\Nexon\Maple"
+$Data = Join-Path $Maple "Data"
 $Base = Join-Path $Maple "Base.wz"
-$String = Join-Path $Maple "String.wz"
-$Skill = Join-Path $Maple "Skill.wz"
-$Item = Join-Path $Maple "Item.wz"
-$Character = Join-Path $Maple "Character.wz"
-$Map = Join-Path $Maple "Map.wz"
-$Mob = Join-Path $Maple "Mob.wz"
 
 Get-ChildItem $Maple -Filter *.wz | Select-Object Name, Length | Format-Table
+Get-ChildItem $Data -Directory -ErrorAction SilentlyContinue | Select-Object Name | Format-Table
 ```
 
-Stop if `Base.wz` or the target WZ files are missing.
+Stop if `Base.wz` is missing.
+
+## Input Layout Detection
+
+Modern Maple clients can have tiny root/link WZ files at paths like `String.wz`, while the real data lives in `Data\String`, `Data\Skill`, `Data\Item`, `Data\Character`, `Data\Mob_Canvas`, and sharded map files such as `Data\Map\Map\Map1\Map1_000.wz`.
+
+If a command fails with `WZ path not found` or `<kind> id not found` against a root WZ file, retry with the data-bearing directory or shard.
+
+Use this detection block:
+
+```powershell
+function FirstExisting($name, [string[]] $candidates) {
+  foreach ($candidate in $candidates) {
+    if (Test-Path $candidate) {
+      Write-Host "$name = $candidate"
+      return $candidate
+    }
+  }
+  throw "No usable $name input found. Tried: $($candidates -join ', ')"
+}
+
+$String = FirstExisting "String" @("$Data\String", "$Maple\String.wz")
+$Skill = FirstExisting "Skill" @("$Data\Skill", "$Maple\Skill.wz")
+$Item = FirstExisting "Item" @("$Data\Item", "$Maple\Item.wz")
+$Gear = FirstExisting "Gear" @("$Data\Character\Cap", "$Data\Character", "$Maple\Character.wz")
+$Map = FirstExisting "Map" @("$Data\Map\Map\Map1\Map1_000.wz", "$Data\Map", "$Maple\Map.wz")
+$Mob = FirstExisting "Mob animation" @("$Data\Mob_Canvas", "$Data\Mob", "$Maple\Mob.wz")
+```
+
+Validated split-layout examples from Windows testing:
+
+- `Data\String` with `CashItemSearch.img`
+- `Data\Skill` with skill id `3001004`
+- `Data\Item` with item id `2000000`
+- `Data\Character\Cap` with gear id `1002140`
+- `Data\Map\Map\Map1\Map1_000.wz` with map id `100000000`
+- `Data\Mob_Canvas` with animation path `0100100.img\stand`
 
 ## Required Smoke Commands
 
@@ -154,10 +186,11 @@ First inspect `String.wz`:
 if ($LASTEXITCODE -ne 0) { throw "tree String.wz failed" }
 ```
 
-Then choose an image path that exists. Common candidates are `Skill.img`, `Item.img`, or `Map.img`.
+Then choose an image path that exists.
+For modern split `Data\String`, `CashItemSearch.img` is a validated candidate.
 
 ```powershell
-$StringNode = "Skill.img"
+$StringNode = "CashItemSearch.img"
 & $Wcr2 dump $String --path $StringNode --format json --out "$Out\dump-string-skill.json"
 if ($LASTEXITCODE -ne 0) { throw "dump String.wz failed; check `$StringNode" }
 
@@ -194,16 +227,17 @@ if ($LASTEXITCODE -ne 0) { throw "old/new Base.wz compare failed" }
 
 ### 6. Domain Metadata
 
-These IDs are common examples. If an ID is missing in the tested client version, record the failure and retry with an ID found in that WZ.
+These IDs are smoke-test examples for a modern split client.
+If an ID is missing in the tested client version, record the failure and retry with an ID found in that WZ.
 
 ```powershell
-& $Wcr2 skill info $Skill --id 1001004 --string-wz $String --json | Tee-Object "$Out\skill-1001004.json"
-if ($LASTEXITCODE -ne 0) { Write-Warning "skill 1001004 failed; try another known skill id" }
+& $Wcr2 skill info $Skill --id 3001004 --string-wz $String --json | Tee-Object "$Out\skill-3001004.json"
+if ($LASTEXITCODE -ne 0) { Write-Warning "skill 3001004 failed; try another known skill id" }
 
 & $Wcr2 item info $Item --id 2000000 --string-wz $String --json | Tee-Object "$Out\item-2000000.json"
 if ($LASTEXITCODE -ne 0) { Write-Warning "item 2000000 failed; try another known item id" }
 
-& $Wcr2 gear info $Character --id 1002140 --string-wz $String --json | Tee-Object "$Out\gear-1002140.json"
+& $Wcr2 gear info $Gear --id 1002140 --string-wz $String --json | Tee-Object "$Out\gear-1002140.json"
 if ($LASTEXITCODE -ne 0) { Write-Warning "gear 1002140 failed; try another known gear id" }
 
 & $Wcr2 map info $Map --id 100000000 --string-wz $String --json | Tee-Object "$Out\map-100000000.json"

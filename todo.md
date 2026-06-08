@@ -287,6 +287,64 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [x] 아이템/장비/스킬 기본 데이터 조회 명령 구현
 - [ ] 최소 하나 이상의 툴팁 이미지 export 가능
 
+## Phase 8A. CharaSim headless 해석 계층 CLI 연결
+
+분석 결과:
+
+- 현재 `skill info`는 `WzComparerR2.Common/CharaSim`을 사용하지 않고 `DomainInfoFinder` + `DomainInfoDto`로 id 노드와 문자열을 얕게 합친다.
+- 그래서 `LevelCount`, `MaxLevel`, `Description`이 `null`이거나 `#x`, `#damage`, `#indiePMdR` 같은 placeholder가 남는 것은 데이터 깨짐보다 CharaSim 해석 계층 미연결에 가깝다.
+- 기존 GUI의 풍부한 스킬 해석은 `Skill.CreateFromNode`, `StringLinker`, `SummaryParser`, `Calculator` 조합으로 수행된다.
+- `SkillTooltipRender2`와 툴팁 이미지 export는 `System.Drawing`, WinForms, `CharaSimResource`, `PluginManager.FindWz` 의존이 커서 첫 단계에서 바로 CLI에 붙이면 macOS/GDI+ 문제와 GUI 의존 문제가 함께 터진다.
+
+목표:
+
+- 렌더링 없이 스킬/아이템/장비/몹/NPC/퀘스트의 CharaSim 모델 해석 결과를 JSON/XML/text로 출력한다.
+- 스킬은 우선 `common`, `PVPcommon`, `level`, `req`, `action`, `maxLevel`, `masterLevel`, flags, resolved summary를 CLI에서 볼 수 있게 한다.
+- 툴팁 PNG export는 Windows-only 후속 단계로 분리한다.
+
+작업:
+
+- [ ] Headless CharaSim core 분리 방식을 결정한다.
+  - 후보 A: `WzComparerR2.Common`에 `net8.0` non-windows target을 추가하고 순수 CharaSim 파일만 조건부 빌드한다.
+  - 후보 B: 새 프로젝트 `WzComparerR2.CharaSimCore`를 만들고 `Skill`, `StringResult`, `StringLinker`, `SummaryParser`, `SummaryParams`, `Calculator`를 이동/공유한다.
+  - 후보 C: CLI 프로젝트에 필요한 파일만 링크한다. 빠르지만 장기 유지보수 비용이 커서 임시 방안으로만 사용한다.
+- [ ] CLI용 WZ repository/find service를 만든다.
+  - `PluginManager.FindWz` 이벤트/WinForms 의존 없이 `FindWz("Skill/1100.img/skill/11001025")` 같은 경로 조회를 제공한다.
+  - 입력 후보: `--skill-wz`, `--string-wz`, `--item-wz`, `--etc-wz`, `--quest-wz`, `--base-wz`, `--data-dir`.
+  - split layout 후보: `Data/Skill`, `Data/String`, `Data/Item`, `Data/Etc`, `Data/Quest`.
+- [ ] `StringLinker` 초기화를 CLI에서 수행한다.
+  - [x] 현재 `--string-wz` 단일 보강은 구현됨.
+  - [ ] `StringLinker.Load(stringNode, itemNode, etcNode, questNode)`와 호환되는 입력 로딩을 제공한다.
+  - [ ] string-only 상태와 full-linker 상태를 출력에 명확히 표시한다.
+- [ ] `skill full` 또는 `skill detail` 명령을 추가한다.
+  - 예: `wcr2 skill full <skill-wz> --id 11001025 --string-wz <string> --level max --json`
+  - 출력: raw path, name, desc, h/ph/hch, common, pvpCommon, levelCommon, reqSkill, reqLevel, actions, flags, icon paths, maxLevel, masterLevel.
+  - 출력: `resolvedSummary`, `nextLevelSummary`, `unresolvedPlaceholders`.
+  - 기존 `skill info`는 호환성 유지용 얕은 metadata 명령으로 남긴다.
+- [ ] `skill full --format json|xml|text`를 지원한다.
+  - XML은 raw WZ dump가 아니라 CharaSim 해석 결과 XML로 정의한다.
+  - 예: `<skill id="11001025" name="라이징 선"><common>...</common><summary level="...">...</summary></skill>`.
+- [ ] `1001004` 같은 string-only 스킬 상태를 명확히 처리한다.
+  - `String/Skill.img/1001004`는 존재하지만 `Data/Skill` 실제 skill node가 없으면 exit 실패 대신 `Status: string-only` 옵션을 제공할지 결정한다.
+  - 기본은 기존 CLI 호환을 위해 `skill full`에서만 풍부한 진단을 제공한다.
+- [ ] 실제 WZ 기반 golden 샘플을 추가한다.
+  - macOS CrossOver 실클라에서 확인한 후보: `10000074`, `11001025`, `11100027`.
+  - 검증 포인트: 이름 한글 정상 디코딩, common/level 존재 여부, summary placeholder 치환 여부, string-only 진단.
+  - fixture가 없을 때는 자동 테스트를 skip/gate 처리한다.
+- [ ] 렌더링 단계는 별도 Phase 8B로 분리한다.
+  - `skill tooltip --out <png>`는 Windows 우선.
+  - macOS는 `System.Drawing/GDI+` 오류 해결 전까지 제한으로 문서화한다.
+  - 이 단계에서만 `CharaSimResource`/`SkillTooltipRender2` 직접 사용 여부를 재검토한다.
+
+완료 기준:
+
+- [ ] `skill info` 기존 JSON/text 계약이 깨지지 않는다.
+- [ ] `skill full`이 실제 개별 스킬 3개 이상에서 CharaSim model fields를 출력한다.
+- [ ] `SummaryParser` 기반 resolved summary가 common 값이 있는 스킬에서 placeholder를 실제 값으로 치환한다.
+- [ ] `1001004`처럼 실제 skill node가 없는 경우 string-only 상태 또는 명확한 진단을 제공한다.
+- [ ] macOS에서도 JSON/XML/text 출력은 동작한다.
+- [ ] PNG tooltip export는 Windows-only 또는 별도 제한으로 문서화된다.
+
 ## Phase 9. 애니메이션/GIF 생성 CLI화
 
 - [ ] `WzComparerR2.Common/Gif*`, `Animation/`, `Encoders/` 구조를 분석한다.
@@ -641,6 +699,11 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `wcr2.exe`가 Windows x64 PE console executable인지 확인
 - [x] Windows 실클라 테스트 체크리스트 작성: `docs/windows-cli-test-checklist.md`
 - [x] Windows 실클라 smoke script 작성: `samples/cli/windows-maple-smoke.ps1`
+- [x] Windows 실클라 실행 결과 반영
+  - 기본 root WZ 기준 체크리스트: 17 passed, 16 failed
+  - split `Data` directory/shard retry: 14 passed, 0 failed
+  - 확인된 성공 입력: `Data\String`, `Data\Skill`, `Data\Item`, `Data\Character\Cap`, `Data\Map\Map\Map1\Map1_000.wz`, `Data\Mob_Canvas`
+  - `samples/cli/windows-maple-smoke.ps1`와 `docs/windows-cli-test-checklist.md`를 split layout 자동/수동 후보 기준으로 업데이트
 - [x] `dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Debug --no-restore -p:UseSharedCompilation=false -p:UseAppHost=false -v:minimal` 재검증 통과
 - [x] `git diff --check` 공백 오류 없음
 - [x] 현재 저장소 안에서 `.wz`, `.img`, `.ms`, `.patch` 샘플 파일을 찾지 못함
