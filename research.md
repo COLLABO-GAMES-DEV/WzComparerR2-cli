@@ -257,7 +257,7 @@ WZ/MS 파일 포맷을 다루는 가장 낮은 레벨입니다.
 - `String.wz`에서 문자열을 ID만으로 찾으면 같은 숫자 ID가 `Npc.img`, `Eqp.img`, `Skill.img`에 동시에 존재할 수 있습니다. 실제로 `3001004`는 skill data node가 있지만 string 검색은 NPC 문자열을 먼저 잡을 수 있었고, `1001004`는 장비 문자열을 먼저 잡을 수 있었습니다. 따라서 도메인 문자열 조회는 `skill`이면 `Skill.img`, `item/gear`이면 `Cash.img`/`Consume.img`/`Eqp.img` 등 도메인별 String 파일을 우선해야 합니다.
 - macOS CrossOver 실클라 `Data/Skill`에서는 `11001025`, `11100027` 같은 일부 실제 skill node가 아이콘과 문자열 중심으로 구성되어 `common`/`maxLevel`이 비어 있었습니다. 이 경우 `skill full`은 `resolvedSummary`에 치환 가능한 값만 반영하고, 남은 `#x`, `#indiePMdR` 같은 placeholder를 `Diagnostics`에 남깁니다. 이는 CLI 파싱 실패라기보다 현재 입력 shard에 수치 property가 없다는 신호로 보아야 합니다.
 - `String/Skill.img/1001004`의 “파워 스트라이크” 문자열은 확인되지만 현재 `Data/Skill`에서는 실제 skill node가 검색되지 않았습니다. `skill full --allow-string-only`는 이 케이스를 `Mode = string-only`, `FoundData = false`로 출력합니다.
-- Phase 9에서 `animate gif`를 추가했습니다. 구현은 기존 Common의 `Gif`, `GifFrame`, `BuildInGifEncoder`와 `ImageManipulation.dll`을 CLI에 링크하는 방식입니다. 빌드 출력에 `ImageManipulation.dll`은 복사되지만, macOS 실클라 실행은 `The type initializer for 'Gdip' threw an exception`으로 실패했습니다. 이는 이전 `animate frames` PNG 추출 실패와 같은 `System.Drawing/GDI+` 제한이므로 실제 GIF 생성은 Windows 환경에서 검증해야 합니다.
+- Phase 9에서 `animate gif`와 `animate apng`를 추가했습니다. 구현은 기존 Common의 `Gif`, `GifFrame`, `BuildInGifEncoder`, `BuildInApngEncoder`를 CLI에 링크하는 방식입니다. 빌드 출력에 `ImageManipulation.dll`과 `libapng.dll`은 복사되지만, macOS 실클라 실행은 `The type initializer for 'Gdip' threw an exception`으로 실패했습니다. 이는 이전 `animate frames` PNG 추출 실패와 같은 `System.Drawing/GDI+` 제한이므로 실제 GIF/APNG 생성은 Windows 환경에서 검증해야 합니다.
 
 ## 처음 작업할 때 주의할 점
 

@@ -39,6 +39,7 @@ wcr2 map life <map-wz-file-or-dir> --id <map-id> [--json]
 wcr2 map reactors <map-wz-file-or-dir> --id <map-id> [--json]
 wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]
 wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--json]
+wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--optimize] [--json]
 wcr2 avatar inspect --code <code> [--json]
 wcr2 avatar unpack --code <code>
 wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--timeout <seconds>] [--json]
@@ -100,6 +101,7 @@ wcr2 map portals Map.wz --id 100000000 --json
 wcr2 map objects Map.wz --id 100000000 --json
 wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand --json
 wcr2 animate gif Mob.wz --path 0100100.img/stand --out out/stand.gif --json
+wcr2 animate apng Mob.wz --path 0100100.img/stand --out out/stand.png --json
 wcr2 avatar inspect --code "1002140,1040036,1060026"
 wcr2 avatar unpack --code "1002140,1040036,1060026" --json
 wcr2 lua run WzComparerR2.LuaConsole/Examples/DumpXml.lua --dry-run --json
@@ -218,7 +220,8 @@ MonoGame 기반 screenshot 렌더링은 아직 CLI에 포함하지 않습니다.
 
 `animate frames`는 숫자 자식 노드를 프레임으로 보고 각 프레임의 PNG/사운드/스칼라 값을 하위 폴더로 추출한 뒤 `frames.json` manifest를 생성합니다.
 `animate gif`는 기존 built-in GIF encoder를 사용해 직접 PNG 프레임이 있는 애니메이션 노드를 GIF로 저장합니다.
-UOL이 다른 WZ 파일을 참조하는 복잡한 애니메이션이나 APNG 인코딩은 아직 포함하지 않습니다.
+`animate apng`는 기존 native `libapng.dll` 기반 encoder를 사용하며 Windows x64 배포에 DLL을 함께 복사합니다.
+UOL이 다른 WZ 파일을 참조하는 복잡한 애니메이션은 아직 제한적입니다.
 macOS에서는 WZ PNG 추출이 `System.Drawing/GDI+`에서 실패할 수 있으므로 Windows 실클라 검증을 우선하세요.
 
 `avatar inspect`와 `avatar unpack`은 avatar code 안의 item id를 추출하고 MapleStory item id prefix로 장비 슬롯을 추정합니다.

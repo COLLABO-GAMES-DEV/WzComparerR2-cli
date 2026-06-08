@@ -354,7 +354,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `animate frames --path <wz-path> --out <dir>`
 - [ ] GIF/APNG export 명령 구현
   - [x] `animate gif`
-  - `animate apng`
+  - [x] `animate apng`
 - [ ] overlay 옵션을 CLI 인자로 설계한다.
   - origin
   - delay
@@ -370,8 +370,9 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [ ] 실제 WZ animation sample 기반 PNG export 검증 필요
 - [x] GIF 또는 APNG 파일 생성 가능
   - [x] `animate gif` 구현 및 빌드 검증
+  - [x] `animate apng` 구현 및 빌드 검증
   - [ ] 실제 WZ animation sample 기반 GIF export 검증 필요
-  - [ ] APNG export 미구현
+  - [ ] 실제 WZ animation sample 기반 APNG export 검증 필요
 
 ## Phase 10. Avatar 기능 CLI화
 

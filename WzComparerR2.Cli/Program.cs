@@ -390,6 +390,10 @@ namespace WzComparerR2.Cli
             {
                 return RunAnimateGif(args);
             }
+            if (subCommand == "apng")
+            {
+                return RunAnimateApng(args);
+            }
             if (subCommand != "frames")
             {
                 throw new UsageException("Unknown animate command: " + args.Positionals[0]);
@@ -419,6 +423,41 @@ namespace WzComparerR2.Cli
                     foreach (var frame in result.Frames)
                     {
                         writer.WriteLine(frame.Index + "\tdelay=" + frame.Delay + "\tfiles=" + frame.Files.Count);
+                    }
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunAnimateApng(ParsedArgs args)
+        {
+            string input = RequireInputAt(args, 1, "animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--optimize] [--json]");
+            string nodePath = args.GetValue("path");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+            bool json = args.HasFlag("json");
+            if (string.IsNullOrEmpty(nodePath))
+            {
+                throw new UsageException("animate apng requires --path <wz-path>.");
+            }
+            if (string.IsNullOrEmpty(output))
+            {
+                throw new UsageException("animate apng requires --out <file.png>.");
+            }
+
+            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            {
+                Wz_Node node = ResolveRequiredNode(context.Root, nodePath, true);
+                var result = AnimationGifExporter.ExportApng(node, output, args.HasFlag("optimize"));
+                WriteOutput(result, json, writer =>
+                {
+                    writer.WriteLine("Frames: " + result.FrameCount);
+                    writer.WriteLine("Output: " + result.OutputPath);
+                    writer.WriteLine("Bytes: " + result.Bytes);
+                    writer.WriteLine("Canvas: " + result.Width + "x" + result.Height);
+                    foreach (var frame in result.Frames)
+                    {
+                        writer.WriteLine(frame.Index + "\tdelay=" + frame.Delay + "\tpath=" + frame.SourcePath);
                     }
                 });
             }
@@ -1957,6 +1996,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
             Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--json]");
+            Console.WriteLine("  wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--optimize] [--json]");
             Console.WriteLine("  wcr2 avatar inspect --code <code> [--json]");
             Console.WriteLine("  wcr2 avatar unpack --code <code>");
             Console.WriteLine("  wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--json]");
@@ -1995,6 +2035,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 map portals Map.wz --id 100000000 --json");
             Console.WriteLine("  wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand");
             Console.WriteLine("  wcr2 animate gif Mob.wz --path 0100100.img/stand --out out/stand.gif");
+            Console.WriteLine("  wcr2 animate apng Mob.wz --path 0100100.img/stand --out out/stand.png");
             Console.WriteLine("  wcr2 avatar inspect --code \"1002140,1040036,1060026\"");
             Console.WriteLine("  wcr2 lua run WzComparerR2.LuaConsole/Examples/DumpXml.lua --dry-run --json");
             Console.WriteLine("  wcr2 network server-info --json");
@@ -2052,6 +2093,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
             Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--json]");
+            Console.WriteLine("  wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--optimize] [--json]");
         }
 
         private static void PrintAvatarHelp()
@@ -5268,6 +5310,16 @@ namespace WzComparerR2.Cli
     {
         public static AnimationGifResultDto ExportGif(Wz_Node node, string outputPath, AnimationGifOptions options)
         {
+            return Export(node, outputPath, new BuildInGifEncoder(), options.Background, options.MinAlpha);
+        }
+
+        public static AnimationGifResultDto ExportApng(Wz_Node node, string outputPath, bool optimize)
+        {
+            return Export(node, outputPath, new BuildInApngEncoder { OptimizeEnabled = optimize }, Color.Transparent, 0);
+        }
+
+        private static AnimationGifResultDto Export(Wz_Node node, string outputPath, GifEncoder encoder, Color background, int minAlpha)
+        {
             string fullOutputPath = Path.GetFullPath(outputPath);
             string directory = Path.GetDirectoryName(fullOutputPath);
             if (!string.IsNullOrEmpty(directory))
@@ -5287,10 +5339,10 @@ namespace WzComparerR2.Cli
                 throw new UsageException("Animation frame bounds are empty: " + node.FullPath);
             }
 
-            using (var encoder = new BuildInGifEncoder())
+            using (encoder)
             {
                 encoder.Init(fullOutputPath, rect.Width, rect.Height);
-                gif.SaveGif(encoder, fullOutputPath, options.Background, options.MinAlpha);
+                gif.SaveGif(encoder, fullOutputPath, background, minAlpha);
             }
 
             var result = new AnimationGifResultDto

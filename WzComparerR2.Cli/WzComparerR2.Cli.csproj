@@ -26,6 +26,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="..\References\x64\libapng.dll" Link="libapng.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\WzComparerR2.Common\Calculator.cs" Link="Common\Calculator.cs" />
     <Compile Include="..\WzComparerR2.Common\GlobalFindNodeFunction.cs" Link="Common\GlobalFindNodeFunction.cs" />
     <Compile Include="..\WzComparerR2.Common\Gif.cs" Link="Common\Gif.cs" />
