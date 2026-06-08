@@ -20,7 +20,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="ImageManipulation">
+      <HintPath>..\References\ImageManipulation.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\WzComparerR2.Common\Calculator.cs" Link="Common\Calculator.cs" />
+    <Compile Include="..\WzComparerR2.Common\GlobalFindNodeFunction.cs" Link="Common\GlobalFindNodeFunction.cs" />
+    <Compile Include="..\WzComparerR2.Common\Gif.cs" Link="Common\Gif.cs" />
+    <Compile Include="..\WzComparerR2.Common\GifFrame.cs" Link="Common\GifFrame.cs" />
+    <Compile Include="..\WzComparerR2.Common\IGifFrame.cs" Link="Common\IGifFrame.cs" />
+    <Compile Include="..\WzComparerR2.Common\Wz_NodeExtension2.cs" Link="Common\Wz_NodeExtension2.cs" />
+    <Compile Include="..\WzComparerR2.Common\Encoders\BuildInApngEncoder.cs" Link="Common\Encoders\BuildInApngEncoder.cs" />
+    <Compile Include="..\WzComparerR2.Common\Encoders\BuildInGifEncoder.cs" Link="Common\Encoders\BuildInGifEncoder.cs" />
+    <Compile Include="..\WzComparerR2.Common\Encoders\GifEncoder.cs" Link="Common\Encoders\GifEncoder.cs" />
+    <Compile Include="..\WzComparerR2.Common\Encoders\GifEncoderCompatibility.cs" Link="Common\Encoders\GifEncoderCompatibility.cs" />
+    <Compile Include="..\WzComparerR2.Common\Encoders\IndexGifEncoder.cs" Link="Common\Encoders\IndexGifEncoder.cs" />
     <Compile Include="..\WzComparerR2\Patcher\WzPatcher.cs" Link="Patcher\WzPatcher.cs" />
     <Compile Include="..\WzComparerR2\Patcher\PatchPartContext.cs" Link="Patcher\PatchPartContext.cs" />
     <Compile Include="..\WzComparerR2\Patcher\PatchingEventArgs.cs" Link="Patcher\PatchingEventArgs.cs" />

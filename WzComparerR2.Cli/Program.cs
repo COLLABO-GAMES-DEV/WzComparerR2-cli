@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
@@ -16,6 +17,8 @@ using System.Threading;
 using WzComparerR2.Patcher;
 using WzComparerR2.Patcher.Builder;
 using WzComparerR2.WzLib;
+using WzComparerR2.Common;
+using WzComparerR2.Encoders;
 
 namespace WzComparerR2.Cli
 {
@@ -382,7 +385,12 @@ namespace WzComparerR2.Cli
                 PrintAnimateHelp();
                 return ExitSuccess;
             }
-            if (!string.Equals(args.Positionals[0], "frames", StringComparison.OrdinalIgnoreCase))
+            string subCommand = args.Positionals[0].ToLowerInvariant();
+            if (subCommand == "gif")
+            {
+                return RunAnimateGif(args);
+            }
+            if (subCommand != "frames")
             {
                 throw new UsageException("Unknown animate command: " + args.Positionals[0]);
             }
@@ -411,6 +419,41 @@ namespace WzComparerR2.Cli
                     foreach (var frame in result.Frames)
                     {
                         writer.WriteLine(frame.Index + "\tdelay=" + frame.Delay + "\tfiles=" + frame.Files.Count);
+                    }
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunAnimateGif(ParsedArgs args)
+        {
+            string input = RequireInputAt(args, 1, "animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background #RRGGBB|transparent] [--min-alpha <0-255>] [--json]");
+            string nodePath = args.GetValue("path");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+            bool json = args.HasFlag("json");
+            if (string.IsNullOrEmpty(nodePath))
+            {
+                throw new UsageException("animate gif requires --path <wz-path>.");
+            }
+            if (string.IsNullOrEmpty(output))
+            {
+                throw new UsageException("animate gif requires --out <file.gif>.");
+            }
+
+            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            {
+                Wz_Node node = ResolveRequiredNode(context.Root, nodePath, true);
+                var result = AnimationGifExporter.ExportGif(node, output, AnimationGifOptions.FromArgs(args));
+                WriteOutput(result, json, writer =>
+                {
+                    writer.WriteLine("Frames: " + result.FrameCount);
+                    writer.WriteLine("Output: " + result.OutputPath);
+                    writer.WriteLine("Bytes: " + result.Bytes);
+                    writer.WriteLine("Canvas: " + result.Width + "x" + result.Height);
+                    foreach (var frame in result.Frames)
+                    {
+                        writer.WriteLine(frame.Index + "\tdelay=" + frame.Delay + "\tpath=" + frame.SourcePath);
                     }
                 });
             }
@@ -1913,6 +1956,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 map objects <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
+            Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--json]");
             Console.WriteLine("  wcr2 avatar inspect --code <code> [--json]");
             Console.WriteLine("  wcr2 avatar unpack --code <code>");
             Console.WriteLine("  wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--json]");
@@ -1950,6 +1994,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 skill full Skill.wz --id 3001004 --string-wz String.wz --format json");
             Console.WriteLine("  wcr2 map portals Map.wz --id 100000000 --json");
             Console.WriteLine("  wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand");
+            Console.WriteLine("  wcr2 animate gif Mob.wz --path 0100100.img/stand --out out/stand.gif");
             Console.WriteLine("  wcr2 avatar inspect --code \"1002140,1040036,1060026\"");
             Console.WriteLine("  wcr2 lua run WzComparerR2.LuaConsole/Examples/DumpXml.lua --dry-run --json");
             Console.WriteLine("  wcr2 network server-info --json");
@@ -2006,6 +2051,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine();
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
+            Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--json]");
         }
 
         private static void PrintAvatarHelp()
@@ -5216,6 +5262,144 @@ namespace WzComparerR2.Cli
         public string SourcePath { get; set; }
         public int? Delay { get; set; }
         public List<ExtractedFileDto> Files { get; set; }
+    }
+
+    internal static class AnimationGifExporter
+    {
+        public static AnimationGifResultDto ExportGif(Wz_Node node, string outputPath, AnimationGifOptions options)
+        {
+            string fullOutputPath = Path.GetFullPath(outputPath);
+            string directory = Path.GetDirectoryName(fullOutputPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            Gif gif = Gif.CreateFromNode(node, FindLinkedNode);
+            if (gif == null || gif.Frames.Count == 0)
+            {
+                throw new UsageException("No GIF-compatible bitmap frames were found at path: " + node.FullPath);
+            }
+
+            Rectangle rect = gif.GetRect();
+            if (rect.Width <= 0 || rect.Height <= 0)
+            {
+                throw new UsageException("Animation frame bounds are empty: " + node.FullPath);
+            }
+
+            using (var encoder = new BuildInGifEncoder())
+            {
+                encoder.Init(fullOutputPath, rect.Width, rect.Height);
+                gif.SaveGif(encoder, fullOutputPath, options.Background, options.MinAlpha);
+            }
+
+            var result = new AnimationGifResultDto
+            {
+                SourcePath = node.FullPath,
+                OutputPath = fullOutputPath,
+                Width = rect.Width,
+                Height = rect.Height,
+                FrameCount = gif.Frames.Count,
+                Bytes = new FileInfo(fullOutputPath).Length,
+                Frames = CollectFrameMetadata(node)
+            };
+            return result;
+        }
+
+        private static Wz_Node FindLinkedNode(string fullPath, Wz_File sourceWzFile)
+        {
+            return null;
+        }
+
+        private static List<AnimationGifFrameDto> CollectFrameMetadata(Wz_Node node)
+        {
+            var frames = new List<AnimationGifFrameDto>();
+            foreach (Wz_Node child in node.Nodes)
+            {
+                int index;
+                if (!int.TryParse(child.Text, out index))
+                {
+                    continue;
+                }
+                Wz_Node frameNode = NodePath.ExtractImageNode(child, true) ?? child;
+                if (!(frameNode.Value is Wz_Png))
+                {
+                    continue;
+                }
+
+                frames.Add(new AnimationGifFrameDto
+                {
+                    Index = index,
+                    SourcePath = frameNode.FullPath,
+                    Delay = ReadDelay(frameNode)
+                });
+            }
+
+            return frames.OrderBy(frame => frame.Index).ToList();
+        }
+
+        private static int ReadDelay(Wz_Node frameNode)
+        {
+            Wz_Node delayNode = frameNode.FindNodeByPath("delay");
+            int delay = delayNode.GetValueEx<int>(0);
+            return delay <= 0 ? 120 : delay;
+        }
+    }
+
+    internal sealed class AnimationGifOptions
+    {
+        public Color Background { get; private set; }
+        public int MinAlpha { get; private set; }
+
+        public static AnimationGifOptions FromArgs(ParsedArgs args)
+        {
+            return new AnimationGifOptions
+            {
+                Background = ParseColor(args.GetValue("background") ?? "transparent"),
+                MinAlpha = Math.Max(0, Math.Min(255, args.GetInt("min-alpha", 0)))
+            };
+        }
+
+        private static Color ParseColor(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)
+                || string.Equals(value, "transparent", StringComparison.OrdinalIgnoreCase))
+            {
+                return Color.Transparent;
+            }
+            if (value.Length == 7 && value[0] == '#')
+            {
+                int r;
+                int g;
+                int b;
+                if (int.TryParse(value.Substring(1, 2), System.Globalization.NumberStyles.HexNumber, null, out r)
+                    && int.TryParse(value.Substring(3, 2), System.Globalization.NumberStyles.HexNumber, null, out g)
+                    && int.TryParse(value.Substring(5, 2), System.Globalization.NumberStyles.HexNumber, null, out b))
+                {
+                    return Color.FromArgb(255, r, g, b);
+                }
+            }
+
+            throw new UsageException("animate gif --background must be transparent or #RRGGBB.");
+        }
+    }
+
+    internal sealed class AnimationGifResultDto
+    {
+        public string SourcePath { get; set; }
+        public string OutputPath { get; set; }
+        public int FrameCount { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public long Bytes { get; set; }
+        public List<AnimationGifFrameDto> Frames { get; set; }
+    }
+
+    internal sealed class AnimationGifFrameDto
+    {
+        public int Index { get; set; }
+        public string SourcePath { get; set; }
+        public int Delay { get; set; }
     }
 
     internal sealed class AvatarCodeDto
