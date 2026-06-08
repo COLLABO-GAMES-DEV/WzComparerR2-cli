@@ -324,12 +324,15 @@ namespace WzComparerR2.Cli
             string levelText = args.GetValue("level");
             if (!string.IsNullOrEmpty(levelText))
             {
-                int parsedLevel;
-                if (!int.TryParse(levelText, out parsedLevel) || parsedLevel < 0)
+                if (!string.Equals(levelText, "max", StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new UsageException("skill full --level must be a non-negative integer.");
+                    int parsedLevel;
+                    if (!int.TryParse(levelText, out parsedLevel) || parsedLevel < 0)
+                    {
+                        throw new UsageException("skill full --level must be a non-negative integer or max.");
+                    }
+                    level = parsedLevel;
                 }
-                level = parsedLevel;
             }
 
             DomainStringInfo stringInfo = null;
@@ -1795,6 +1798,11 @@ namespace WzComparerR2.Cli
             if (!string.IsNullOrEmpty(dto.ResolvedSummary))
             {
                 writer.WriteLine("Summary: " + dto.ResolvedSummary);
+            }
+            if (dto.NextLevel.HasValue && !string.IsNullOrEmpty(dto.NextResolvedSummary))
+            {
+                writer.WriteLine("NextLevel: " + dto.NextLevel);
+                writer.WriteLine("NextSummary: " + dto.NextResolvedSummary);
             }
             writer.WriteLine("Common: " + dto.Common.Count + " Effective: " + dto.EffectiveProperties.Count + " LevelSets: " + dto.LevelProperties.Count);
             writer.WriteLine("Actions: " + dto.Actions.Count + " Icons: " + dto.Icons.Count + " Requirements: " + dto.RequiredSkills.Count);
@@ -4237,6 +4245,9 @@ namespace WzComparerR2.Cli
         public bool PreBigBangSkill { get; set; }
         public string RawSummary { get; set; }
         public string ResolvedSummary { get; set; }
+        public int? NextLevel { get; set; }
+        public string NextRawSummary { get; set; }
+        public string NextResolvedSummary { get; set; }
         public Dictionary<string, string> Common { get; set; }
         public Dictionary<string, string> EffectiveProperties { get; set; }
         public List<SkillLevelPropertiesDto> LevelProperties { get; set; }
@@ -4293,6 +4304,14 @@ namespace WzComparerR2.Cli
             var diagnostics = new List<string>();
             string rawSummary = skillString.SelectSummary(model.PreBigBangSkill, selectedLevel);
             string resolvedSummary = CliSkillSummaryResolver.Resolve(rawSummary, selectedLevel, effective, diagnostics);
+            int? nextLevel = ResolveNextLevel(model, selectedLevel);
+            string nextRawSummary = null;
+            string nextResolvedSummary = null;
+            if (nextLevel.HasValue)
+            {
+                nextRawSummary = skillString.SelectSummary(model.PreBigBangSkill, nextLevel.Value);
+                nextResolvedSummary = CliSkillSummaryResolver.Resolve(nextRawSummary, nextLevel.Value, model.GetEffectiveProperties(nextLevel.Value), diagnostics);
+            }
 
             if (stringInfo == null)
             {
@@ -4320,6 +4339,9 @@ namespace WzComparerR2.Cli
                 PreBigBangSkill = model.PreBigBangSkill,
                 RawSummary = rawSummary,
                 ResolvedSummary = resolvedSummary,
+                NextLevel = nextLevel,
+                NextRawSummary = nextRawSummary,
+                NextResolvedSummary = nextResolvedSummary,
                 Common = model.Common,
                 EffectiveProperties = effective,
                 LevelProperties = model.LevelProperties
@@ -4356,6 +4378,33 @@ namespace WzComparerR2.Cli
                 return model.LevelProperties.Keys.Max();
             }
             return 1;
+        }
+
+        private static int? ResolveNextLevel(HeadlessSkillModel model, int selectedLevel)
+        {
+            bool disableNextLevelInfo;
+            if (model.Flags.TryGetValue("disableNextLevelInfo", out disableNextLevelInfo) && disableNextLevelInfo)
+            {
+                return null;
+            }
+
+            if (model.MaxLevel > selectedLevel)
+            {
+                return selectedLevel + 1;
+            }
+
+            if (model.LevelProperties.Count > 0)
+            {
+                foreach (int level in model.LevelProperties.Keys)
+                {
+                    if (level > selectedLevel)
+                    {
+                        return level;
+                    }
+                }
+            }
+
+            return null;
         }
     }
 
@@ -4927,6 +4976,14 @@ namespace WzComparerR2.Cli
                     WriteElement(writer, "raw", dto.RawSummary);
                     WriteElement(writer, "resolved", dto.ResolvedSummary);
                     writer.WriteEndElement();
+                    if (dto.NextLevel.HasValue)
+                    {
+                        writer.WriteStartElement("nextSummary");
+                        writer.WriteAttributeString("level", dto.NextLevel.Value.ToString());
+                        WriteElement(writer, "raw", dto.NextRawSummary);
+                        WriteElement(writer, "resolved", dto.NextResolvedSummary);
+                        writer.WriteEndElement();
+                    }
                     WriteDictionary(writer, "common", "property", dto.Common);
                     WriteDictionary(writer, "effectiveProperties", "property", dto.EffectiveProperties);
                     WriteDictionary(writer, "pvpCommon", "property", dto.PvpCommon);

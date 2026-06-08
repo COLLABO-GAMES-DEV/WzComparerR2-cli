@@ -321,8 +321,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `skill full` 또는 `skill detail` 명령을 추가한다.
   - 예: `wcr2 skill full <skill-wz> --id 11001025 --string-wz <string> --level max --json`
   - 출력: raw path, name, desc, h/ph/hch, common, pvpCommon, levelCommon, reqSkill, reqLevel, actions, flags, icon paths, maxLevel, masterLevel.
-  - 출력: `resolvedSummary`, `unresolvedPlaceholders`.
-  - 남은 항목: `nextLevelSummary`.
+  - 출력: `resolvedSummary`, `nextLevelSummary`, `unresolvedPlaceholders`.
   - 기존 `skill info`는 호환성 유지용 얕은 metadata 명령으로 남긴다.
 - [x] `skill full --format json|xml|text`를 지원한다.
   - XML은 raw WZ dump가 아니라 CharaSim 해석 결과 XML로 정의한다.
