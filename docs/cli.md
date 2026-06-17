@@ -217,6 +217,7 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Debug/net8.0/wcr2-te
 
 The current automated tests cover CLI help/version, usage errors, config, avatar metadata, Lua dry-run, network dry-run, update validation, and CLI plugin discovery/execution.
 Full WZ happy-path golden tests still require sample `.wz`/`.img` fixtures.
+Snapshot and real-client verification rules are documented in [`docs/cli-test-strategy.md`](cli-test-strategy.md).
 
 Real Maple clients can use a split `Data` layout.
 If `String.wz`, `Map.wz`, `Skill.wz`, or similar root files load but do not contain the expected path/id, try the data-bearing folder or shard instead, for example `Data\String`, `Data\Skill`, `Data\Character\Cap`, `Data\Map\Map\Map1\Map1_000.wz`, or `Data\Mob_Canvas`.

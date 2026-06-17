@@ -74,9 +74,10 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [ ] 샘플 WZ/MS 파일 세트를 정한다.
   - 공개 가능 샘플 또는 로컬 비공개 fixture
   - 최소: Base/String/Item/Map/Sound/Mob/Npc/Skill 계열
-- [ ] CLI 출력 스냅샷 검증 방식을 정한다.
+- [x] CLI 출력 스냅샷 검증 방식을 정한다.
   - JSON 출력은 golden file 비교
   - binary export는 hash/크기/metadata 비교
+  - 세부 기준: `docs/cli-test-strategy.md`
 
 완료 기준:
 
@@ -596,6 +597,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] parser 자체를 검증하기보다 CLI service와 output contract를 검증한다.
   - CLI 바이너리를 실제 process로 실행하고 exit code, stdout/stderr, JSON field를 검증한다.
 - [ ] golden output 테스트 추가
+  - [x] golden/snapshot 검증 전략 문서화: `docs/cli-test-strategy.md`
   - [x] 현재 샘플 없이 검증 가능한 JSON contract: `avatar`, `config`, `lua --dry-run`, `network`, `plugin`
   - [ ] 실제 WZ sample 기반 tree JSON
   - [ ] 실제 WZ sample 기반 search JSON
