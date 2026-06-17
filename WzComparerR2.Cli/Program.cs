@@ -550,6 +550,11 @@ namespace WzComparerR2.Cli
             }
 
             string subCommand = args.Positionals[0].ToLowerInvariant();
+            if (subCommand == "render")
+            {
+                return RunAvatarRender(args);
+            }
+
             if (subCommand != "inspect" && subCommand != "unpack")
             {
                 throw new UsageException("Unknown avatar command: " + args.Positionals[0]);
@@ -572,6 +577,92 @@ namespace WzComparerR2.Cli
                 }
             });
             return ExitSuccess;
+        }
+
+        private static int RunAvatarRender(ParsedArgs args)
+        {
+            if (!args.HasFlag("dry-run"))
+            {
+                throw new UsageException("avatar render currently supports --dry-run only. Real PNG rendering needs AvatarCommon dependency isolation first.");
+            }
+
+            string output = args.GetValue("out");
+            if (string.IsNullOrEmpty(output))
+            {
+                output = args.GetValue("output");
+            }
+            if (string.IsNullOrEmpty(output))
+            {
+                throw new UsageException("avatar render requires --out <avatar.png>.");
+            }
+
+            var avatarCode = ParseAvatarRenderInput(args);
+            if (!avatarCode.IsValid)
+            {
+                throw new UsageException("avatar render requires --code <code> or --items <ids>.");
+            }
+
+            string action = args.GetValue("action");
+            if (string.IsNullOrEmpty(action))
+            {
+                action = "stand1";
+            }
+
+            string emotion = args.GetValue("emotion");
+            if (string.IsNullOrEmpty(emotion))
+            {
+                emotion = "default";
+            }
+
+            var result = AvatarRenderPlanDto.Create(
+                avatarCode,
+                output,
+                action,
+                emotion,
+                args.HasFlag("offline"),
+                !string.IsNullOrEmpty(args.GetValue("api-key")));
+
+            bool json = args.HasFlag("json") || args.HasFlag("dry-run");
+            WriteOutput(result, json, writer =>
+            {
+                writer.WriteLine("Avatar render dry-run");
+                writer.WriteLine("Output: " + result.OutputPath);
+                writer.WriteLine("Action: " + result.Action + " Emotion: " + result.Emotion);
+                writer.WriteLine("Items: " + result.Items.Count);
+                foreach (var candidate in result.Candidates)
+                {
+                    writer.WriteLine(candidate.Id + "\t" + candidate.Category + "\t" + string.Join(", ", candidate.CandidatePaths));
+                }
+                foreach (string blocker in result.Blockers)
+                {
+                    writer.WriteLine("Blocker: " + blocker);
+                }
+            });
+
+            return ExitSuccess;
+        }
+
+        private static AvatarCodeDto ParseAvatarRenderInput(ParsedArgs args)
+        {
+            var parts = new List<string>();
+            string code = args.GetValue("code");
+            if (!string.IsNullOrEmpty(code))
+            {
+                parts.Add(code);
+            }
+
+            string items = args.GetValue("items");
+            if (!string.IsNullOrEmpty(items))
+            {
+                parts.Add(items);
+            }
+
+            for (int i = 1; i < args.Positionals.Count; i++)
+            {
+                parts.Add(args.Positionals[i]);
+            }
+
+            return AvatarCodeDto.Parse(string.Join(",", parts));
         }
 
         private static int RunMap(ParsedArgs args)
@@ -2147,6 +2238,8 @@ namespace WzComparerR2.Cli
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 avatar inspect --code <code> [--json]");
             Console.WriteLine("  wcr2 avatar unpack --code <code>");
+            Console.WriteLine("  wcr2 avatar render --code <code> --out <avatar.png> --dry-run [--action <action>] [--emotion <emotion>] [--offline] [--api-key <key>] [--json]");
+            Console.WriteLine("  wcr2 avatar render --items <ids> --out <avatar.png> --dry-run [--action <action>] [--emotion <emotion>] [--json]");
         }
 
         private static void PrintLuaHelp()
@@ -5726,6 +5819,154 @@ namespace WzComparerR2.Cli
         }
     }
 
+    internal sealed class AvatarRenderPlanDto
+    {
+        public string Mode { get; set; }
+        public string OutputPath { get; set; }
+        public string Action { get; set; }
+        public string Emotion { get; set; }
+        public bool Offline { get; set; }
+        public bool ApiKeyProvided { get; set; }
+        public bool CanRender { get; set; }
+        public List<AvatarItemDto> Items { get; set; }
+        public List<AvatarRenderCandidateDto> Candidates { get; set; }
+        public List<string> Warnings { get; set; }
+        public List<string> Blockers { get; set; }
+
+        public static AvatarRenderPlanDto Create(AvatarCodeDto code, string outputPath, string action, string emotion, bool offline, bool apiKeyProvided)
+        {
+            var warnings = new List<string>(code.Warnings ?? new List<string>());
+            if (!offline && !apiKeyProvided)
+            {
+                warnings.Add("No MapleStory OpenAPI key was provided; dry-run will not attempt remote code expansion.");
+            }
+
+            return new AvatarRenderPlanDto
+            {
+                Mode = "dry-run",
+                OutputPath = outputPath,
+                Action = action,
+                Emotion = emotion,
+                Offline = offline,
+                ApiKeyProvided = apiKeyProvided,
+                CanRender = false,
+                Items = code.Items,
+                Candidates = code.Items.Select(AvatarRenderCandidateDto.FromItem).ToList(),
+                Warnings = warnings,
+                Blockers = new List<string>
+                {
+                    "AvatarCommon.AvatarCanvas and AvatarCanvasManager resolve WZ data through PluginManager.FindWz.",
+                    "CLI must inject a headless WZ repository before AvatarCommon can render without the WinForms plugin host.",
+                    "PNG rendering uses System.Drawing/GDI+ paths and still needs Windows verification with a real Maple client."
+                }
+            };
+        }
+    }
+
+    internal sealed class AvatarRenderCandidateDto
+    {
+        public string Id { get; set; }
+        public string Category { get; set; }
+        public string SlotGuess { get; set; }
+        public List<string> CandidatePaths { get; set; }
+
+        public static AvatarRenderCandidateDto FromItem(AvatarItemDto item)
+        {
+            return new AvatarRenderCandidateDto
+            {
+                Id = item.Id,
+                Category = item.Category,
+                SlotGuess = item.SlotGuess,
+                CandidatePaths = GuessCandidatePaths(item)
+            };
+        }
+
+        private static List<string> GuessCandidatePaths(AvatarItemDto item)
+        {
+            string id = NormalizeItemId(item.Id);
+            var paths = new List<string>();
+            switch (item.Category)
+            {
+                case "body":
+                case "head":
+                    paths.Add("Character/" + id + ".img");
+                    break;
+                case "face":
+                    paths.Add("Character/Face/" + id + ".img");
+                    break;
+                case "hair":
+                    paths.Add("Character/Hair/" + id + ".img");
+                    break;
+                case "equipment":
+                    string folder = EquipmentFolder(item.SlotGuess);
+                    if (!string.IsNullOrEmpty(folder))
+                    {
+                        paths.Add("Character/" + folder + "/" + id + ".img");
+                    }
+                    paths.Add("Character/" + id + ".img");
+                    break;
+                default:
+                    paths.Add("Character/" + id + ".img");
+                    break;
+            }
+
+            return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private static string NormalizeItemId(string id)
+        {
+            int numericId;
+            if (int.TryParse(id, out numericId) && numericId >= 0)
+            {
+                return numericId.ToString("D8", CultureInfo.InvariantCulture);
+            }
+
+            return id;
+        }
+
+        private static string EquipmentFolder(string slot)
+        {
+            switch (slot)
+            {
+                case "cap":
+                    return "Cap";
+                case "face-accessory":
+                case "eye-accessory":
+                case "earrings":
+                case "pendant":
+                case "belt":
+                case "shoulder":
+                case "pocket":
+                case "badge":
+                case "emblem":
+                case "totem":
+                    return "Accessory";
+                case "coat":
+                    return "Coat";
+                case "longcoat":
+                    return "Longcoat";
+                case "pants":
+                    return "Pants";
+                case "shoes":
+                    return "Shoes";
+                case "glove":
+                    return "Glove";
+                case "shield":
+                    return "Shield";
+                case "cape":
+                    return "Cape";
+                case "ring":
+                    return "Ring";
+                case "medal":
+                    return "Medal";
+                case "weapon":
+                    return "Weapon";
+                default:
+                    return null;
+            }
+        }
+    }
+
     internal sealed class AvatarItemDto
     {
         public string Id { get; set; }
@@ -5742,7 +5983,7 @@ namespace WzComparerR2.Cli
             return new AvatarItemDto
             {
                 Id = id,
-                Category = slot == "unknown" ? GuessGeneralCategory(prefix) : "equipment",
+                Category = slot == "unknown" ? GuessGeneralCategory(prefix, numericId) : "equipment",
                 SlotGuess = slot
             };
         }
@@ -5801,8 +6042,24 @@ namespace WzComparerR2.Cli
             return "unknown";
         }
 
-        private static string GuessGeneralCategory(int prefix)
+        private static string GuessGeneralCategory(int prefix, int numericId)
         {
+            if (numericId >= 2000 && numericId < 3000)
+            {
+                return "body";
+            }
+            if (numericId >= 12000 && numericId < 13000)
+            {
+                return "head";
+            }
+            if (numericId >= 20000 && numericId < 30000)
+            {
+                return "face";
+            }
+            if (numericId >= 30000 && numericId < 50000)
+            {
+                return "hair";
+            }
             if (prefix >= 200 && prefix <= 245)
             {
                 return "use";

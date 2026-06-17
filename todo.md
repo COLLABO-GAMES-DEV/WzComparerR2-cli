@@ -379,22 +379,29 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 ## Phase 10. Avatar 기능 CLI화
 
-- [ ] `WzComparerR2.Avatar/Entry.cs`와 `WzComparerR2.Avatar/UI/` 의존성을 분리한다.
-- [ ] `WzComparerR2/AvatarCommon/` 재사용 범위를 확인한다.
+- [x] `WzComparerR2.Avatar/Entry.cs`와 `WzComparerR2.Avatar/UI/` 의존성을 분석한다.
+  - `Entry.cs`/UI는 WinForms plugin host, OpenAPI form, ribbon/menu lifecycle에 묶여 있어 CLI에 직접 링크하지 않는다.
+- [x] `WzComparerR2/AvatarCommon/` 재사용 범위를 확인한다.
+  - `AvatarCanvas`의 합성 로직은 재사용 후보지만 내부 WZ 탐색이 `PluginManager.FindWz`에 묶여 있어 repository injection 분리가 먼저 필요하다.
 - [x] avatar code 파싱/검증 명령 구현
   - `avatar inspect --code <code>`
   - `avatar unpack --code <code> --json`
-- [ ] avatar render 명령 구현
-  - `avatar render --code <code> --out avatar.png`
-  - `avatar render --items <ids...> --action <action>`
-- [ ] 외부 MapleStory OpenAPI 사용 여부를 옵션화한다.
+- [x] avatar render dry-run 명령 구현
+  - `avatar render --code <code> --out avatar.png --dry-run`
+  - `avatar render --items <ids...> --action <action> --dry-run`
+  - 후보 WZ 경로, action/emotion, blocker manifest를 JSON으로 출력한다.
+- [x] 외부 MapleStory OpenAPI 사용 여부를 옵션화한다.
   - `--offline`
   - `--api-key`
-- [ ] rendering을 headless로 실행할 수 있는지 검증한다.
+- [ ] avatar render 실제 PNG 명령 구현
+  - `AvatarCommon`에서 `PluginManager.FindWz` 직접 호출을 제거하거나 주입 가능하게 만든 뒤 진행한다.
+- [x] rendering을 headless로 실행할 수 있는지 1차 검증한다.
+  - 현재 결론: CLI dry-run은 가능하지만 실제 render는 `PluginManager.FindWz`와 `System.Drawing/GDI+` 의존 때문에 아직 blocked.
 
 완료 기준:
 
 - [x] 아바타 구성 정보를 JSON으로 출력 가능
+- [x] avatar render dry-run plan을 JSON으로 출력 가능
 - [ ] 최소 정적 avatar PNG export 가능
 
 ## Phase 11. MapRender 기능 CLI화
@@ -564,7 +571,8 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [x] compare report: `samples/cli/compare-report.sh`
   - [x] avatar metadata export: `samples/cli/avatar-metadata.sh`
   - [x] map metadata export: `samples/cli/map-metadata.sh`
-  - [ ] avatar render: CLI image rendering 미구현으로 metadata script만 제공
+  - [x] avatar render dry-run: CLI image rendering blocker manifest 제공
+  - [ ] avatar render PNG: `AvatarCommon` headless repository injection 후 구현
   - [ ] map screenshot: CLI screenshot rendering 미구현으로 metadata script만 제공
 
 완료 기준:

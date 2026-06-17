@@ -22,6 +22,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("missing input returns not found", () => MissingInputReturnsNotFound(runner)),
                 TestCase.Create("invalid regex returns usage error before WZ load", () => InvalidRegexReturnsUsageError(runner)),
                 TestCase.Create("avatar inspect emits stable json", () => AvatarInspectEmitsStableJson(runner)),
+                TestCase.Create("avatar render dry-run emits blocked plan", () => AvatarRenderDryRunEmitsBlockedPlan(runner)),
                 TestCase.Create("config stores and removes values", () => ConfigStoresAndRemovesValues(runner)),
                 TestCase.Create("config default-wz fallback is used", () => ConfigDefaultWzFallbackIsUsed(runner)),
                 TestCase.Create("lua dry-run validates example script", () => LuaDryRunValidatesExampleScript(runner)),
@@ -99,6 +100,23 @@ namespace WzComparerR2.Cli.Tests
                 JsonElement root = doc.RootElement;
                 AssertEqual(3, root.GetProperty("Items").GetArrayLength(), "avatar item count");
                 AssertEqual(true, root.GetProperty("IsValid").GetBoolean(), "avatar validity");
+            }
+        }
+
+        private static void AvatarRenderDryRunEmitsBlockedPlan(CliRunner runner)
+        {
+            CommandResult result = runner.Run("avatar", "render", "--items", "00002000", "00012000", "1002140", "--out", "avatar.png", "--dry-run");
+            AssertExitCode(result, 0);
+            using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+            {
+                JsonElement root = doc.RootElement;
+                AssertEqual("dry-run", root.GetProperty("Mode").GetString(), "avatar render mode");
+                AssertEqual("avatar.png", root.GetProperty("OutputPath").GetString(), "avatar render output");
+                AssertEqual(false, root.GetProperty("CanRender").GetBoolean(), "avatar render capability");
+                AssertEqual(3, root.GetProperty("Items").GetArrayLength(), "avatar render item count");
+                AssertEqual(3, root.GetProperty("Candidates").GetArrayLength(), "avatar render candidate count");
+                AssertContains(root.GetProperty("Candidates")[0].GetProperty("CandidatePaths")[0].GetString(), "Character/00002000.img");
+                AssertContains(root.GetProperty("Blockers")[0].GetString(), "PluginManager.FindWz");
             }
         }
 
