@@ -37,6 +37,7 @@ wcr2 map objects <map-wz-file-or-dir> --id <map-id> [--json]
 wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]
 wcr2 map life <map-wz-file-or-dir> --id <map-id> [--json]
 wcr2 map reactors <map-wz-file-or-dir> --id <map-id> [--json]
+wcr2 map render [<map-wz-file-or-dir>] --id <map-id> --out <map.png> --dry-run [--layer <n|all>] [--include-life] [--include-reactor] [--include-tooltip] [--json]
 wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]
 wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--json]
 wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--optimize] [--json]
@@ -102,6 +103,7 @@ wcr2 gear info Character.wz --id 1002140 --string-wz String.wz --json
 wcr2 map info Map.wz --id 100000000 --string-wz String.wz
 wcr2 map portals Map.wz --id 100000000 --json
 wcr2 map objects Map.wz --id 100000000 --json
+wcr2 map render --id 100000000 --out out/map.png --dry-run --include-life --json
 wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand --json
 wcr2 animate gif Mob.wz --path 0100100.img/stand --out out/stand.gif --json
 wcr2 animate gif Mob.wz --path 0100100.img/stand --out out/stand-fast.gif --start-frame 1 --end-frame 4 --delay 80 --scale 2 --origin 0,0 --background '#ffffff'
@@ -222,7 +224,8 @@ If `String.wz`, `Map.wz`, `Skill.wz`, or similar root files load but do not cont
 툴팁 PNG 렌더링은 아직 포함하지 않으며 Windows-only 후속 단계로 분리되어 있습니다.
 
 `map objects/portals/life/reactors`는 map `.img` 안의 해당 섹션을 읽어 좌표, id, 이동 대상 같은 scalar property를 JSON으로 내보냅니다.
-MonoGame 기반 screenshot 렌더링은 아직 CLI에 포함하지 않습니다.
+`map render --dry-run`은 실제 PNG를 만들지 않고, map id 기반 후보 shard/path, layer/include 옵션, MonoGame headless 렌더링 blocker를 JSON으로 출력합니다.
+MonoGame 기반 실제 screenshot 렌더링은 아직 CLI에 포함하지 않습니다.
 
 `animate frames`는 숫자 자식 노드를 프레임으로 보고 각 프레임의 PNG/사운드/스칼라 값을 하위 폴더로 추출한 뒤 `frames.json` manifest를 생성합니다.
 `animate gif`는 기존 built-in GIF encoder를 사용해 직접 PNG 프레임이 있는 애니메이션 노드를 GIF로 저장합니다.

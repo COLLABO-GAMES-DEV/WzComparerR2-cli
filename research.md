@@ -264,6 +264,8 @@ WZ/MS 파일 포맷을 다루는 가장 낮은 레벨입니다.
 - `WzComparerR2/AvatarCommon/AvatarCanvas`에는 action/frame 합성에 필요한 핵심 로직이 있지만, WZ 노드 탐색이 `PluginManager.FindWz` 전역 호출에 묶여 있습니다. 실제 headless PNG 렌더를 하려면 먼저 `AvatarCanvas`/`AvatarCanvasManager`가 CLI의 WZ repository 또는 `Func<string, Wz_Node>` 같은 resolver를 주입받도록 분리해야 합니다.
 - `avatar render --dry-run`을 추가했습니다. 현재 이 명령은 실제 PNG를 만들지 않고, 입력 avatar code/items를 파싱해 body/head/face/hair/equipment 분류, 후보 `Character/.../*.img` 경로, action/emotion, `--offline`/`--api-key` 상태, 그리고 실제 render blocker를 JSON으로 출력합니다. `CanRender = false`는 의도된 계약입니다.
 - 기본 body/head/face/hair ID는 장비 prefix와 다르게 `00002000`, `00012000`, `00020000`, `00030000`처럼 8자리 문자열에 앞자리 0이 포함될 수 있습니다. CLI의 avatar parser는 이제 이 범위를 `body`, `head`, `face`, `hair`로 따로 분류합니다.
+- Phase 11에서 `map render --dry-run`을 추가했습니다. 이 명령은 실제 screenshot을 만들지 않고 map id에서 `Map/Map/MapN/<id>.img`와 split layout 후보 `Data/Map/Map/MapN/MapN_###.wz`를 계산하며, `--layer`, `--include-life`, `--include-reactor`, `--include-tooltip` 옵션과 MonoGame/EmptyKeys/native dependency blocker를 JSON으로 출력합니다.
+- 실제 map screenshot export는 `WzComparerR2.MapRender`의 MonoGame `Game`/`GraphicsDevice` lifecycle, offscreen render target 생성, Bass/native runtime 배치, real-client split shard layout 확인이 필요합니다. 따라서 현재 `map render`의 `CanRender = false`는 의도된 계약입니다.
 
 ## 처음 작업할 때 주의할 점
 

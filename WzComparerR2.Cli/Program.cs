@@ -678,6 +678,10 @@ namespace WzComparerR2.Cli
             {
                 return RunDomainInfo(args, "map");
             }
+            if (subCommand == "render")
+            {
+                return RunMapRender(args);
+            }
 
             if (subCommand != "objects" && subCommand != "portals" && subCommand != "life" && subCommand != "reactors")
             {
@@ -711,6 +715,65 @@ namespace WzComparerR2.Cli
                     }
                 });
             }
+
+            return ExitSuccess;
+        }
+
+        private static int RunMapRender(ParsedArgs args)
+        {
+            if (!args.HasFlag("dry-run"))
+            {
+                throw new UsageException("map render currently supports --dry-run only. Real screenshot rendering needs a headless MonoGame render target first.");
+            }
+
+            string id = args.GetValue("id");
+            if (string.IsNullOrEmpty(id))
+            {
+                throw new UsageException("map render requires --id <map-id>.");
+            }
+
+            string output = args.GetValue("out");
+            if (string.IsNullOrEmpty(output))
+            {
+                output = args.GetValue("output");
+            }
+            if (string.IsNullOrEmpty(output))
+            {
+                throw new UsageException("map render requires --out <map.png>.");
+            }
+
+            string input = args.Positionals.Count > 1 ? args.Positionals[1] : null;
+            string layer = args.GetValue("layer");
+            if (string.IsNullOrEmpty(layer))
+            {
+                layer = "all";
+            }
+
+            var result = MapRenderPlanDto.Create(
+                id,
+                input,
+                output,
+                layer,
+                args.HasFlag("include-life"),
+                args.HasFlag("include-reactor"),
+                args.HasFlag("include-tooltip"));
+
+            bool json = args.HasFlag("json") || args.HasFlag("dry-run");
+            WriteOutput(result, json, writer =>
+            {
+                writer.WriteLine("Map render dry-run");
+                writer.WriteLine("Map: " + result.Id);
+                writer.WriteLine("Output: " + result.OutputPath);
+                writer.WriteLine("Layer: " + result.Layer);
+                foreach (string path in result.CandidatePaths)
+                {
+                    writer.WriteLine("Candidate: " + path);
+                }
+                foreach (string blocker in result.Blockers)
+                {
+                    writer.WriteLine("Blocker: " + blocker);
+                }
+            });
 
             return ExitSuccess;
         }
@@ -2194,6 +2257,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 map life <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 map reactors <map-wz-file-or-dir> --id <map-id> [--json]");
+            Console.WriteLine("  wcr2 map render [<map-wz-file-or-dir>] --id <map-id> --out <map.png> --dry-run [--layer <n|all>] [--include-life] [--include-reactor] [--include-tooltip] [--json]");
         }
 
         private static void PrintSkillHelp()
@@ -6077,6 +6141,75 @@ namespace WzComparerR2.Cli
                 return "cash";
             }
             return "unknown";
+        }
+    }
+
+    internal sealed class MapRenderPlanDto
+    {
+        public string Mode { get; set; }
+        public string Id { get; set; }
+        public string WzInputPath { get; set; }
+        public string OutputPath { get; set; }
+        public string Layer { get; set; }
+        public bool IncludeLife { get; set; }
+        public bool IncludeReactor { get; set; }
+        public bool IncludeTooltip { get; set; }
+        public bool CanRender { get; set; }
+        public List<string> CandidatePaths { get; set; }
+        public List<string> Warnings { get; set; }
+        public List<string> Blockers { get; set; }
+
+        public static MapRenderPlanDto Create(string id, string wzInputPath, string outputPath, string layer, bool includeLife, bool includeReactor, bool includeTooltip)
+        {
+            return new MapRenderPlanDto
+            {
+                Mode = "dry-run",
+                Id = id,
+                WzInputPath = wzInputPath,
+                OutputPath = outputPath,
+                Layer = layer,
+                IncludeLife = includeLife,
+                IncludeReactor = includeReactor,
+                IncludeTooltip = includeTooltip,
+                CanRender = false,
+                CandidatePaths = BuildCandidatePaths(id),
+                Warnings = BuildWarnings(wzInputPath),
+                Blockers = new List<string>
+                {
+                    "WzComparerR2.MapRender is built around MonoGame Game and GraphicsDevice lifecycle.",
+                    "CLI needs an offscreen render target and deterministic viewport before screenshot export can run headless.",
+                    "MapRender also depends on EmptyKeys UI, Bass/native runtime files, and real-client asset layout verification."
+                }
+            };
+        }
+
+        private static List<string> BuildCandidatePaths(string id)
+        {
+            var paths = new List<string>();
+            int numericId;
+            if (int.TryParse(id, out numericId) && numericId >= 0)
+            {
+                int group = numericId / 100000000;
+                int shard = (numericId / 100000) % 1000;
+                paths.Add("Map/Map/Map" + group + "/" + numericId.ToString("D9", CultureInfo.InvariantCulture) + ".img");
+                paths.Add("Data/Map/Map/Map" + group + "/Map" + group + "_" + shard.ToString("D3", CultureInfo.InvariantCulture) + ".wz");
+            }
+            else
+            {
+                paths.Add("Map/Map/<group>/" + id + ".img");
+            }
+
+            return paths;
+        }
+
+        private static List<string> BuildWarnings(string wzInputPath)
+        {
+            var warnings = new List<string>();
+            if (string.IsNullOrEmpty(wzInputPath))
+            {
+                warnings.Add("No map WZ input path was provided; dry-run only reports candidate paths.");
+            }
+            return warnings;
         }
     }
 

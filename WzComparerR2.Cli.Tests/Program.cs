@@ -23,6 +23,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("invalid regex returns usage error before WZ load", () => InvalidRegexReturnsUsageError(runner)),
                 TestCase.Create("avatar inspect emits stable json", () => AvatarInspectEmitsStableJson(runner)),
                 TestCase.Create("avatar render dry-run emits blocked plan", () => AvatarRenderDryRunEmitsBlockedPlan(runner)),
+                TestCase.Create("map render dry-run emits blocked plan", () => MapRenderDryRunEmitsBlockedPlan(runner)),
                 TestCase.Create("config stores and removes values", () => ConfigStoresAndRemovesValues(runner)),
                 TestCase.Create("config default-wz fallback is used", () => ConfigDefaultWzFallbackIsUsed(runner)),
                 TestCase.Create("lua dry-run validates example script", () => LuaDryRunValidatesExampleScript(runner)),
@@ -117,6 +118,24 @@ namespace WzComparerR2.Cli.Tests
                 AssertEqual(3, root.GetProperty("Candidates").GetArrayLength(), "avatar render candidate count");
                 AssertContains(root.GetProperty("Candidates")[0].GetProperty("CandidatePaths")[0].GetString(), "Character/00002000.img");
                 AssertContains(root.GetProperty("Blockers")[0].GetString(), "PluginManager.FindWz");
+            }
+        }
+
+        private static void MapRenderDryRunEmitsBlockedPlan(CliRunner runner)
+        {
+            CommandResult result = runner.Run("map", "render", "--id", "100000000", "--out", "map.png", "--dry-run", "--include-life", "--layer", "all");
+            AssertExitCode(result, 0);
+            using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+            {
+                JsonElement root = doc.RootElement;
+                AssertEqual("dry-run", root.GetProperty("Mode").GetString(), "map render mode");
+                AssertEqual("100000000", root.GetProperty("Id").GetString(), "map render id");
+                AssertEqual("map.png", root.GetProperty("OutputPath").GetString(), "map render output");
+                AssertEqual(false, root.GetProperty("CanRender").GetBoolean(), "map render capability");
+                AssertEqual(true, root.GetProperty("IncludeLife").GetBoolean(), "map render life option");
+                AssertContains(root.GetProperty("CandidatePaths")[0].GetString(), "Map/Map/Map1/100000000.img");
+                AssertContains(root.GetProperty("CandidatePaths")[1].GetString(), "Data/Map/Map/Map1/Map1_000.wz");
+                AssertContains(root.GetProperty("Blockers")[0].GetString(), "MonoGame");
             }
         }
 

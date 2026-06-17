@@ -413,16 +413,18 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [x] `map portals --id <map-id>`
   - [x] `map life --id <map-id>`
   - [x] `map reactors --id <map-id>`
-- [ ] headless render 가능성 조사
+- [x] headless render 가능성 조사
   - MonoGame device 생성
   - offscreen render target
   - native dependency
-- [ ] map screenshot export 명령 구현
-  - `map render --id <map-id> --out map.png`
+- [x] map render dry-run 명령 구현
+  - `map render --id <map-id> --out map.png --dry-run`
   - `--layer`
   - `--include-life`
   - `--include-reactor`
   - `--include-tooltip`
+- [ ] map screenshot export 명령 구현
+  - MonoGame `Game` 없이 offscreen `GraphicsDevice`/render target을 안정적으로 만들 수 있는지 Windows에서 검증한 뒤 진행한다.
 - [ ] world map/minimap export 검토
   - `map minimap`
   - `map worldmap`
@@ -432,6 +434,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [ ] map metadata를 JSON으로 출력 가능
   - [x] map metadata JSON DTO와 명령 surface 구현 완료
   - [ ] 실제 Map.wz sample 기반 JSON 출력 검증 필요
+- [x] map render dry-run plan을 JSON으로 출력 가능
 - [ ] 최소 한 개 map screenshot PNG export 가능
 
 ## Phase 12. LuaConsole 기능 CLI화
@@ -573,7 +576,8 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [x] map metadata export: `samples/cli/map-metadata.sh`
   - [x] avatar render dry-run: CLI image rendering blocker manifest 제공
   - [ ] avatar render PNG: `AvatarCommon` headless repository injection 후 구현
-  - [ ] map screenshot: CLI screenshot rendering 미구현으로 metadata script만 제공
+  - [x] map render dry-run: CLI screenshot rendering blocker manifest 제공
+  - [ ] map screenshot PNG: MonoGame offscreen render target 검증 후 구현
 
 완료 기준:
 
