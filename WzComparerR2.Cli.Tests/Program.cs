@@ -29,6 +29,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("lua dry-run validates example script", () => LuaDryRunValidatesExampleScript(runner)),
                 TestCase.Create("lua eval dry-run emits code contract", () => LuaEvalDryRunEmitsCodeContract(runner)),
                 TestCase.Create("network server-info emits dry-run json", () => NetworkServerInfoEmitsDryRunJson(runner)),
+                TestCase.Create("network interactive chat is explicitly rejected", () => NetworkInteractiveChatIsExplicitlyRejected(runner)),
                 TestCase.Create("update invalid asset returns usage error", () => UpdateInvalidAssetReturnsUsageError(runner)),
                 TestCase.Create("plugin list reports corrupt assembly without failing", () => PluginListReportsCorruptAssembly(runner)),
                 TestCase.Create("plugin command provider can be discovered and run", () => PluginProviderCanBeDiscoveredAndRun(runner)),
@@ -207,6 +208,13 @@ namespace WzComparerR2.Cli.Tests
                 AssertEqual("server-info", doc.RootElement.GetProperty("Command").GetString(), "network command");
                 AssertEqual("dry-run", doc.RootElement.GetProperty("Mode").GetString(), "network mode");
             }
+        }
+
+        private static void NetworkInteractiveChatIsExplicitlyRejected(CliRunner runner)
+        {
+            CommandResult result = runner.Run("network", "chat", "--interactive");
+            AssertExitCode(result, 1);
+            AssertContains(result.Stderr, "network chat --interactive is not implemented");
         }
 
         private static void UpdateInvalidAssetReturnsUsageError(CliRunner runner)

@@ -887,6 +887,10 @@ namespace WzComparerR2.Cli
 
             if (subCommand == "server-info")
             {
+                if (args.HasFlag("interactive"))
+                {
+                    throw new UsageException("network server-info does not support --interactive.");
+                }
                 if (args.HasFlag("connect"))
                 {
                     NetworkProbe.TryConnect(result, args.GetInt("timeout", 5));
@@ -894,15 +898,23 @@ namespace WzComparerR2.Cli
             }
             else if (subCommand == "chat")
             {
-                result.Message = "Interactive chat is not enabled in CLI yet; this command currently validates connection settings only.";
+                if (args.HasFlag("interactive"))
+                {
+                    throw new UsageException("network chat --interactive is not implemented. Use the GUI network plugin for live chat.");
+                }
+                result.Message = "Non-interactive chat dry-run prepared. Interactive chat is not enabled in CLI yet.";
             }
             else if (subCommand == "send")
             {
+                if (args.HasFlag("interactive"))
+                {
+                    throw new UsageException("network send does not support --interactive.");
+                }
                 if (string.IsNullOrEmpty(args.GetValue("message")))
                 {
                     throw new UsageException("network send requires --message <text>.");
                 }
-                result.Message = "Send dry-run prepared. Use the GUI network plugin for live chat until protocol handshakes are wired into CLI.";
+                result.Message = "Non-interactive send dry-run prepared. Use the GUI network plugin for live chat until protocol handshakes are wired into CLI.";
             }
             else
             {
@@ -2347,6 +2359,10 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 network server-info [--host <host>] [--port <port>] [--connect] [--json]");
             Console.WriteLine("  wcr2 network chat [--host <host>] [--port <port>] [--json]");
             Console.WriteLine("  wcr2 network send --message <text> [--host <host>] [--port <port>] [--json]");
+            Console.WriteLine();
+            Console.WriteLine("Notes:");
+            Console.WriteLine("  network commands are non-interactive dry-runs unless server-info --connect is used for a TCP probe.");
+            Console.WriteLine("  --interactive is reserved and currently rejected.");
         }
 
         private static void PrintUpdateHelp()

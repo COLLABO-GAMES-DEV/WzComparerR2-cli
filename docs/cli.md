@@ -250,6 +250,7 @@ macOS에서는 WZ PNG 추출이 `System.Drawing/GDI+`에서 실패할 수 있으
 
 `network` 명령은 기본적으로 dry-run입니다.
 `server-info --connect`는 프로토콜 로그인 없이 TCP 접속 가능 여부만 확인하며, `chat`과 `send`는 아직 GUI 플러그인의 실제 채팅 세션을 대체하지 않습니다.
+`--interactive`는 예약 옵션이며 현재는 명시적으로 거부됩니다.
 
 `update check`는 GitHub latest release API에서 릴리스 정보와 다운로드 URL을 조회합니다.
 현재 릴리스가 `net8` 같은 개별 asset 대신 통합 zip만 제공하면 `--asset net8`은 통합 zip을 fallback으로 선택합니다.

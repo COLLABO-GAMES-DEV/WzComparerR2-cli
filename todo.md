@@ -478,7 +478,8 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [ ] `network login`
   - [x] `network chat`
   - [x] `network send`
-- [ ] interactive CLI 모드와 non-interactive 모드를 분리한다.
+- [x] interactive CLI 모드와 non-interactive 모드를 분리한다.
+  - 기본 명령은 non-interactive dry-run/probe이며, `--interactive`는 예약 옵션으로 명시적으로 거부한다.
 - [x] credential 저장을 피하고 env var 또는 인자 입력으로 처리한다.
   - 현재 credential을 받거나 저장하지 않는 dry-run/probe만 제공
 
