@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -432,7 +434,7 @@ namespace WzComparerR2.Cli
 
         private static int RunAnimateApng(ParsedArgs args)
         {
-            string input = RequireInputAt(args, 1, "animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--optimize] [--json]");
+            string input = RequireInputAt(args, 1, "animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--optimize] [--json]");
             string nodePath = args.GetValue("path");
             string output = args.GetValue("out") ?? args.GetValue("output");
             bool json = args.HasFlag("json");
@@ -448,7 +450,7 @@ namespace WzComparerR2.Cli
             using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
             {
                 Wz_Node node = ResolveRequiredNode(context.Root, nodePath, true);
-                var result = AnimationGifExporter.ExportApng(node, output, args.HasFlag("optimize"));
+                var result = AnimationGifExporter.ExportApng(node, output, AnimationGifOptions.FromArgs(args), args.HasFlag("optimize"));
                 WriteOutput(result, json, writer =>
                 {
                     writer.WriteLine("Frames: " + result.FrameCount);
@@ -467,7 +469,7 @@ namespace WzComparerR2.Cli
 
         private static int RunAnimateGif(ParsedArgs args)
         {
-            string input = RequireInputAt(args, 1, "animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background #RRGGBB|transparent] [--min-alpha <0-255>] [--json]");
+            string input = RequireInputAt(args, 1, "animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background #RRGGBB|transparent] [--min-alpha <0-255>] [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--json]");
             string nodePath = args.GetValue("path");
             string output = args.GetValue("out") ?? args.GetValue("output");
             bool json = args.HasFlag("json");
@@ -1995,8 +1997,8 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 map objects <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
-            Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--json]");
-            Console.WriteLine("  wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--optimize] [--json]");
+            Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--json]");
+            Console.WriteLine("  wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--optimize] [--json]");
             Console.WriteLine("  wcr2 avatar inspect --code <code> [--json]");
             Console.WriteLine("  wcr2 avatar unpack --code <code>");
             Console.WriteLine("  wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--json]");
@@ -2092,8 +2094,8 @@ namespace WzComparerR2.Cli
             Console.WriteLine();
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
-            Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--json]");
-            Console.WriteLine("  wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--optimize] [--json]");
+            Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--json]");
+            Console.WriteLine("  wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--optimize] [--json]");
         }
 
         private static void PrintAvatarHelp()
@@ -5310,15 +5312,15 @@ namespace WzComparerR2.Cli
     {
         public static AnimationGifResultDto ExportGif(Wz_Node node, string outputPath, AnimationGifOptions options)
         {
-            return Export(node, outputPath, new BuildInGifEncoder(), options.Background, options.MinAlpha);
+            return Export(node, outputPath, new BuildInGifEncoder(), options);
         }
 
-        public static AnimationGifResultDto ExportApng(Wz_Node node, string outputPath, bool optimize)
+        public static AnimationGifResultDto ExportApng(Wz_Node node, string outputPath, AnimationGifOptions options, bool optimize)
         {
-            return Export(node, outputPath, new BuildInApngEncoder { OptimizeEnabled = optimize }, Color.Transparent, 0);
+            return Export(node, outputPath, new BuildInApngEncoder { OptimizeEnabled = optimize }, options);
         }
 
-        private static AnimationGifResultDto Export(Wz_Node node, string outputPath, GifEncoder encoder, Color background, int minAlpha)
+        private static AnimationGifResultDto Export(Wz_Node node, string outputPath, GifEncoder encoder, AnimationGifOptions options)
         {
             string fullOutputPath = Path.GetFullPath(outputPath);
             string directory = Path.GetDirectoryName(fullOutputPath);
@@ -5332,6 +5334,11 @@ namespace WzComparerR2.Cli
             {
                 throw new UsageException("No GIF-compatible bitmap frames were found at path: " + node.FullPath);
             }
+            gif = ApplyOptions(gif, options);
+            if (gif.Frames.Count == 0)
+            {
+                throw new UsageException("No frames remain after applying frame range options.");
+            }
 
             Rectangle rect = gif.GetRect();
             if (rect.Width <= 0 || rect.Height <= 0)
@@ -5342,7 +5349,7 @@ namespace WzComparerR2.Cli
             using (encoder)
             {
                 encoder.Init(fullOutputPath, rect.Width, rect.Height);
-                gif.SaveGif(encoder, fullOutputPath, background, minAlpha);
+                gif.SaveGif(encoder, fullOutputPath, options.Background, options.MinAlpha);
             }
 
             var result = new AnimationGifResultDto
@@ -5353,9 +5360,81 @@ namespace WzComparerR2.Cli
                 Height = rect.Height,
                 FrameCount = gif.Frames.Count,
                 Bytes = new FileInfo(fullOutputPath).Length,
-                Frames = CollectFrameMetadata(node)
+                StartFrame = options.StartFrame,
+                EndFrame = options.EndFrame,
+                Scale = options.Scale,
+                DelayOverride = options.DelayOverride,
+                OriginOverride = options.OriginOverrideText,
+                Frames = CollectFrameMetadata(node, options)
             };
             return result;
+        }
+
+        private static Gif ApplyOptions(Gif source, AnimationGifOptions options)
+        {
+            var result = new Gif();
+            for (int index = 0; index < source.Frames.Count; index++)
+            {
+                if (index < options.StartFrame)
+                {
+                    continue;
+                }
+                if (options.EndFrame.HasValue && index > options.EndFrame.Value)
+                {
+                    continue;
+                }
+
+                var frame = source.Frames[index] as GifFrame;
+                if (frame == null)
+                {
+                    continue;
+                }
+
+                Bitmap bitmap = options.Scale == 1d ? frame.Bitmap : ScaleBitmap(frame.Bitmap, options.Scale);
+                Point origin = options.OriginOverride ?? ScalePoint(frame.Origin, options.Scale);
+                int delay = options.DelayOverride ?? frame.Delay;
+                if (delay <= 0)
+                {
+                    delay = 120;
+                }
+
+                result.Frames.Add(new GifFrame(bitmap, origin, delay)
+                {
+                    A0 = frame.A0,
+                    A1 = frame.A1
+                });
+            }
+            return result;
+        }
+
+        private static Bitmap ScaleBitmap(Bitmap bitmap, double scale)
+        {
+            if (bitmap == null)
+            {
+                return null;
+            }
+
+            int width = Math.Max(1, (int)Math.Round(bitmap.Width * scale));
+            int height = Math.Max(1, (int)Math.Round(bitmap.Height * scale));
+            var scaled = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            using (Graphics graphics = Graphics.FromImage(scaled))
+            {
+                graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+                graphics.PixelOffsetMode = PixelOffsetMode.Half;
+                graphics.DrawImage(bitmap, new Rectangle(0, 0, width, height));
+            }
+            return scaled;
+        }
+
+        private static Point ScalePoint(Point point, double scale)
+        {
+            if (scale == 1d)
+            {
+                return point;
+            }
+            return new Point(
+                (int)Math.Round(point.X * scale),
+                (int)Math.Round(point.Y * scale));
         }
 
         private static Wz_Node FindLinkedNode(string fullPath, Wz_File sourceWzFile)
@@ -5363,7 +5442,7 @@ namespace WzComparerR2.Cli
             return null;
         }
 
-        private static List<AnimationGifFrameDto> CollectFrameMetadata(Wz_Node node)
+        private static List<AnimationGifFrameDto> CollectFrameMetadata(Wz_Node node, AnimationGifOptions options)
         {
             var frames = new List<AnimationGifFrameDto>();
             foreach (Wz_Node child in node.Nodes)
@@ -5373,6 +5452,15 @@ namespace WzComparerR2.Cli
                 {
                     continue;
                 }
+                if (index < options.StartFrame)
+                {
+                    continue;
+                }
+                if (options.EndFrame.HasValue && index > options.EndFrame.Value)
+                {
+                    continue;
+                }
+
                 Wz_Node frameNode = NodePath.ExtractImageNode(child, true) ?? child;
                 if (!(frameNode.Value is Wz_Png))
                 {
@@ -5383,7 +5471,7 @@ namespace WzComparerR2.Cli
                 {
                     Index = index,
                     SourcePath = frameNode.FullPath,
-                    Delay = ReadDelay(frameNode)
+                    Delay = options.DelayOverride ?? ReadDelay(frameNode)
                 });
             }
 
@@ -5402,14 +5490,35 @@ namespace WzComparerR2.Cli
     {
         public Color Background { get; private set; }
         public int MinAlpha { get; private set; }
+        public int StartFrame { get; private set; }
+        public int? EndFrame { get; private set; }
+        public int? DelayOverride { get; private set; }
+        public double Scale { get; private set; }
+        public Point? OriginOverride { get; private set; }
+        public string OriginOverrideText { get; private set; }
 
         public static AnimationGifOptions FromArgs(ParsedArgs args)
         {
-            return new AnimationGifOptions
+            var options = new AnimationGifOptions
             {
                 Background = ParseColor(args.GetValue("background") ?? "transparent"),
-                MinAlpha = Math.Max(0, Math.Min(255, args.GetInt("min-alpha", 0)))
+                MinAlpha = Math.Max(0, Math.Min(255, args.GetInt("min-alpha", 0))),
+                StartFrame = args.GetInt("start-frame", 0),
+                EndFrame = ParseOptionalNonNegativeInt(args.GetValue("end-frame"), "end-frame"),
+                DelayOverride = ParseOptionalPositiveInt(args.GetValue("delay"), "delay"),
+                Scale = ParseScale(args.GetValue("scale"))
             };
+            options.OriginOverride = ParseOrigin(args.GetValue("origin"), out string originText);
+            options.OriginOverrideText = originText;
+            if (options.StartFrame < 0)
+            {
+                throw new UsageException("animate --start-frame must be a non-negative integer.");
+            }
+            if (options.EndFrame.HasValue && options.EndFrame.Value < options.StartFrame)
+            {
+                throw new UsageException("animate --end-frame must be greater than or equal to --start-frame.");
+            }
+            return options;
         }
 
         private static Color ParseColor(string value)
@@ -5434,6 +5543,73 @@ namespace WzComparerR2.Cli
 
             throw new UsageException("animate gif --background must be transparent or #RRGGBB.");
         }
+
+        private static int? ParseOptionalNonNegativeInt(string value, string optionName)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return null;
+            }
+            int parsed;
+            if (!int.TryParse(value, out parsed) || parsed < 0)
+            {
+                throw new UsageException("animate --" + optionName + " must be a non-negative integer.");
+            }
+            return parsed;
+        }
+
+        private static int? ParseOptionalPositiveInt(string value, string optionName)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return null;
+            }
+            int parsed;
+            if (!int.TryParse(value, out parsed) || parsed <= 0)
+            {
+                throw new UsageException("animate --" + optionName + " must be a positive integer.");
+            }
+            return parsed;
+        }
+
+        private static double ParseScale(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return 1d;
+            }
+            double parsed;
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed) || parsed <= 0d)
+            {
+                throw new UsageException("animate --scale must be a positive number.");
+            }
+            return parsed;
+        }
+
+        private static Point? ParseOrigin(string value, out string originText)
+        {
+            originText = null;
+            if (string.IsNullOrEmpty(value))
+            {
+                return null;
+            }
+
+            var parts = value.Split(',');
+            if (parts.Length != 2)
+            {
+                throw new UsageException("animate --origin must use x,y format.");
+            }
+
+            int x;
+            int y;
+            if (!int.TryParse(parts[0], out x) || !int.TryParse(parts[1], out y))
+            {
+                throw new UsageException("animate --origin must use integer x,y values.");
+            }
+
+            originText = x + "," + y;
+            return new Point(x, y);
+        }
     }
 
     internal sealed class AnimationGifResultDto
@@ -5444,6 +5620,11 @@ namespace WzComparerR2.Cli
         public int Width { get; set; }
         public int Height { get; set; }
         public long Bytes { get; set; }
+        public int StartFrame { get; set; }
+        public int? EndFrame { get; set; }
+        public double Scale { get; set; }
+        public int? DelayOverride { get; set; }
+        public string OriginOverride { get; set; }
         public List<AnimationGifFrameDto> Frames { get; set; }
     }
 

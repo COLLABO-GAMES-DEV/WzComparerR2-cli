@@ -258,6 +258,7 @@ WZ/MS 파일 포맷을 다루는 가장 낮은 레벨입니다.
 - macOS CrossOver 실클라 `Data/Skill`에서는 `11001025`, `11100027` 같은 일부 실제 skill node가 아이콘과 문자열 중심으로 구성되어 `common`/`maxLevel`이 비어 있었습니다. 이 경우 `skill full`은 `resolvedSummary`에 치환 가능한 값만 반영하고, 남은 `#x`, `#indiePMdR` 같은 placeholder를 `Diagnostics`에 남깁니다. 이는 CLI 파싱 실패라기보다 현재 입력 shard에 수치 property가 없다는 신호로 보아야 합니다.
 - `String/Skill.img/1001004`의 “파워 스트라이크” 문자열은 확인되지만 현재 `Data/Skill`에서는 실제 skill node가 검색되지 않았습니다. `skill full --allow-string-only`는 이 케이스를 `Mode = string-only`, `FoundData = false`로 출력합니다.
 - Phase 9에서 `animate gif`와 `animate apng`를 추가했습니다. 구현은 기존 Common의 `Gif`, `GifFrame`, `BuildInGifEncoder`, `BuildInApngEncoder`를 CLI에 링크하는 방식입니다. 빌드 출력에 `ImageManipulation.dll`과 `libapng.dll`은 복사되지만, macOS 실클라 실행은 `The type initializer for 'Gdip' threw an exception`으로 실패했습니다. 이는 이전 `animate frames` PNG 추출 실패와 같은 `System.Drawing/GDI+` 제한이므로 실제 GIF/APNG 생성은 Windows 환경에서 검증해야 합니다.
+- `animate gif`/`animate apng`는 CLI 레벨에서 `--start-frame`, `--end-frame`, `--delay`, `--scale`, `--origin`을 공유합니다. GIF는 추가로 `--background`와 `--min-alpha`를 받습니다. 이 옵션들은 encoder 호출 전 `GifFrame` 목록을 새로 구성하는 방식이라 기존 Common encoder 코드를 수정하지 않습니다.
 
 ## 처음 작업할 때 주의할 점
 
