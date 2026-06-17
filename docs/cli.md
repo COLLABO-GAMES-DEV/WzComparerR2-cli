@@ -76,6 +76,9 @@ wcr2 patch apply <patch-file> --target <dir> --out <dir> [--log <file>] [--json]
 --fallback <path>
 --extract-images
 --json
+--quiet
+--verbose
+--no-color
 --format xml
 --regex
 --ignore-image-binary
@@ -164,6 +167,9 @@ If the machine only has a newer .NET runtime, prefix the command with `DOTNET_RO
 
 `--json` uses indented JSON with stable, PascalCase property names from the command result DTOs.
 For automation, prefer checking high-level fields rather than relying on text output.
+`--quiet` suppresses stdout for successful commands, while errors still go to stderr.
+`--verbose` adds exception details to stderr on failure.
+`--no-color` is accepted for script compatibility; current CLI output does not emit color codes.
 
 Common result shapes:
 

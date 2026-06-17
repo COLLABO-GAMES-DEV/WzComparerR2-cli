@@ -146,7 +146,10 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `ExportResultDto`
   - `CompareResultDto`
 - [x] 기본 human-readable 출력과 `--json` 출력을 분리한다.
-- [ ] `--quiet`, `--verbose`, `--no-color` 옵션을 추가한다.
+- [x] `--quiet`, `--verbose`, `--no-color` 옵션을 추가한다.
+  - `--quiet`: 성공 stdout 억제
+  - `--verbose`: 실패 stderr에 예외 타입/스택 추가
+  - `--no-color`: 현재 색상 미사용이지만 스크립트 호환 플래그로 수용
 - [x] 큰 tree 출력 제한 옵션을 추가한다.
   - `--depth`
   - `--limit`

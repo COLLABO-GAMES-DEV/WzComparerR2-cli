@@ -18,6 +18,8 @@ namespace WzComparerR2.Cli.Tests
             {
                 TestCase.Create("help lists core commands", () => HelpListsCoreCommands(runner)),
                 TestCase.Create("version prints cli version", () => VersionPrintsCliVersion(runner)),
+                TestCase.Create("quiet suppresses success stdout", () => QuietSuppressesSuccessStdout(runner)),
+                TestCase.Create("verbose adds exception details", () => VerboseAddsExceptionDetails(runner)),
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
                 TestCase.Create("missing input returns not found", () => MissingInputReturnsNotFound(runner)),
                 TestCase.Create("invalid regex returns usage error before WZ load", () => InvalidRegexReturnsUsageError(runner)),
@@ -71,6 +73,25 @@ namespace WzComparerR2.Cli.Tests
             CommandResult result = runner.Run("version");
             AssertExitCode(result, 0);
             AssertContains(result.Stdout, "wcr2 cli ");
+        }
+
+        private static void QuietSuppressesSuccessStdout(CliRunner runner)
+        {
+            CommandResult afterCommand = runner.Run("version", "--quiet");
+            AssertExitCode(afterCommand, 0);
+            AssertEqual(string.Empty, afterCommand.Stdout, "quiet stdout after command");
+
+            CommandResult beforeCommand = runner.Run("--quiet", "version");
+            AssertExitCode(beforeCommand, 0);
+            AssertEqual(string.Empty, beforeCommand.Stdout, "quiet stdout before command");
+        }
+
+        private static void VerboseAddsExceptionDetails(CliRunner runner)
+        {
+            CommandResult result = runner.Run("search", "/no/such.wz", "--match-path", "[", "--regex", "--verbose");
+            AssertExitCode(result, 1);
+            AssertContains(result.Stderr, "Invalid --match-path pattern");
+            AssertContains(result.Stderr, "Exception: WzComparerR2.Cli.UsageException");
         }
 
         private static void UnknownCommandReturnsUsageError(CliRunner runner)

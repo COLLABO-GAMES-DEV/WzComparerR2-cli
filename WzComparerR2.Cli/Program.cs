@@ -32,6 +32,9 @@ namespace WzComparerR2.Cli
         private const int ExitLoadFailed = 3;
         private const int ExitInternalError = 5;
         private const string CliVersion = "0.1.0";
+        private static bool QuietOutput;
+        private static bool VerboseErrors;
+        private static bool NoColor;
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
@@ -40,16 +43,24 @@ namespace WzComparerR2.Cli
 
         public static int Main(string[] args)
         {
+            QuietOutput = HasRawFlag(args, "quiet");
+            VerboseErrors = HasRawFlag(args, "verbose");
+            NoColor = HasRawFlag(args, "no-color");
+
             try
             {
-                if (args.Length == 0 || IsHelp(args[0]))
+                var commandArgs = StripLeadingOutputFlags(args).ToList();
+                if (commandArgs.Count == 0 || IsHelp(commandArgs[0]))
                 {
-                    PrintHelp();
+                    if (!QuietOutput)
+                    {
+                        PrintHelp();
+                    }
                     return ExitSuccess;
                 }
 
-                string command = args[0].ToLowerInvariant();
-                var parsed = ParsedArgs.Parse(args.Skip(1));
+                string command = commandArgs[0].ToLowerInvariant();
+                var parsed = ParsedArgs.Parse(commandArgs.Skip(1));
 
                 switch (command)
                 {
@@ -92,28 +103,34 @@ namespace WzComparerR2.Cli
                         return RunPlugin(parsed);
                     case "version":
                     case "--version":
-                        Console.WriteLine("wcr2 cli " + CliVersion);
+                        WriteLine("wcr2 cli " + CliVersion);
                         return ExitSuccess;
                     default:
                         Console.Error.WriteLine("Unknown command: " + command);
                         Console.Error.WriteLine();
-                        PrintHelp();
+                        if (!QuietOutput)
+                        {
+                            PrintHelp();
+                        }
                         return ExitUsage;
                 }
             }
             catch (UsageException ex)
             {
                 Console.Error.WriteLine(ex.Message);
+                WriteVerboseError(ex);
                 return ExitUsage;
             }
             catch (FileNotFoundException ex)
             {
                 Console.Error.WriteLine(ex.Message);
+                WriteVerboseError(ex);
                 return ExitNotFound;
             }
             catch (DirectoryNotFoundException ex)
             {
                 Console.Error.WriteLine(ex.Message);
+                WriteVerboseError(ex);
                 return ExitNotFound;
             }
             catch (WzLoadException ex)
@@ -123,12 +140,64 @@ namespace WzComparerR2.Cli
                 {
                     Console.Error.WriteLine(ex.InnerException.Message);
                 }
+                WriteVerboseError(ex);
                 return ExitLoadFailed;
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine("Unexpected error: " + ex.Message);
+                WriteVerboseError(ex);
                 return ExitInternalError;
+            }
+        }
+
+        private static bool HasRawFlag(IEnumerable<string> args, string name)
+        {
+            string flag = "--" + name;
+            return args.Any(arg => string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static IEnumerable<string> StripLeadingOutputFlags(IEnumerable<string> args)
+        {
+            bool inLeadingFlags = true;
+            foreach (string arg in args)
+            {
+                if (inLeadingFlags && IsOutputFlag(arg))
+                {
+                    continue;
+                }
+
+                inLeadingFlags = false;
+                yield return arg;
+            }
+        }
+
+        private static bool IsOutputFlag(string arg)
+        {
+            return string.Equals(arg, "--quiet", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(arg, "--verbose", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(arg, "--no-color", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void WriteVerboseError(Exception ex)
+        {
+            if (!VerboseErrors)
+            {
+                return;
+            }
+
+            Console.Error.WriteLine("Exception: " + ex.GetType().FullName);
+            if (!string.IsNullOrEmpty(ex.StackTrace))
+            {
+                Console.Error.WriteLine(ex.StackTrace);
+            }
+        }
+
+        private static void WriteLine(string text)
+        {
+            if (!QuietOutput)
+            {
+                Console.WriteLine(NoColor ? text : text);
             }
         }
 
@@ -2088,6 +2157,11 @@ namespace WzComparerR2.Cli
 
         private static void WriteOutput<T>(T value, bool json, Action<TextWriter> writeText)
         {
+            if (QuietOutput)
+            {
+                return;
+            }
+
             if (json)
             {
                 Console.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
@@ -2291,6 +2365,9 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  --fallback <path>   Fallback WZ file or folder.");
             Console.WriteLine("  --extract-images    Extract image nodes while traversing.");
             Console.WriteLine("  --json              Emit JSON output.");
+            Console.WriteLine("  --quiet             Suppress stdout for successful commands.");
+            Console.WriteLine("  --verbose           Include exception details on stderr when a command fails.");
+            Console.WriteLine("  --no-color          Disable colored output; accepted for script compatibility.");
             Console.WriteLine("  --format xml        Export selected node as XML instead of loose files.");
             Console.WriteLine("  --regex             Treat --match-path as a regular expression.");
             Console.WriteLine("  --ignore-image-binary  Skip pixel-level image comparison where supported.");
