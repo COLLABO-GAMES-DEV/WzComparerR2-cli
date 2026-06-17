@@ -18,9 +18,11 @@ variables:
   outputDir_netfx_x86: 'WzComparerR2/bin/x86/release/net462'
   outputDir_net6_anycpu: 'WzComparerR2/bin/release/net6.0-windows'
   outputDir_net8_anycpu: 'WzComparerR2/bin/release/net8.0-windows'
+  outputDir_cli_win_x64: '$(Build.ArtifactStagingDirectory)/wcr2-win-x64-self-contained'
   outputFileName_netfx: 'WcR2_With_Plugins_$(Build.BuildNumber)'
   outputFileName_net6: 'WcR2_With_Plugins_net6_$(Build.BuildNumber)'
   outputFileName_net8: 'WcR2_With_Plugins_net8_$(Build.BuildNumber)'
+  outputFileName_cli_win_x64: 'WzComparerR2.Cli-win-x64-self-contained_$(Build.BuildNumber)'
   isMain: $[eq(variables['Build.SourceBranch'], 'refs/heads/master')]
   accountName: 'wcr2publish'
   containerName: 'ci-build'
@@ -59,6 +61,14 @@ steps:
       set DOTNET_ROLL_FORWARD=Major
       set DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1
       dotnet run --project WzComparerR2.Cli.Tests/WzComparerR2.Cli.Tests.csproj -c $(buildConfiguration) --no-build -- --cli WzComparerR2.Cli/bin/$(buildConfiguration)/net8.0/wcr2.dll
+
+- task: DotNetCoreCLI@2
+  displayName: Publish CLI win-x64 self-contained
+  inputs:
+    command: 'publish'
+    projects: 'WzComparerR2.Cli/WzComparerR2.Cli.csproj'
+    arguments: '-c $(buildConfiguration) -r win-x64 --self-contained true --no-restore -p:PublishSingleFile=false -p:PublishTrimmed=false -p:UseAppHost=true -o "$(outputDir_cli_win_x64)"'
+    zipAfterPublish: false
 
 - task: DotNetCoreCLI@2
   displayName: Build x86
@@ -114,6 +124,15 @@ steps:
     archiveFile: '$(Build.ArtifactStagingDirectory)/$(outputFileName_net8).zip'
     replaceExistingArchive: true
 
+- task: ArchiveFiles@2
+  displayName: Compress CLI win-x64 release
+  inputs:
+    rootFolderOrFile: '$(outputDir_cli_win_x64)'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/$(outputFileName_cli_win_x64).zip'
+    replaceExistingArchive: true
+
 - task: AzureCLI@2
   displayName: Upload to blob
   inputs:
@@ -133,6 +152,10 @@ steps:
         @{
           "srcFile"="$(outputFileName_net8).zip"
           "outputVariableName"="sasurl_net8"
+        }
+        @{
+          "srcFile"="$(outputFileName_cli_win_x64).zip"
+          "outputVariableName"="sasurl_cli_win_x64"
         }
       )
       
@@ -190,6 +213,6 @@ steps:
     releaseNotesSource: 'inline'
     releaseNotesInline: |
       Automation build from azure-pipeline.
-      Mirror: [[WcR2.netfx.zip]($(sasurl_netfx))] | [[WcR2.net6.zip]($(sasurl_net6))] | [[WcR2.net8.zip]($(sasurl_net8))]
+      Mirror: [[WcR2.netfx.zip]($(sasurl_netfx))] | [[WcR2.net6.zip]($(sasurl_net6))] | [[WcR2.net8.zip]($(sasurl_net8))] | [[WzComparerR2.Cli-win-x64-self-contained.zip]($(sasurl_cli_win_x64))]
     isPreRelease: false
     addChangeLog: false

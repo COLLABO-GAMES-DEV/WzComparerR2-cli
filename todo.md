@@ -633,13 +633,17 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `Lib/x64`
   - `Lib/ARM64`
   - CLI는 현재 WzLib 중심 기능이라 GUI native `Lib/*`를 별도로 포함하지 않는다. self-contained publish는 .NET runtime/native runtime 파일을 publish 폴더에 포함한다.
-- [ ] Azure pipeline에 CLI artifact 추가
-- [ ] release note에 CLI 사용 예시 추가
-- [ ] 기존 GUI artifact와 CLI artifact를 분리한다.
+- [x] Azure pipeline에 CLI artifact 추가
+  - `Publish CLI win-x64 self-contained`와 `Compress CLI win-x64 release` 단계 추가.
+- [x] release note에 CLI 사용 예시 추가
+- [x] 기존 GUI artifact와 CLI artifact를 분리한다.
+  - GUI: `WcR2_With_Plugins*.zip`
+  - CLI: `WzComparerR2.Cli-win-x64-self-contained_<BuildNumber>.zip`
 
 완료 기준:
 
 - [ ] CI 산출물에 CLI zip이 포함됨
+  - pipeline 정의에는 추가 완료. 실제 Azure run artifact 확인 필요.
 - [ ] zip만 풀어서 `wcr2 --help` 실행 가능
   - macOS에서 `wcr2.exe`가 Windows x64 PE executable인 것은 확인. 실제 실행은 Windows에서 `docs/windows-cli-test-checklist.md`로 검증 필요.
 

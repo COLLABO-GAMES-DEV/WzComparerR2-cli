@@ -10,6 +10,14 @@ Current local artifact:
 artifacts/wcr2-win-x64-self-contained.zip
 ```
 
+Azure Pipeline also publishes a separate CI artifact:
+
+```text
+WzComparerR2.Cli-win-x64-self-contained_<BuildNumber>.zip
+```
+
+The CLI artifact is separate from the GUI `WcR2_With_Plugins*.zip` packages.
+
 SHA-256:
 
 ```text

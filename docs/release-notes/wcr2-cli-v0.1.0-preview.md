@@ -46,17 +46,24 @@ This package is Windows x64 self-contained, so a separate .NET runtime should no
   - `map reactors`
 - Added automation/helper commands:
   - `animate frames`
+  - `animate gif`
+  - `animate apng`
+  - `animate ffmpeg`
   - `avatar inspect`
   - `avatar unpack`
+  - `avatar render --dry-run`
+  - `map render --dry-run`
   - `lua run`
+  - `lua eval`
   - `network server-info`
   - `update check/download/apply`
   - `config`
   - `plugin list/inspect/commands/run`
 - Added JSON output support for script-friendly workflows.
-- Added CLI config file support, including `default-wz` fallback input.
+- Added headless `skill full` output for richer skill summaries.
+- Added CLI config file support, including `default-wz` fallback input and `--profile` scoped values.
 - Added Windows Maple client smoke test checklist and PowerShell smoke script.
-- Added CLI process-based test harness with 13 smoke/error tests.
+- Added CLI process-based test harness with 18 smoke/error tests.
 
 ## Example Commands
 
@@ -67,8 +74,13 @@ This package is Windows x64 self-contained, so a separate .NET runtime should no
 .\wcr2.exe extract C:\Nexon\Maple\Data\String --path CashItemSearch.img --out out\string --recursive --manifest out\string\manifest.json --json
 .\wcr2.exe compare old\Base.wz new\Base.wz --format markdown --out out\compare.md
 .\wcr2.exe skill info C:\Nexon\Maple\Data\Skill --id 3001004 --string-wz C:\Nexon\Maple\Data\String --json
+.\wcr2.exe skill full C:\Nexon\Maple\Data\Skill --id 3001004 --string-wz C:\Nexon\Maple\Data\String --format json
 .\wcr2.exe map portals C:\Nexon\Maple\Data\Map\Map\Map1\Map1_000.wz --id 100000000 --json
+.\wcr2.exe map render --id 100000000 --out out\map.png --dry-run --json
 .\wcr2.exe avatar inspect --code "1002140,1040036,1060026" --json
+.\wcr2.exe avatar render --items "00002000,00012000,00020000,00030000,1002140" --out out\avatar.png --dry-run --json
+.\wcr2.exe lua eval --code "print('ok')" --dry-run --json
+.\wcr2.exe config set default-wz C:\Nexon\Maple\Data\Skill --profile kms
 ```
 
 Modern Maple clients may store real data in split `Data\...` folders and shards instead of the root `.wz` files.
@@ -96,9 +108,11 @@ Or run the smoke script from a source checkout:
 - This is a preview CLI release.
 - The current package was cross-published for Windows x64; final execution validation must be done on Windows.
 - Windows smoke testing confirmed the CLI works against a split Maple client layout when pointed at data-bearing inputs such as `Data\String`, `Data\Skill`, `Data\Character\Cap`, `Data\Map\Map\Map1\Map1_000.wz`, and `Data\Mob_Canvas`.
+- GIF/APNG/FFmpeg animation export is wired into the CLI but should be verified on Windows with real animation nodes before depending on it for batch output.
 - Avatar PNG rendering is not implemented yet.
 - Full map screenshot rendering is not implemented yet.
-- `network chat` and `network send` do not replace the GUI network plugin yet.
+- `avatar render --dry-run` and `map render --dry-run` intentionally report `CanRender = false` until headless rendering dependencies are isolated.
+- `network chat` and `network send` do not replace the GUI network plugin yet; `--interactive` is reserved and rejected.
 - WZ happy-path golden tests require real `.wz` fixtures and are still pending.
 - Patch application should only be tested against a copied client folder, not a live MapleStory install directory.
 
