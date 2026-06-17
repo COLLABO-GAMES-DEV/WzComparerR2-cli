@@ -84,6 +84,9 @@ namespace WzComparerR2.Cli
                         return RunSkill(parsed);
                     case "item":
                     case "gear":
+                    case "mob":
+                    case "npc":
+                    case "quest":
                         return RunDomainInfo(parsed, command);
                     case "map":
                         return RunMap(parsed);
@@ -2336,6 +2339,9 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
             Console.WriteLine("  wcr2 item info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             Console.WriteLine("  wcr2 gear info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 mob info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 npc info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 quest info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             Console.WriteLine("  wcr2 map info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             Console.WriteLine("  wcr2 map objects <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]");
@@ -4396,6 +4402,14 @@ namespace WzComparerR2.Cli
                     AddUnique(candidates, numericId.ToString("d9"));
                     AddUnique(candidates, numericId.ToString("d9") + ".img");
                 }
+                else if (string.Equals(kind, "mob", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(kind, "npc", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddUnique(candidates, numericId.ToString("d7"));
+                    AddUnique(candidates, numericId.ToString("d7") + ".img");
+                    AddUnique(candidates, numericId.ToString("d8"));
+                    AddUnique(candidates, numericId.ToString("d8") + ".img");
+                }
                 else
                 {
                     AddUnique(candidates, numericId.ToString("d8"));
@@ -4440,6 +4454,18 @@ namespace WzComparerR2.Cli
             {
                 return path.IndexOf("/map", StringComparison.OrdinalIgnoreCase) >= 0;
             }
+            if (string.Equals(kind, "mob", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("/mob", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (string.Equals(kind, "npc", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("/npc", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (string.Equals(kind, "quest", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("/quest", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
 
             return true;
         }
@@ -4469,6 +4495,18 @@ namespace WzComparerR2.Cli
             if (string.Equals(kind, "map", StringComparison.OrdinalIgnoreCase))
             {
                 return path.IndexOf("map.img/", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (string.Equals(kind, "mob", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("mob.img/", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (string.Equals(kind, "npc", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("npc.img/", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (string.Equals(kind, "quest", StringComparison.OrdinalIgnoreCase))
+            {
+                return path.IndexOf("quest.img/", StringComparison.OrdinalIgnoreCase) >= 0;
             }
 
             return true;

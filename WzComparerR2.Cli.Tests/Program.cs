@@ -20,6 +20,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("version prints cli version", () => VersionPrintsCliVersion(runner)),
                 TestCase.Create("quiet suppresses success stdout", () => QuietSuppressesSuccessStdout(runner)),
                 TestCase.Create("verbose adds exception details", () => VerboseAddsExceptionDetails(runner)),
+                TestCase.Create("extended domain help lists info commands", () => ExtendedDomainHelpListsInfoCommands(runner)),
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
                 TestCase.Create("missing input returns not found", () => MissingInputReturnsNotFound(runner)),
                 TestCase.Create("invalid regex returns usage error before WZ load", () => InvalidRegexReturnsUsageError(runner)),
@@ -92,6 +93,16 @@ namespace WzComparerR2.Cli.Tests
             AssertExitCode(result, 1);
             AssertContains(result.Stderr, "Invalid --match-path pattern");
             AssertContains(result.Stderr, "Exception: WzComparerR2.Cli.UsageException");
+        }
+
+        private static void ExtendedDomainHelpListsInfoCommands(CliRunner runner)
+        {
+            foreach (string command in new[] { "mob", "npc", "quest" })
+            {
+                CommandResult result = runner.Run(command, "--help");
+                AssertExitCode(result, 0);
+                AssertContains(result.Stdout, "wcr2 " + command + " info <wz-file-or-dir> --id <id>");
+            }
         }
 
         private static void UnknownCommandReturnsUsageError(CliRunner runner)

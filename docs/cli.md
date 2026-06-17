@@ -32,6 +32,9 @@ wcr2 skill info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
 wcr2 skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n|max>] [--format json|xml|text] [--out <path>]
 wcr2 item info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
 wcr2 gear info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
+wcr2 mob info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
+wcr2 npc info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
+wcr2 quest info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
 wcr2 map info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
 wcr2 map objects <map-wz-file-or-dir> --id <map-id> [--json]
 wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]
@@ -105,6 +108,9 @@ wcr2 skill full Data/Skill --id 11001025 --string-wz Data/String --format json -
 wcr2 skill full Data/Skill --id 1001004 --string-wz Data/String --allow-string-only --format xml --out out/power-strike.xml
 wcr2 item info Item.wz --id 2000000 --string-wz String.wz
 wcr2 gear info Character.wz --id 1002140 --string-wz String.wz --json
+wcr2 mob info Mob.wz --id 100100 --string-wz String.wz --json
+wcr2 npc info Npc.wz --id 9000000 --string-wz String.wz --json
+wcr2 quest info Quest.wz --id 1000 --string-wz String.wz --json
 wcr2 map info Map.wz --id 100000000 --string-wz String.wz
 wcr2 map portals Map.wz --id 100000000 --json
 wcr2 map objects Map.wz --id 100000000 --json

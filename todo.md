@@ -268,17 +268,17 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 - [ ] `WzComparerR2.Common/CharaSim/` 모델 로딩 방식을 정리한다.
 - [ ] `WzComparerR2/CharaSim/CharaSimLoader.cs`의 UI 의존성을 분리한다.
-- [ ] 아이템/장비 조회 명령 구현
+- [x] 아이템/장비/기본 도메인 조회 명령 구현
   - [x] `item info --id <id>`
   - [x] `gear info --id <id>`
   - [x] `skill info --id <id>`
-  - `mob info --id <id>`
-  - `npc info --id <id>`
-  - `quest info --id <id>`
-- [ ] 출력 형식
+  - [x] `mob info --id <id>`
+  - [x] `npc info --id <id>`
+  - [x] `quest info --id <id>`
+- [x] 출력 형식
   - [x] text
   - [x] JSON
-  - optional tooltip image
+  - [ ] optional tooltip image
 - [ ] 툴팁 렌더러의 WinForms/GDI 의존을 CLI에서 호출 가능한 렌더링 서비스로 감싼다.
 - [ ] string linker 초기화 옵션을 제공한다.
   - [x] `--string-wz`
