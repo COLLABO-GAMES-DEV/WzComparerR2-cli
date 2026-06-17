@@ -38,6 +38,7 @@
     <Compile Include="..\WzComparerR2.Common\Wz_NodeExtension2.cs" Link="Common\Wz_NodeExtension2.cs" />
     <Compile Include="..\WzComparerR2.Common\Encoders\BuildInApngEncoder.cs" Link="Common\Encoders\BuildInApngEncoder.cs" />
     <Compile Include="..\WzComparerR2.Common\Encoders\BuildInGifEncoder.cs" Link="Common\Encoders\BuildInGifEncoder.cs" />
+    <Compile Include="..\WzComparerR2.Common\Encoders\FFmpegEncoder.cs" Link="Common\Encoders\FFmpegEncoder.cs" />
     <Compile Include="..\WzComparerR2.Common\Encoders\GifEncoder.cs" Link="Common\Encoders\GifEncoder.cs" />
     <Compile Include="..\WzComparerR2.Common\Encoders\GifEncoderCompatibility.cs" Link="Common\Encoders\GifEncoderCompatibility.cs" />
     <Compile Include="..\WzComparerR2.Common\Encoders\IndexGifEncoder.cs" Link="Common\Encoders\IndexGifEncoder.cs" />

@@ -396,6 +396,10 @@ namespace WzComparerR2.Cli
             {
                 return RunAnimateApng(args);
             }
+            if (subCommand == "ffmpeg")
+            {
+                return RunAnimateFfmpeg(args);
+            }
             if (subCommand != "frames")
             {
                 throw new UsageException("Unknown animate command: " + args.Positionals[0]);
@@ -425,6 +429,41 @@ namespace WzComparerR2.Cli
                     foreach (var frame in result.Frames)
                     {
                         writer.WriteLine(frame.Index + "\tdelay=" + frame.Delay + "\tfiles=" + frame.Files.Count);
+                    }
+                });
+            }
+
+            return ExitSuccess;
+        }
+
+        private static int RunAnimateFfmpeg(ParsedArgs args)
+        {
+            string input = RequireInputAt(args, 1, "animate ffmpeg <wz-file-or-dir> --path <wz-path> --out <file> [--ffmpeg <path>] [--ffmpeg-args <format>] [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--json]");
+            string nodePath = args.GetValue("path");
+            string output = args.GetValue("out") ?? args.GetValue("output");
+            bool json = args.HasFlag("json");
+            if (string.IsNullOrEmpty(nodePath))
+            {
+                throw new UsageException("animate ffmpeg requires --path <wz-path>.");
+            }
+            if (string.IsNullOrEmpty(output))
+            {
+                throw new UsageException("animate ffmpeg requires --out <file>.");
+            }
+
+            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            {
+                Wz_Node node = ResolveRequiredNode(context.Root, nodePath, true);
+                var result = AnimationGifExporter.ExportFfmpeg(node, output, AnimationGifOptions.FromArgs(args), args.GetValue("ffmpeg"), args.GetValue("ffmpeg-args"));
+                WriteOutput(result, json, writer =>
+                {
+                    writer.WriteLine("Frames: " + result.FrameCount);
+                    writer.WriteLine("Output: " + result.OutputPath);
+                    writer.WriteLine("Bytes: " + result.Bytes);
+                    writer.WriteLine("Canvas: " + result.Width + "x" + result.Height);
+                    foreach (var frame in result.Frames)
+                    {
+                        writer.WriteLine(frame.Index + "\tdelay=" + frame.Delay + "\tpath=" + frame.SourcePath);
                     }
                 });
             }
@@ -1999,6 +2038,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
             Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--json]");
             Console.WriteLine("  wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--optimize] [--json]");
+            Console.WriteLine("  wcr2 animate ffmpeg <wz-file-or-dir> --path <wz-path> --out <file> [--ffmpeg <path>] [--ffmpeg-args <format>] [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--json]");
             Console.WriteLine("  wcr2 avatar inspect --code <code> [--json]");
             Console.WriteLine("  wcr2 avatar unpack --code <code>");
             Console.WriteLine("  wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--json]");
@@ -2038,6 +2078,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand");
             Console.WriteLine("  wcr2 animate gif Mob.wz --path 0100100.img/stand --out out/stand.gif");
             Console.WriteLine("  wcr2 animate apng Mob.wz --path 0100100.img/stand --out out/stand.png");
+            Console.WriteLine("  wcr2 animate ffmpeg Mob.wz --path 0100100.img/stand --out out/stand.mp4");
             Console.WriteLine("  wcr2 avatar inspect --code \"1002140,1040036,1060026\"");
             Console.WriteLine("  wcr2 lua run WzComparerR2.LuaConsole/Examples/DumpXml.lua --dry-run --json");
             Console.WriteLine("  wcr2 network server-info --json");
@@ -2096,6 +2137,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
             Console.WriteLine("  wcr2 animate gif <wz-file-or-dir> --path <wz-path> --out <file.gif> [--background transparent|#RRGGBB] [--min-alpha <0-255>] [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--json]");
             Console.WriteLine("  wcr2 animate apng <wz-file-or-dir> --path <wz-path> --out <file.png> [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--optimize] [--json]");
+            Console.WriteLine("  wcr2 animate ffmpeg <wz-file-or-dir> --path <wz-path> --out <file> [--ffmpeg <path>] [--ffmpeg-args <format>] [--start-frame <n>] [--end-frame <n>] [--delay <ms>] [--scale <factor>] [--origin <x,y>] [--json]");
         }
 
         private static void PrintAvatarHelp()
@@ -5318,6 +5360,15 @@ namespace WzComparerR2.Cli
         public static AnimationGifResultDto ExportApng(Wz_Node node, string outputPath, AnimationGifOptions options, bool optimize)
         {
             return Export(node, outputPath, new BuildInApngEncoder { OptimizeEnabled = optimize }, options);
+        }
+
+        public static AnimationGifResultDto ExportFfmpeg(Wz_Node node, string outputPath, AnimationGifOptions options, string ffmpegPath, string ffmpegArgs)
+        {
+            return Export(node, outputPath, new FFmpegEncoder
+            {
+                FFmpegBinPath = ffmpegPath,
+                FFmpegArgumentFormat = ffmpegArgs
+            }, options);
         }
 
         private static AnimationGifResultDto Export(Wz_Node node, string outputPath, GifEncoder encoder, AnimationGifOptions options)

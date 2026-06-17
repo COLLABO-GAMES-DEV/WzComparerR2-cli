@@ -361,7 +361,10 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [x] background: `--background transparent|#RRGGBB`, `--min-alpha <0-255>`
   - [x] scale: `--scale <factor>`
   - [x] frame range: `--start-frame <n>`, `--end-frame <n>`
-- [ ] ffmpeg encoder 사용 여부와 경로 옵션을 정한다.
+- [x] ffmpeg encoder 사용 여부와 경로 옵션을 정한다.
+  - [x] `animate ffmpeg`
+  - [x] `--ffmpeg <path>`
+  - [x] `--ffmpeg-args <format>`
 
 완료 기준:
 
