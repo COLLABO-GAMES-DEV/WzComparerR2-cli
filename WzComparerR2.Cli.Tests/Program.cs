@@ -27,6 +27,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("config stores and removes values", () => ConfigStoresAndRemovesValues(runner)),
                 TestCase.Create("config default-wz fallback is used", () => ConfigDefaultWzFallbackIsUsed(runner)),
                 TestCase.Create("lua dry-run validates example script", () => LuaDryRunValidatesExampleScript(runner)),
+                TestCase.Create("lua eval dry-run emits code contract", () => LuaEvalDryRunEmitsCodeContract(runner)),
                 TestCase.Create("network server-info emits dry-run json", () => NetworkServerInfoEmitsDryRunJson(runner)),
                 TestCase.Create("update invalid asset returns usage error", () => UpdateInvalidAssetReturnsUsageError(runner)),
                 TestCase.Create("plugin list reports corrupt assembly without failing", () => PluginListReportsCorruptAssembly(runner)),
@@ -180,6 +181,20 @@ namespace WzComparerR2.Cli.Tests
             {
                 AssertEqual("dry-run", doc.RootElement.GetProperty("Mode").GetString(), "lua mode");
                 AssertEqual(0, doc.RootElement.GetProperty("ExitCode").GetInt32(), "lua exit code");
+            }
+        }
+
+        private static void LuaEvalDryRunEmitsCodeContract(CliRunner runner)
+        {
+            CommandResult result = runner.Run("lua", "eval", "--code", "print('ok')", "--dry-run", "--json");
+            AssertExitCode(result, 0);
+            using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+            {
+                JsonElement root = doc.RootElement;
+                AssertEqual(true, root.GetProperty("IsEval").GetBoolean(), "lua eval marker");
+                AssertEqual("print('ok')", root.GetProperty("Code").GetString(), "lua eval code");
+                AssertEqual("dry-run", root.GetProperty("Mode").GetString(), "lua eval mode");
+                AssertEqual(0, root.GetProperty("ExitCode").GetInt32(), "lua eval exit code");
             }
         }
 

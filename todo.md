@@ -444,7 +444,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `WzComparerR2.LuaConsole/LuaSandbox.cs` 재사용 가능성 분석
 - [x] Lua 실행 명령 구현
   - `lua run <script.lua> --wz <file-or-dir>`
-  - [ ] `lua eval <code> --wz <file-or-dir>`
+  - [x] `lua eval <code> --wz <file-or-dir>`
 - [x] dry-run 검증 옵션 구현
   - `--dry-run`
 - [x] WZ 입력 검증과 환경 변수 전달 구현
@@ -461,6 +461,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 - [ ] 기존 `Examples/*.lua` 중 최소 2개가 CLI에서 실행 가능
   - [x] `DumpXml.lua` dry-run 검증 가능
+  - [x] `lua eval --code "print('ok')" --dry-run --json` 검증 가능
   - [ ] 현재 환경에 외부 lua 실행기가 없어 실제 script 실행 미검증
 - [ ] Lua 오류가 line/stack 정보와 함께 출력됨
 

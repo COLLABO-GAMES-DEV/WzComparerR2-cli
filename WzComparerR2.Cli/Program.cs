@@ -787,25 +787,42 @@ namespace WzComparerR2.Cli
             }
 
             string subCommand = args.Positionals[0].ToLowerInvariant();
-            if (subCommand != "run")
+            if (subCommand != "run" && subCommand != "eval")
             {
                 throw new UsageException("Unknown lua command: " + args.Positionals[0]);
             }
-            if (args.Positionals.Count < 2)
+            if (subCommand == "run" && args.Positionals.Count < 2)
             {
                 throw new UsageException("Usage: wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--json]");
             }
 
-            string scriptPath = args.Positionals[1];
             string wzInput = args.GetValue("wz");
             bool json = args.HasFlag("json");
             bool dryRun = args.HasFlag("dry-run");
             int timeoutSeconds = args.GetInt("timeout", 30);
 
-            var result = LuaRunResultDto.Create(scriptPath, wzInput);
-            if (!File.Exists(result.ScriptPath))
+            LuaRunResultDto result;
+            if (subCommand == "eval")
             {
-                throw new FileNotFoundException("Lua script not found: " + scriptPath);
+                string code = args.GetValue("code");
+                if (string.IsNullOrEmpty(code) && args.Positionals.Count > 1)
+                {
+                    code = string.Join(" ", args.Positionals.Skip(1));
+                }
+                if (string.IsNullOrEmpty(code))
+                {
+                    throw new UsageException("lua eval requires <code> or --code <code>.");
+                }
+                result = LuaRunResultDto.CreateEval(code, wzInput);
+            }
+            else
+            {
+                string scriptPath = args.Positionals[1];
+                result = LuaRunResultDto.Create(scriptPath, wzInput);
+                if (!File.Exists(result.ScriptPath))
+                {
+                    throw new FileNotFoundException("Lua script not found: " + scriptPath);
+                }
             }
 
             if (!string.IsNullOrEmpty(wzInput))
@@ -829,8 +846,12 @@ namespace WzComparerR2.Cli
 
             WriteOutput(result, json, writer =>
             {
-                writer.WriteLine("Lua: " + result.ScriptPath);
+                writer.WriteLine("Lua: " + (result.IsEval ? "eval" : result.ScriptPath));
                 writer.WriteLine("Mode: " + result.Mode + " ExitCode: " + result.ExitCode);
+                if (result.IsEval)
+                {
+                    writer.WriteLine("Code: " + result.Code);
+                }
                 if (!string.IsNullOrEmpty(result.LuaExecutable))
                 {
                     writer.WriteLine("Executable: " + result.LuaExecutable);
@@ -2196,6 +2217,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 avatar inspect --code <code> [--json]");
             Console.WriteLine("  wcr2 avatar unpack --code <code>");
             Console.WriteLine("  wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--json]");
+            Console.WriteLine("  wcr2 lua eval <code> [--wz <file-or-dir>] [--dry-run] [--json]");
             Console.WriteLine("  wcr2 network server-info [--host <host>] [--port <port>] [--connect] [--json]");
             Console.WriteLine("  wcr2 network send --message <text> [--host <host>] [--port <port>] [--json]");
             Console.WriteLine("  wcr2 update check [--asset net8|net10|net6|net462|zip] [--json]");
@@ -2235,6 +2257,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 animate ffmpeg Mob.wz --path 0100100.img/stand --out out/stand.mp4");
             Console.WriteLine("  wcr2 avatar inspect --code \"1002140,1040036,1060026\"");
             Console.WriteLine("  wcr2 lua run WzComparerR2.LuaConsole/Examples/DumpXml.lua --dry-run --json");
+            Console.WriteLine("  wcr2 lua eval --code \"print('ok')\" --dry-run --json");
             Console.WriteLine("  wcr2 network server-info --json");
             Console.WriteLine("  wcr2 update check --asset net8 --json");
             Console.WriteLine("  wcr2 update download --asset net8 --out downloads");
@@ -2312,6 +2335,8 @@ namespace WzComparerR2.Cli
             Console.WriteLine();
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--timeout <seconds>] [--json]");
+            Console.WriteLine("  wcr2 lua eval <code> [--wz <file-or-dir>] [--dry-run] [--timeout <seconds>] [--json]");
+            Console.WriteLine("  wcr2 lua eval --code <code> [--wz <file-or-dir>] [--dry-run] [--timeout <seconds>] [--json]");
         }
 
         private static void PrintNetworkHelp()
@@ -6365,6 +6390,8 @@ namespace WzComparerR2.Cli
     internal sealed class LuaRunResultDto
     {
         public string ScriptPath { get; set; }
+        public string Code { get; set; }
+        public bool IsEval { get; set; }
         public string WzInputPath { get; set; }
         public string WzRootName { get; set; }
         public int WzRootChildren { get; set; }
@@ -6384,6 +6411,18 @@ namespace WzComparerR2.Cli
                 WzInputPath = string.IsNullOrEmpty(wzInput) ? null : Path.GetFullPath(wzInput),
                 Mode = "external-lua",
                 LineCount = File.Exists(fullScriptPath) ? File.ReadLines(fullScriptPath).Count() : 0
+            };
+        }
+
+        public static LuaRunResultDto CreateEval(string code, string wzInput)
+        {
+            return new LuaRunResultDto
+            {
+                Code = code,
+                IsEval = true,
+                WzInputPath = string.IsNullOrEmpty(wzInput) ? null : Path.GetFullPath(wzInput),
+                Mode = "external-lua",
+                LineCount = string.IsNullOrEmpty(code) ? 0 : code.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).Length
             };
         }
     }
@@ -6412,9 +6451,17 @@ namespace WzComparerR2.Cli
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true,
-                WorkingDirectory = Path.GetDirectoryName(result.ScriptPath)
+                WorkingDirectory = result.IsEval ? Environment.CurrentDirectory : Path.GetDirectoryName(result.ScriptPath)
             };
-            psi.ArgumentList.Add(result.ScriptPath);
+            if (result.IsEval)
+            {
+                psi.ArgumentList.Add("-e");
+                psi.ArgumentList.Add(result.Code);
+            }
+            else
+            {
+                psi.ArgumentList.Add(result.ScriptPath);
+            }
             if (!string.IsNullOrEmpty(result.WzInputPath))
             {
                 psi.Environment["WCR2_WZ_INPUT"] = result.WzInputPath;

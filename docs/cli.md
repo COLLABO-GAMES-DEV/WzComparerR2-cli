@@ -47,6 +47,8 @@ wcr2 avatar unpack --code <code>
 wcr2 avatar render --code <code> --out <avatar.png> --dry-run [--action <action>] [--emotion <emotion>] [--offline] [--api-key <key>] [--json]
 wcr2 avatar render --items <ids> --out <avatar.png> --dry-run [--action <action>] [--emotion <emotion>] [--json]
 wcr2 lua run <script.lua> [--wz <file-or-dir>] [--dry-run] [--timeout <seconds>] [--json]
+wcr2 lua eval <code> [--wz <file-or-dir>] [--dry-run] [--timeout <seconds>] [--json]
+wcr2 lua eval --code <code> [--wz <file-or-dir>] [--dry-run] [--timeout <seconds>] [--json]
 wcr2 network server-info [--host <host>] [--port <port>] [--connect] [--json]
 wcr2 network chat [--host <host>] [--port <port>] [--json]
 wcr2 network send --message <text> [--host <host>] [--port <port>] [--json]
@@ -113,6 +115,7 @@ wcr2 avatar inspect --code "1002140,1040036,1060026"
 wcr2 avatar unpack --code "1002140,1040036,1060026" --json
 wcr2 avatar render --items "00002000,00012000,00020000,00030000,1002140" --out out/avatar.png --dry-run --json
 wcr2 lua run WzComparerR2.LuaConsole/Examples/DumpXml.lua --dry-run --json
+wcr2 lua eval --code "print('ok')" --dry-run --json
 wcr2 network server-info --json
 wcr2 network server-info --connect --timeout 5
 wcr2 network send --message "hello" --json
@@ -241,7 +244,7 @@ macOS에서는 WZ PNG 추출이 `System.Drawing/GDI+`에서 실패할 수 있으
 `avatar render --dry-run`은 실제 PNG를 만들지 않고, 입력 아이템의 캐릭터 파츠 분류, 후보 WZ 경로, action/emotion, OpenAPI 옵션 상태, headless 렌더링 blocker를 JSON으로 출력합니다.
 현재 실제 캐릭터 PNG 렌더링은 아직 포함하지 않습니다.
 
-`lua run`은 새 의존성을 추가하지 않기 위해 현재 시스템 `PATH`의 `lua`, `lua5.4`, `lua5.3`, `luajit` 실행기를 사용합니다.
+`lua run`과 `lua eval`은 새 의존성을 추가하지 않기 위해 현재 시스템 `PATH`의 `lua`, `lua5.4`, `lua5.3`, `luajit` 실행기를 사용합니다.
 `--wz`를 지정하면 WZ 로딩 가능 여부를 먼저 확인하고 `WCR2_WZ_INPUT`, `WCR2_WZ_ROOT` 환경 변수를 전달합니다.
 기존 LuaConsole의 `env`/NLua 통합 API는 아직 headless CLI로 이식하지 않았으므로 기존 예제 검증은 `--dry-run`부터 사용하세요.
 
