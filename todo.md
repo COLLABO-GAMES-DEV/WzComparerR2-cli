@@ -520,10 +520,11 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [x] `config get <key>`
   - [x] `config set <key> <value>`
   - [x] `config unset <key>`
-- [ ] profile 지원 검토
+- [x] profile 지원 검토
   - `--profile kms`
   - `--profile gms`
   - `--profile custom`
+  - 값은 `profiles.<profile>.<key>` flat key로 저장하고, 입력 fallback은 profile 값을 전역 값보다 우선한다.
 - [x] CLI 기본값 문서화
 
 완료 기준:

@@ -1030,6 +1030,7 @@ namespace WzComparerR2.Cli
 
             string subCommand = args.Positionals[0].ToLowerInvariant();
             var store = CliConfigStore.Open(args.GetValue("config"));
+            string profile = GetConfigProfile(args);
 
             switch (subCommand)
             {
@@ -1046,7 +1047,7 @@ namespace WzComparerR2.Cli
                 }
                 case "list":
                 {
-                    var result = ConfigListDto.FromStore(store);
+                    var result = ConfigListDto.FromStore(store, profile);
                     WriteOutput(result, args.HasFlag("json"),
                         writer =>
                         {
@@ -1070,7 +1071,7 @@ namespace WzComparerR2.Cli
                         throw new UsageException("Usage: wcr2 config get <key> [--json]");
                     }
 
-                    string key = args.Positionals[1];
+                    string key = ResolveConfigKey(args.Positionals[1], profile);
                     var result = ConfigValueDto.FromStore(store, key);
                     WriteOutput(result, args.HasFlag("json"),
                         writer =>
@@ -1093,7 +1094,7 @@ namespace WzComparerR2.Cli
                         throw new UsageException("Usage: wcr2 config set <key> <value> [--json]");
                     }
 
-                    string key = args.Positionals[1];
+                    string key = ResolveConfigKey(args.Positionals[1], profile);
                     string value = args.Positionals[2];
                     store.Set(key, value);
                     store.Save();
@@ -1109,7 +1110,7 @@ namespace WzComparerR2.Cli
                         throw new UsageException("Usage: wcr2 config unset <key> [--json]");
                     }
 
-                    string key = args.Positionals[1];
+                    string key = ResolveConfigKey(args.Positionals[1], profile);
                     bool removed = store.Unset(key);
                     store.Save();
                     var result = new ConfigUnsetDto
@@ -1893,6 +1894,18 @@ namespace WzComparerR2.Cli
         {
             var store = CliConfigStore.Open(args.GetValue("config"));
             string value;
+            string profile = GetConfigProfile(args);
+            if (!string.IsNullOrEmpty(profile))
+            {
+                if (store.Values.TryGetValue(BuildProfiledConfigKey(profile, "default-wz"), out value))
+                {
+                    return value;
+                }
+                if (store.Values.TryGetValue(BuildProfiledConfigKey(profile, "wz"), out value))
+                {
+                    return value;
+                }
+            }
             if (store.Values.TryGetValue("default-wz", out value))
             {
                 return value;
@@ -1902,6 +1915,36 @@ namespace WzComparerR2.Cli
                 return value;
             }
             return null;
+        }
+
+        private static string GetConfigProfile(ParsedArgs args)
+        {
+            string profile = args.GetValue("profile");
+            if (string.IsNullOrWhiteSpace(profile))
+            {
+                return null;
+            }
+
+            profile = profile.Trim();
+            if (!Regex.IsMatch(profile, @"^[A-Za-z0-9_.-]+$"))
+            {
+                throw new UsageException("Config profile may contain only letters, numbers, dot, underscore, and dash.");
+            }
+            return profile;
+        }
+
+        private static string ResolveConfigKey(string key, string profile)
+        {
+            if (string.IsNullOrEmpty(profile))
+            {
+                return key;
+            }
+            return BuildProfiledConfigKey(profile, key);
+        }
+
+        private static string BuildProfiledConfigKey(string profile, string key)
+        {
+            return "profiles." + profile + "." + key;
         }
 
         private static Wz_Node ResolveRequiredNode(Wz_Node root, string path, bool extractImages)
@@ -2235,7 +2278,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 update check [--asset net8|net10|net6|net462|zip] [--json]");
             Console.WriteLine("  wcr2 update download --out <dir> [--asset net8|net10|net6|net462|zip] [--json]");
             Console.WriteLine("  wcr2 update apply [--asset net8|net10|net6|net462|zip] [--updater <path>] [--execute] [--json]");
-            Console.WriteLine("  wcr2 config list|get|set|unset|path [--config <path>] [--json]");
+            Console.WriteLine("  wcr2 config list|get|set|unset|path [--config <path>] [--profile <name>] [--json]");
             Console.WriteLine("  wcr2 plugin list|commands [--plugin-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 plugin inspect <assembly.dll> [--json]");
             Console.WriteLine("  wcr2 plugin run <command> [args...] [--plugin-dir <dir>]");
@@ -2385,14 +2428,17 @@ namespace WzComparerR2.Cli
             Console.WriteLine();
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 config path [--config <path>] [--json]");
-            Console.WriteLine("  wcr2 config list [--config <path>] [--json]");
-            Console.WriteLine("  wcr2 config get <key> [--config <path>] [--json]");
-            Console.WriteLine("  wcr2 config set <key> <value> [--config <path>] [--json]");
-            Console.WriteLine("  wcr2 config unset <key> [--config <path>] [--json]");
+            Console.WriteLine("  wcr2 config list [--config <path>] [--profile <name>] [--json]");
+            Console.WriteLine("  wcr2 config get <key> [--config <path>] [--profile <name>] [--json]");
+            Console.WriteLine("  wcr2 config set <key> <value> [--config <path>] [--profile <name>] [--json]");
+            Console.WriteLine("  wcr2 config unset <key> [--config <path>] [--profile <name>] [--json]");
             Console.WriteLine();
             Console.WriteLine("Default path:");
             Console.WriteLine("  Windows: %APPDATA%/WzComparerR2/wcr2.config.json");
             Console.WriteLine("  Unix:    $XDG_CONFIG_HOME/wzcomparerr2/wcr2.config.json or ~/.config/wzcomparerr2/wcr2.config.json");
+            Console.WriteLine();
+            Console.WriteLine("Profiles:");
+            Console.WriteLine("  --profile <name> stores values under profiles.<name>.<key> and profile values override global fallback keys.");
         }
 
         private static void PrintPluginHelp()
@@ -6665,16 +6711,20 @@ namespace WzComparerR2.Cli
     internal sealed class ConfigListDto
     {
         public string Path { get; set; }
+        public string Profile { get; set; }
         public List<ConfigItemDto> Values { get; set; }
 
-        public static ConfigListDto FromStore(CliConfigStore store)
+        public static ConfigListDto FromStore(CliConfigStore store, string profile)
         {
+            string prefix = string.IsNullOrEmpty(profile) ? null : "profiles." + profile + ".";
             return new ConfigListDto
             {
                 Path = store.Path,
+                Profile = profile,
                 Values = store.Values
+                    .Where(item => prefix == null || item.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                     .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
-                    .Select(item => new ConfigItemDto { Key = item.Key, Value = item.Value })
+                    .Select(item => new ConfigItemDto { Key = prefix == null ? item.Key : item.Key.Substring(prefix.Length), Value = item.Value })
                     .ToList()
             };
         }

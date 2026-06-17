@@ -26,6 +26,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("map render dry-run emits blocked plan", () => MapRenderDryRunEmitsBlockedPlan(runner)),
                 TestCase.Create("config stores and removes values", () => ConfigStoresAndRemovesValues(runner)),
                 TestCase.Create("config default-wz fallback is used", () => ConfigDefaultWzFallbackIsUsed(runner)),
+                TestCase.Create("config profile overrides default fallback", () => ConfigProfileOverridesDefaultFallback(runner)),
                 TestCase.Create("lua dry-run validates example script", () => LuaDryRunValidatesExampleScript(runner)),
                 TestCase.Create("lua eval dry-run emits code contract", () => LuaEvalDryRunEmitsCodeContract(runner)),
                 TestCase.Create("network server-info emits dry-run json", () => NetworkServerInfoEmitsDryRunJson(runner)),
@@ -170,6 +171,40 @@ namespace WzComparerR2.Cli.Tests
                 CommandResult result = runner.Run("info", "--config", config);
                 AssertExitCode(result, 2);
                 AssertContains(result.Stderr, missing);
+            }
+        }
+
+        private static void ConfigProfileOverridesDefaultFallback(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string config = Path.Combine(temp.Path, "wcr2.config.json");
+                string global = Path.Combine(temp.Path, "global.wz");
+                string kms = Path.Combine(temp.Path, "kms.wz");
+
+                AssertExitCode(runner.Run("config", "set", "default-wz", global, "--config", config, "--json"), 0);
+                AssertExitCode(runner.Run("config", "set", "default-wz", kms, "--profile", "kms", "--config", config, "--json"), 0);
+
+                CommandResult get = runner.Run("config", "get", "default-wz", "--profile", "kms", "--config", config, "--json");
+                AssertExitCode(get, 0);
+                using (JsonDocument doc = JsonDocument.Parse(get.Stdout))
+                {
+                    AssertEqual(kms, doc.RootElement.GetProperty("Value").GetString(), "profile default-wz value");
+                    AssertEqual("profiles.kms.default-wz", doc.RootElement.GetProperty("Key").GetString(), "profile storage key");
+                }
+
+                CommandResult list = runner.Run("config", "list", "--profile", "kms", "--config", config, "--json");
+                AssertExitCode(list, 0);
+                using (JsonDocument doc = JsonDocument.Parse(list.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("kms", root.GetProperty("Profile").GetString(), "profile list name");
+                    AssertEqual("default-wz", root.GetProperty("Values")[0].GetProperty("Key").GetString(), "profile list display key");
+                }
+
+                CommandResult result = runner.Run("info", "--profile", "kms", "--config", config);
+                AssertExitCode(result, 2);
+                AssertContains(result.Stderr, kms);
             }
         }
 

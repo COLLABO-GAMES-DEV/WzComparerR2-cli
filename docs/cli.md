@@ -56,10 +56,10 @@ wcr2 update check [--asset net8|net10|net6|net462|zip] [--json]
 wcr2 update download --out <dir> [--asset net8|net10|net6|net462|zip] [--force] [--json]
 wcr2 update apply [--asset net8|net10|net6|net462|zip] [--updater <path>] [--download <zip>] [--execute] [--json]
 wcr2 config path [--config <path>] [--json]
-wcr2 config list [--config <path>] [--json]
-wcr2 config get <key> [--config <path>] [--json]
-wcr2 config set <key> <value> [--config <path>] [--json]
-wcr2 config unset <key> [--config <path>] [--json]
+wcr2 config list [--config <path>] [--profile <name>] [--json]
+wcr2 config get <key> [--config <path>] [--profile <name>] [--json]
+wcr2 config set <key> <value> [--config <path>] [--profile <name>] [--json]
+wcr2 config unset <key> [--config <path>] [--profile <name>] [--json]
 wcr2 plugin list [--plugin-dir <dir>] [--include-gui-plugin-dir] [--json]
 wcr2 plugin inspect <assembly.dll> [--json]
 wcr2 plugin commands [--plugin-dir <dir>] [--json]
@@ -124,6 +124,7 @@ wcr2 update download --asset net8 --out downloads
 wcr2 update apply --asset net8 --json
 wcr2 config path
 wcr2 config set default-wz /path/to/Base.wz
+wcr2 config set default-wz /path/to/KMS/Base.wz --profile kms
 wcr2 config get default-wz
 wcr2 config unset default-wz
 wcr2 plugin list --plugin-dir CliPlugin --json
@@ -262,6 +263,7 @@ macOS에서는 WZ PNG 추출이 `System.Drawing/GDI+`에서 실패할 수 있으
 기본 위치는 Windows에서 `%APPDATA%/WzComparerR2/wcr2.config.json`, Unix 계열에서 `$XDG_CONFIG_HOME/wzcomparerr2/wcr2.config.json` 또는 `~/.config/wzcomparerr2/wcr2.config.json`입니다.
 `--config <path>`나 `WCR2_CLI_CONFIG` 환경 변수로 위치를 바꿀 수 있습니다.
 `default-wz` 또는 `wz` 값을 저장해두면 단일 WZ 입력을 받는 명령에서 입력 경로를 생략했을 때 fallback으로 사용합니다.
+`--profile <name>`을 사용하면 값이 `profiles.<name>.<key>` 아래 저장되며, 같은 명령에서 `--profile`을 지정했을 때 profile 값이 전역 `default-wz`/`wz`보다 먼저 사용됩니다.
 현재 config 값은 CLI 작업 자동화용 key/value 저장소이며, 기존 GUI 설정 화면과 직접 동기화하지 않습니다.
 
 `plugin` 명령은 CLI 전용 확장 DLL을 찾고 실행합니다.
