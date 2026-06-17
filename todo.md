@@ -253,7 +253,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - 기본값은 원본 수정 금지
   - `--in-place`는 지원하지 않음
   - `--out`은 target과 분리되어야 하며 없거나 비어 있어야 함
-- [ ] checksum 검증과 로그 파일을 추가한다.
+- [x] checksum 검증과 로그 파일을 추가한다.
   - [x] `patch dry-run` 기존 파일 checksum 검증
   - [x] patch apply 로그 파일
 
@@ -261,7 +261,8 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 - [x] dry-run으로 변경 예정 파일 목록 확인 가능
 - [x] out directory 방식으로 안전하게 patch 적용 가능
-- [ ] checksum 실패가 명확히 보고됨
+- [x] checksum 실패가 명확히 보고됨
+  - `PatchDryRunResultDto.ChecksumMismatchCount`와 action `Status=checksum-mismatch`로 보고.
 
 ## Phase 8. CharaSim/Tooltip 계열 CLI화
 

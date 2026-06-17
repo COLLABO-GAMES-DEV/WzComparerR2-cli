@@ -266,6 +266,7 @@ WZ/MS 파일 포맷을 다루는 가장 낮은 레벨입니다.
 - Azure Pipeline에 CLI win-x64 self-contained publish/archive/upload 항목을 추가했습니다. GUI artifact는 기존 `WcR2_With_Plugins*.zip` 이름을 유지하고, CLI artifact는 `WzComparerR2.Cli-win-x64-self-contained_<BuildNumber>.zip`으로 분리합니다.
 - 표준 출력 옵션을 추가했습니다. `--quiet`은 성공 stdout을 억제하고, `--verbose`는 실패 stderr에 예외 타입/스택을 추가합니다. `--no-color`는 현재 색상 출력이 없지만 자동화 호환 플래그로 수용합니다.
 - `docs/cli-test-strategy.md`를 추가해 fixture-free contract test, private real-client smoke test, golden JSON 비교, binary export metadata 검증 기준을 분리했습니다.
+- Patch CLI는 이미 `patch dry-run`에서 기존 파일 checksum을 확인하고 `ValidCount`, `ChecksumMismatchCount`, action `Status=checksum-mismatch`를 출력합니다. `patch apply --log <file>`은 복사본 적용 이벤트를 텍스트 로그로 남깁니다. 실제 patch 파일 기반 검증은 별도 fixture 확보가 필요합니다.
 - Phase 10 Avatar 분석 결과, `WzComparerR2.Avatar/Entry.cs`와 UI form 계층은 WinForms plugin host, ribbon/menu lifecycle, OpenAPI form 흐름에 묶여 있어 CLI에 직접 붙이기 어렵습니다.
 - `WzComparerR2/AvatarCommon/AvatarCanvas`에는 action/frame 합성에 필요한 핵심 로직이 있지만, WZ 노드 탐색이 `PluginManager.FindWz` 전역 호출에 묶여 있습니다. 실제 headless PNG 렌더를 하려면 먼저 `AvatarCanvas`/`AvatarCanvasManager`가 CLI의 WZ repository 또는 `Func<string, Wz_Node>` 같은 resolver를 주입받도록 분리해야 합니다.
 - `avatar render --dry-run`을 추가했습니다. 현재 이 명령은 실제 PNG를 만들지 않고, 입력 avatar code/items를 파싱해 body/head/face/hair/equipment 분류, 후보 `Character/.../*.img` 경로, action/emotion, `--offline`/`--api-key` 상태, 그리고 실제 render blocker를 JSON으로 출력합니다. `CanRender = false`는 의도된 계약입니다.
