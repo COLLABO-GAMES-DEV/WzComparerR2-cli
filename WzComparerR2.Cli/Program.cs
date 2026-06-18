@@ -12,6 +12,7 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Xml;
@@ -38,6 +39,7 @@ namespace WzComparerR2.Cli
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             WriteIndented = true
         };
 
@@ -4820,6 +4822,7 @@ namespace WzComparerR2.Cli
                 Mode = "charasim-headless",
                 FoundData = true,
                 DataPath = node.FullPath,
+                StringPath = stringInfo == null ? null : stringInfo.Values.GetValueOrDefault("__path"),
                 Name = skillString.Name,
                 Description = skillString.Description,
                 PassiveDescription = skillString.PassiveDescription,

@@ -171,7 +171,8 @@ If the machine only has a newer .NET runtime, prefix the command with `DOTNET_RO
 
 ## JSON Output Contract
 
-`--json` uses indented JSON with stable, PascalCase property names from the command result DTOs.
+`--json` uses indented UTF-8 JSON with stable, PascalCase property names from the command result DTOs.
+Korean and other non-ASCII WZ strings are emitted as readable text instead of `\uXXXX` escape sequences.
 For automation, prefer checking high-level fields rather than relying on text output.
 `--quiet` suppresses stdout for successful commands, while errors still go to stderr.
 `--verbose` adds exception details to stderr on failure.
