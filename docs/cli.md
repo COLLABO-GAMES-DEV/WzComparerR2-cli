@@ -29,7 +29,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> [--path <wz-path>] [--type adde
 wcr2 dump <file-or-dir> --path <wz-path> [--format json|xml|raw] [--out <path>]
 wcr2 extract <file-or-dir> --path <wz-path> --out <output-dir> [--recursive] [--manifest <json>] [--json]
 wcr2 skill info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
-wcr2 skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n|max>] [--format json|xml|text] [--out <path>]
+wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n|max>] [--format json|xml|text] [--out <path>]
 wcr2 item info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
 wcr2 gear info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
 wcr2 mob info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
@@ -105,6 +105,7 @@ wcr2 extract Base.wz --path String --out out/string --recursive --manifest out/s
 wcr2 extract Base.wz --path String --out out/string.xml --format xml
 wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json
 wcr2 skill full Data/Skill --id 11001025 --string-wz Data/String --format json --out out/skill-11001025.json
+wcr2 skill full --data-dir Data --id 1001008 --format json --out out/skill-1001008.json
 wcr2 skill full Data/Skill --id 1001004 --string-wz Data/String --allow-string-only --format xml --out out/power-strike.xml
 wcr2 item info Item.wz --id 2000000 --string-wz String.wz
 wcr2 gear info Character.wz --id 1002140 --string-wz String.wz --json
@@ -236,8 +237,9 @@ If `String.wz`, `Map.wz`, `Skill.wz`, or similar root files load but do not cont
 현재는 텍스트/JSON 메타데이터 조회가 중심이며, tooltip image 렌더링은 아직 포함하지 않습니다.
 
 `skill full`은 렌더링 없이 CharaSim 스타일의 headless 스킬 해석 결과를 내보냅니다.
-출력에는 `sourceProfile`, `common`, `PVPcommon`, `level`, 요구 스킬, 액션, 플래그, 아이콘 메타데이터, 원문 요약, `resolvedSummary`, 가능한 경우 `nextResolvedSummary`, 미해결 placeholder 진단이 포함됩니다.
+출력에는 `sourceProfile`, `dataInputPath`, `stringInputPath`, 입력 후보 목록, `common`, `PVPcommon`, `level`, 요구 스킬, 액션, 플래그, 아이콘 메타데이터, 원문 요약, `resolvedSummary`, 가능한 경우 `nextResolvedSummary`, 미해결 placeholder 진단이 포함됩니다.
 `sourceProfile`이 `visual-only`이면 입력 WZ 노드에 아이콘/이펙트 같은 canvas 계열 데이터는 있지만 `common`/`level` 수치 property가 없다는 뜻입니다. 이 경우 `MaxLevel`, `LevelCount`, placeholder 치환 값이 `null` 또는 미해결로 남을 수 있습니다.
+`--data-dir <Data>`를 주면 `Data/Skill`과 `Data/String`을 자동 후보로 사용합니다. positional `Data/Skill`만 줘도 sibling `Data/String`이 있으면 문자열 후보로 자동 추가합니다.
 `--format json|xml|text`와 `--out <path>`를 지원합니다.
 실제 skill node가 없고 `String/Skill.img` 문자열만 있는 ID는 기본적으로 실패하지만, `--allow-string-only`를 주면 `Mode: string-only` 결과로 이름/설명/문자열 속성을 확인할 수 있습니다.
 툴팁 PNG 렌더링은 아직 포함하지 않으며 Windows-only 후속 단계로 분리되어 있습니다.

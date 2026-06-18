@@ -21,6 +21,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("quiet suppresses success stdout", () => QuietSuppressesSuccessStdout(runner)),
                 TestCase.Create("verbose adds exception details", () => VerboseAddsExceptionDetails(runner)),
                 TestCase.Create("extended domain help lists info commands", () => ExtendedDomainHelpListsInfoCommands(runner)),
+                TestCase.Create("skill help lists repository inputs", () => SkillHelpListsRepositoryInputs(runner)),
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
                 TestCase.Create("missing input returns not found", () => MissingInputReturnsNotFound(runner)),
                 TestCase.Create("invalid regex returns usage error before WZ load", () => InvalidRegexReturnsUsageError(runner)),
@@ -103,6 +104,15 @@ namespace WzComparerR2.Cli.Tests
                 AssertExitCode(result, 0);
                 AssertContains(result.Stdout, "wcr2 " + command + " info <wz-file-or-dir> --id <id>");
             }
+        }
+
+        private static void SkillHelpListsRepositoryInputs(CliRunner runner)
+        {
+            CommandResult result = runner.Run("skill", "--help");
+            AssertExitCode(result, 0);
+            AssertContains(result.Stdout, "--data-dir <dir>");
+            AssertContains(result.Stdout, "--skill-wz <path>");
+            AssertContains(result.Stdout, "wcr2 skill full [<skill-wz-file-or-dir>]");
         }
 
         private static void UnknownCommandReturnsUsageError(CliRunner runner)

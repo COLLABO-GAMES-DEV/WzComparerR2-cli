@@ -389,7 +389,7 @@ namespace WzComparerR2.Cli
 
         private static int RunSkillFull(ParsedArgs args)
         {
-            string input = RequireInputAt(args, 1, "skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
+            string input = ResolveSkillFullInput(args);
             string id = args.GetValue("id");
             if (string.IsNullOrEmpty(id))
             {
@@ -398,7 +398,6 @@ namespace WzComparerR2.Cli
 
             string format = args.GetValue("format") ?? (args.HasFlag("json") ? "json" : "text");
             string output = args.GetValue("out") ?? args.GetValue("output");
-            string stringWz = args.GetValue("string-wz");
             int? level = null;
             string levelText = args.GetValue("level");
             if (!string.IsNullOrEmpty(levelText))
@@ -415,43 +414,62 @@ namespace WzComparerR2.Cli
             }
 
             DomainStringInfo stringInfo = null;
-            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            using (var repository = CliWzRepository.ForSkill(input, args))
             {
-                WzLoadContext stringContext = null;
-                try
+                var stringResult = repository.FindStringInfo("skill", id);
+                if (stringResult != null)
                 {
-                    if (!string.IsNullOrEmpty(stringWz))
-                    {
-                        stringContext = WzLoadContext.Load(stringWz, WzLoadOptions.FromArgs(args));
-                        stringInfo = DomainInfoFinder.FindStringInfo(stringContext.Root, "skill", id);
-                    }
-
-                    Wz_Node dataNode = DomainInfoFinder.FindDataNode(context.Root, "skill", id);
-                    if (dataNode == null)
-                    {
-                        if (args.HasFlag("allow-string-only") && stringInfo != null)
-                        {
-                            var stringOnly = SkillFullDto.FromStringOnly(id, stringInfo);
-                            WriteSkillFullOutput(stringOnly, format, output);
-                            return ExitSuccess;
-                        }
-
-                        throw new UsageException("skill id not found: " + id);
-                    }
-
-                    var dto = SkillFullDto.FromNode(id, dataNode, stringInfo, level);
-                    WriteSkillFullOutput(dto, format, output);
+                    stringInfo = stringResult.StringInfo;
                 }
-                finally
+
+                var dataResult = repository.FindDataNode("skill", id);
+                if (dataResult == null)
                 {
-                    if (stringContext != null)
+                    if (args.HasFlag("allow-string-only") && stringInfo != null)
                     {
-                        stringContext.Dispose();
+                        var stringOnly = SkillFullDto.FromStringOnly(id, stringInfo, stringResult.InputPath, repository.DataInputPaths, repository.StringInputPaths);
+                        WriteSkillFullOutput(stringOnly, format, output);
+                        return ExitSuccess;
                     }
+
+                    throw new UsageException("skill id not found: " + id);
                 }
+
+                var dto = SkillFullDto.FromNode(
+                    id,
+                    dataResult.Node,
+                    stringInfo,
+                    level,
+                    dataResult.InputPath,
+                    stringResult == null ? null : stringResult.InputPath,
+                    repository.DataInputPaths,
+                    repository.StringInputPaths);
+                WriteSkillFullOutput(dto, format, output);
             }
 
             return ExitSuccess;
+        }
+
+        private static string ResolveSkillFullInput(ParsedArgs args)
+        {
+            if (args.Positionals.Count > 1 && !IsHelp(args.Positionals[1]))
+            {
+                return args.Positionals[1];
+            }
+
+            string skillWz = args.GetValue("skill-wz");
+            if (!string.IsNullOrEmpty(skillWz))
+            {
+                return skillWz;
+            }
+
+            string dataDir = args.GetValue("data-dir");
+            if (!string.IsNullOrEmpty(dataDir))
+            {
+                return Path.Combine(dataDir, "Skill");
+            }
+
+            throw new UsageException("skill full requires <skill-wz-file-or-dir>, --skill-wz <path>, or --data-dir <dir>.");
         }
 
         private static int RunAnimate(ParsedArgs args)
@@ -2215,6 +2233,14 @@ namespace WzComparerR2.Cli
             {
                 writer.WriteLine("SourceProfile: " + dto.SourceProfile);
             }
+            if (!string.IsNullOrEmpty(dto.DataInputPath))
+            {
+                writer.WriteLine("DataInput: " + dto.DataInputPath);
+            }
+            if (!string.IsNullOrEmpty(dto.StringInputPath))
+            {
+                writer.WriteLine("StringInput: " + dto.StringInputPath);
+            }
             if (!string.IsNullOrEmpty(dto.DataPath))
             {
                 writer.WriteLine("Path: " + dto.DataPath);
@@ -2343,7 +2369,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 dump <file-or-dir> --path <wz-path> [--format json|xml|raw] [--out <path>]");
             Console.WriteLine("  wcr2 extract <file-or-dir> --path <wz-path> --out <output-dir> [--recursive] [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 skill info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
-            Console.WriteLine("  wcr2 skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
+            Console.WriteLine("  wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
             Console.WriteLine("  wcr2 item info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             Console.WriteLine("  wcr2 gear info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             Console.WriteLine("  wcr2 mob info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
@@ -2394,7 +2420,8 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 compare old/Base.wz new/Base.wz --json");
             Console.WriteLine("  wcr2 extract Base.wz --path String --out out/string --recursive");
             Console.WriteLine("  wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json");
-            Console.WriteLine("  wcr2 skill full Skill.wz --id 3001004 --string-wz String.wz --format json");
+            Console.WriteLine("  wcr2 skill full Data/Skill --id 3001004 --string-wz Data/String --format json");
+            Console.WriteLine("  wcr2 skill full --data-dir Data --id 1001008 --format json");
             Console.WriteLine("  wcr2 map portals Map.wz --id 100000000 --json");
             Console.WriteLine("  wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand");
             Console.WriteLine("  wcr2 animate gif Mob.wz --path 0100100.img/stand --out out/stand.gif");
@@ -2434,10 +2461,12 @@ namespace WzComparerR2.Cli
             Console.WriteLine();
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 skill info <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
-            Console.WriteLine("  wcr2 skill full <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
+            Console.WriteLine("  wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --allow-string-only  Emit string metadata when the skill id exists only in String.wz.");
+            Console.WriteLine("  --data-dir <dir>     Add split Data layout candidates such as <dir>/Skill and <dir>/String.");
+            Console.WriteLine("  --skill-wz <path>    Add or replace the skill WZ file/folder input candidate.");
         }
 
         private static void PrintDomainHelp(string kind)
@@ -2448,7 +2477,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 " + kind + " info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine("  wcr2 skill full <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--level <n>] [--format json|xml|text]");
+                Console.WriteLine("  wcr2 skill full [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text]");
             }
         }
 
@@ -3198,6 +3227,209 @@ namespace WzComparerR2.Cli
         {
             this.Structure.Clear();
         }
+    }
+
+    internal sealed class CliWzRepository : IDisposable
+    {
+        private readonly List<WzLoadContext> dataContexts = new List<WzLoadContext>();
+        private readonly List<WzLoadContext> stringContexts = new List<WzLoadContext>();
+
+        private CliWzRepository()
+        {
+        }
+
+        public IReadOnlyList<string> DataInputPaths
+        {
+            get { return dataContexts.Select(item => item.InputPath).ToList(); }
+        }
+
+        public IReadOnlyList<string> StringInputPaths
+        {
+            get { return stringContexts.Select(item => item.InputPath).ToList(); }
+        }
+
+        public static CliWzRepository ForSkill(string skillInput, ParsedArgs args)
+        {
+            var repository = new CliWzRepository();
+            var options = WzLoadOptions.FromArgs(args);
+            var dataCandidates = new List<CliWzRepositoryCandidate>();
+            var stringCandidates = new List<CliWzRepositoryCandidate>();
+
+            AddCandidate(dataCandidates, skillInput, true);
+            AddCandidate(dataCandidates, args.GetValue("skill-wz"), true);
+
+            string dataDir = args.GetValue("data-dir");
+            if (!string.IsNullOrEmpty(dataDir))
+            {
+                AddCandidate(dataCandidates, Path.Combine(dataDir, "Skill"), false);
+                AddCandidate(stringCandidates, Path.Combine(dataDir, "String"), false);
+            }
+
+            AddCandidate(stringCandidates, args.GetValue("string-wz"), true);
+            AddCandidate(stringCandidates, InferSiblingDataFolder(skillInput, "String"), false);
+
+            repository.LoadContexts(repository.dataContexts, dataCandidates, options, "skill data");
+            repository.LoadContexts(repository.stringContexts, stringCandidates, options, "skill string");
+            if (repository.dataContexts.Count == 0)
+            {
+                repository.Dispose();
+                throw new UsageException("No skill WZ input candidates were available. Provide <skill-wz-file-or-dir>, --skill-wz, or --data-dir.");
+            }
+
+            return repository;
+        }
+
+        public CliWzDataResult FindDataNode(string kind, string id)
+        {
+            foreach (WzLoadContext context in dataContexts)
+            {
+                Wz_Node node = DomainInfoFinder.FindDataNode(context.Root, kind, id);
+                if (node != null)
+                {
+                    return new CliWzDataResult
+                    {
+                        Node = node,
+                        InputPath = context.InputPath
+                    };
+                }
+            }
+
+            return null;
+        }
+
+        public CliWzStringResult FindStringInfo(string kind, string id)
+        {
+            foreach (WzLoadContext context in stringContexts)
+            {
+                DomainStringInfo info = DomainInfoFinder.FindStringInfo(context.Root, kind, id);
+                if (info != null)
+                {
+                    return new CliWzStringResult
+                    {
+                        StringInfo = info,
+                        InputPath = context.InputPath
+                    };
+                }
+            }
+
+            return null;
+        }
+
+        private void LoadContexts(List<WzLoadContext> contexts, List<CliWzRepositoryCandidate> candidates, WzLoadOptions options, string label)
+        {
+            foreach (CliWzRepositoryCandidate candidate in candidates)
+            {
+                if (!candidate.Explicit && !PathExists(candidate.Path))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    contexts.Add(WzLoadContext.Load(candidate.Path, options));
+                }
+                catch (FileNotFoundException)
+                {
+                    if (candidate.Explicit)
+                    {
+                        throw;
+                    }
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    if (candidate.Explicit)
+                    {
+                        throw;
+                    }
+                }
+                catch (WzLoadException ex)
+                {
+                    if (candidate.Explicit)
+                    {
+                        throw new WzLoadException("Failed to load " + label + " candidate: " + candidate.Path, ex);
+                    }
+                }
+            }
+        }
+
+        private static void AddCandidate(List<CliWzRepositoryCandidate> candidates, string path, bool explicitCandidate)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            string fullPath = Path.GetFullPath(path);
+            if (candidates.Any(item => string.Equals(item.Path, fullPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            candidates.Add(new CliWzRepositoryCandidate
+            {
+                Path = fullPath,
+                Explicit = explicitCandidate
+            });
+        }
+
+        private static string InferSiblingDataFolder(string inputPath, string siblingName)
+        {
+            if (string.IsNullOrWhiteSpace(inputPath))
+            {
+                return null;
+            }
+
+            string fullPath = Path.GetFullPath(inputPath);
+            string fileName = Path.GetFileName(fullPath);
+            if (string.Equals(fileName, "Skill", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(fileName, "Skill.wz", StringComparison.OrdinalIgnoreCase))
+            {
+                string parent = Directory.Exists(fullPath)
+                    ? Path.GetDirectoryName(fullPath)
+                    : Path.GetDirectoryName(Path.GetDirectoryName(fullPath));
+                if (!string.IsNullOrEmpty(parent))
+                {
+                    return Path.Combine(parent, siblingName);
+                }
+            }
+
+            return null;
+        }
+
+        private static bool PathExists(string path)
+        {
+            return File.Exists(path) || Directory.Exists(path);
+        }
+
+        public void Dispose()
+        {
+            foreach (WzLoadContext context in dataContexts)
+            {
+                context.Dispose();
+            }
+            foreach (WzLoadContext context in stringContexts)
+            {
+                context.Dispose();
+            }
+        }
+    }
+
+    internal sealed class CliWzRepositoryCandidate
+    {
+        public string Path { get; set; }
+        public bool Explicit { get; set; }
+    }
+
+    internal sealed class CliWzDataResult
+    {
+        public Wz_Node Node { get; set; }
+        public string InputPath { get; set; }
+    }
+
+    internal sealed class CliWzStringResult
+    {
+        public DomainStringInfo StringInfo { get; set; }
+        public string InputPath { get; set; }
     }
 
     internal sealed class SearchOptions
@@ -4732,6 +4964,10 @@ namespace WzComparerR2.Cli
         public string Mode { get; set; }
         public bool FoundData { get; set; }
         public string SourceProfile { get; set; }
+        public string DataInputPath { get; set; }
+        public string StringInputPath { get; set; }
+        public List<string> DataInputCandidates { get; set; }
+        public List<string> StringInputCandidates { get; set; }
         public string DataPath { get; set; }
         public string StringPath { get; set; }
         public string Name { get; set; }
@@ -4767,7 +5003,12 @@ namespace WzComparerR2.Cli
         public List<SkillSummaryVariantDto> SummaryVariants { get; set; }
         public List<string> Diagnostics { get; set; }
 
-        public static SkillFullDto FromStringOnly(string id, DomainStringInfo stringInfo)
+        public static SkillFullDto FromStringOnly(
+            string id,
+            DomainStringInfo stringInfo,
+            string stringInputPath,
+            IReadOnlyList<string> dataInputCandidates,
+            IReadOnlyList<string> stringInputCandidates)
         {
             var skillString = SkillStringInfo.FromDomainStringInfo(stringInfo);
             return new SkillFullDto
@@ -4777,6 +5018,9 @@ namespace WzComparerR2.Cli
                 Mode = "string-only",
                 FoundData = false,
                 SourceProfile = "string-only",
+                StringInputPath = stringInputPath,
+                DataInputCandidates = CopyList(dataInputCandidates),
+                StringInputCandidates = CopyList(stringInputCandidates),
                 StringPath = stringInfo == null ? null : stringInfo.Values.GetValueOrDefault("__path"),
                 Name = skillString.Name,
                 Description = skillString.Description,
@@ -4799,7 +5043,15 @@ namespace WzComparerR2.Cli
             };
         }
 
-        public static SkillFullDto FromNode(string id, Wz_Node node, DomainStringInfo stringInfo, int? requestedLevel)
+        public static SkillFullDto FromNode(
+            string id,
+            Wz_Node node,
+            DomainStringInfo stringInfo,
+            int? requestedLevel,
+            string dataInputPath,
+            string stringInputPath,
+            IReadOnlyList<string> dataInputCandidates,
+            IReadOnlyList<string> stringInputCandidates)
         {
             var model = HeadlessSkillModel.FromNode(node);
             var skillString = SkillStringInfo.FromDomainStringInfo(stringInfo);
@@ -4837,6 +5089,10 @@ namespace WzComparerR2.Cli
                 Mode = "charasim-headless",
                 FoundData = true,
                 SourceProfile = model.GetSourceProfile(),
+                DataInputPath = dataInputPath,
+                StringInputPath = stringInputPath,
+                DataInputCandidates = CopyList(dataInputCandidates),
+                StringInputCandidates = CopyList(stringInputCandidates),
                 DataPath = node.FullPath,
                 StringPath = stringInfo == null ? null : stringInfo.Values.GetValueOrDefault("__path"),
                 Name = skillString.Name,
@@ -4874,6 +5130,11 @@ namespace WzComparerR2.Cli
                 SummaryVariants = skillString.BuildVariants(),
                 Diagnostics = diagnostics
             };
+        }
+
+        private static List<string> CopyList(IReadOnlyList<string> values)
+        {
+            return values == null ? new List<string>() : values.ToList();
         }
 
         private static int ResolveLevel(HeadlessSkillModel model, int? requestedLevel)
@@ -5508,6 +5769,8 @@ namespace WzComparerR2.Cli
                     writer.WriteAttributeString("mode", dto.Mode);
                     writer.WriteAttributeString("foundData", dto.FoundData.ToString().ToLowerInvariant());
                     WriteElement(writer, "sourceProfile", dto.SourceProfile);
+                    WriteElement(writer, "dataInputPath", dto.DataInputPath);
+                    WriteElement(writer, "stringInputPath", dto.StringInputPath);
                     WriteElement(writer, "name", dto.Name);
                     WriteElement(writer, "description", dto.Description);
                     WriteElement(writer, "passiveDescription", dto.PassiveDescription);
