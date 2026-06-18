@@ -2318,6 +2318,15 @@ namespace WzComparerR2.Cli
             }
             writer.WriteLine("Common: " + dto.Common.Count + " Effective: " + dto.EffectiveProperties.Count + " LevelSets: " + dto.LevelProperties.Count);
             writer.WriteLine("StatProperties: " + dto.StatPropertyCount + " VisualBranches: " + dto.VisualBranchCount);
+            if (dto.LinkerStatus != null)
+            {
+                writer.WriteLine("LinkerStatus: " + dto.LinkerStatus.Status + " Resolver: " + dto.LinkerStatus.Resolver);
+                writer.WriteLine("LinkerFound: data=" + dto.LinkerStatus.FoundData + " string=" + dto.LinkerStatus.FoundString + " stats=" + dto.LinkerStatus.FoundStats + " visuals=" + dto.LinkerStatus.FoundVisuals + " summary=" + dto.LinkerStatus.FoundSummaryTemplate);
+            }
+            if (dto.UnresolvedPlaceholders != null && dto.UnresolvedPlaceholders.Count > 0)
+            {
+                writer.WriteLine("UnresolvedPlaceholders: " + string.Join(", ", dto.UnresolvedPlaceholders));
+            }
             writer.WriteLine("Actions: " + dto.Actions.Count + " Icons: " + dto.Icons.Count + " Requirements: " + dto.RequiredSkills.Count);
             foreach (string diagnostic in dto.Diagnostics)
             {
@@ -2517,17 +2526,23 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  --allow-string-only  Emit string metadata when the skill id exists only in String.wz.");
             Console.WriteLine("  --data-dir <dir>     Add split Data layout candidates such as <dir>/Skill and <dir>/String.");
             Console.WriteLine("  --skill-wz <path>    Add or replace the skill WZ file/folder input candidate.");
+            Console.WriteLine("  JSON/XML/text output includes SourceProfile, LinkerStatus, and UnresolvedPlaceholders.");
         }
 
         private static void PrintDomainHelp(string kind)
         {
+            string wzOption = string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase) ? "character" : kind;
             Console.WriteLine("wcr2 " + kind + " - " + kind + " lookup tools");
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  wcr2 " + kind + " info [<wz-file-or-dir>] --id <id> [--" + kind + "-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
+            Console.WriteLine("  wcr2 " + kind + " info [<wz-file-or-dir>] --id <id> [--" + wzOption + "-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --data-dir <dir>   Add split Data layout candidates such as <dir>/" + CliWzRepository.GetDefaultDataFolderName(kind) + " and <dir>/String.");
+            if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  --item-wz <path>   Accepted alias for Character/Item-style gear data inputs.");
+            }
             if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
             {
                 Console.WriteLine("  wcr2 skill full [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text]");
@@ -5130,11 +5145,13 @@ namespace WzComparerR2.Cli
         public int StatPropertyCount { get; set; }
         public int VisualBranchCount { get; set; }
         public List<string> VisualBranches { get; set; }
+        public SkillLinkerStatusDto LinkerStatus { get; set; }
         public List<string> Actions { get; set; }
         public List<SkillIconDto> Icons { get; set; }
         public List<SkillVectorDto> Vectors { get; set; }
         public Dictionary<string, List<SkillExtraPropertyDto>> AttackInfo { get; set; }
         public List<SkillSummaryVariantDto> SummaryVariants { get; set; }
+        public List<string> UnresolvedPlaceholders { get; set; }
         public List<string> Diagnostics { get; set; }
 
         public static SkillFullDto FromStringOnly(
@@ -5168,11 +5185,13 @@ namespace WzComparerR2.Cli
                 SpecialProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                 RequiredSkills = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
                 VisualBranches = new List<string>(),
+                LinkerStatus = SkillLinkerStatusDto.ForStringOnly(stringInputPath, dataInputCandidates, stringInputCandidates, skillString),
                 Actions = new List<string>(),
                 Icons = new List<SkillIconDto>(),
                 Vectors = new List<SkillVectorDto>(),
                 AttackInfo = new Dictionary<string, List<SkillExtraPropertyDto>>(StringComparer.OrdinalIgnoreCase),
                 SummaryVariants = skillString.BuildVariants(),
+                UnresolvedPlaceholders = CollectPlaceholders(skillString.BuildVariants().Select(item => item.Text)),
                 Diagnostics = new List<string> { "No matching skill data node was found; output contains String.wz metadata only." }
             };
         }
@@ -5192,15 +5211,16 @@ namespace WzComparerR2.Cli
             int selectedLevel = ResolveLevel(model, requestedLevel);
             var effective = model.GetEffectiveProperties(selectedLevel);
             var diagnostics = new List<string>();
+            var unresolvedPlaceholders = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
             string rawSummary = skillString.SelectSummary(model.PreBigBangSkill, selectedLevel);
-            string resolvedSummary = CliSkillSummaryResolver.Resolve(rawSummary, selectedLevel, effective, diagnostics);
+            string resolvedSummary = CliSkillSummaryResolver.Resolve(rawSummary, selectedLevel, effective, diagnostics, unresolvedPlaceholders);
             int? nextLevel = ResolveNextLevel(model, selectedLevel);
             string nextRawSummary = null;
             string nextResolvedSummary = null;
             if (nextLevel.HasValue)
             {
                 nextRawSummary = skillString.SelectSummary(model.PreBigBangSkill, nextLevel.Value);
-                nextResolvedSummary = CliSkillSummaryResolver.Resolve(nextRawSummary, nextLevel.Value, model.GetEffectiveProperties(nextLevel.Value), diagnostics);
+                nextResolvedSummary = CliSkillSummaryResolver.Resolve(nextRawSummary, nextLevel.Value, model.GetEffectiveProperties(nextLevel.Value), diagnostics, unresolvedPlaceholders);
             }
 
             if (stringInfo == null)
@@ -5257,11 +5277,21 @@ namespace WzComparerR2.Cli
                 StatPropertyCount = model.StatPropertyCount,
                 VisualBranchCount = model.VisualBranches.Count,
                 VisualBranches = model.VisualBranches,
+                LinkerStatus = SkillLinkerStatusDto.ForNode(
+                    dataInputPath,
+                    stringInputPath,
+                    dataInputCandidates,
+                    stringInputCandidates,
+                    model,
+                    skillString,
+                    rawSummary,
+                    unresolvedPlaceholders.Count),
                 Actions = model.Actions,
                 Icons = model.Icons,
                 Vectors = model.Vectors,
                 AttackInfo = model.AttackInfo,
                 SummaryVariants = skillString.BuildVariants(),
+                UnresolvedPlaceholders = unresolvedPlaceholders.ToList(),
                 Diagnostics = diagnostics
             };
         }
@@ -5269,6 +5299,16 @@ namespace WzComparerR2.Cli
         private static List<string> CopyList(IReadOnlyList<string> values)
         {
             return values == null ? new List<string>() : values.ToList();
+        }
+
+        private static List<string> CollectPlaceholders(IEnumerable<string> texts)
+        {
+            var placeholders = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string text in texts ?? Enumerable.Empty<string>())
+            {
+                CliSkillSummaryResolver.CollectPlaceholders(text, placeholders);
+            }
+            return placeholders.ToList();
         }
 
         private static int ResolveLevel(HeadlessSkillModel model, int? requestedLevel)
@@ -5313,6 +5353,136 @@ namespace WzComparerR2.Cli
             }
 
             return null;
+        }
+    }
+
+    internal sealed class SkillLinkerStatusDto
+    {
+        public string Resolver { get; set; }
+        public string Status { get; set; }
+        public bool FoundData { get; set; }
+        public bool FoundString { get; set; }
+        public bool FoundStats { get; set; }
+        public bool FoundVisuals { get; set; }
+        public bool FoundSummaryTemplate { get; set; }
+        public bool SummaryFullyResolved { get; set; }
+        public int UnresolvedPlaceholderCount { get; set; }
+        public bool GuiStringLinkerLoaded { get; set; }
+        public string DataInputPath { get; set; }
+        public string StringInputPath { get; set; }
+        public int DataInputCandidateCount { get; set; }
+        public int StringInputCandidateCount { get; set; }
+        public List<string> Notes { get; set; }
+
+        public static SkillLinkerStatusDto ForStringOnly(
+            string stringInputPath,
+            IReadOnlyList<string> dataInputCandidates,
+            IReadOnlyList<string> stringInputCandidates,
+            SkillStringInfo skillString)
+        {
+            var variants = skillString == null
+                ? new List<SkillSummaryVariantDto>()
+                : skillString.BuildVariants();
+            var unresolved = SkillFullDtoPlaceholderCounter.Count(variants.Select(item => item.Text));
+            return new SkillLinkerStatusDto
+            {
+                Resolver = "cli-headless",
+                Status = "string-only",
+                FoundData = false,
+                FoundString = skillString != null && skillString.Values.Count > 0,
+                FoundStats = false,
+                FoundVisuals = false,
+                FoundSummaryTemplate = variants.Count > 0,
+                SummaryFullyResolved = unresolved == 0,
+                UnresolvedPlaceholderCount = unresolved,
+                GuiStringLinkerLoaded = false,
+                StringInputPath = stringInputPath,
+                DataInputCandidateCount = dataInputCandidates == null ? 0 : dataInputCandidates.Count,
+                StringInputCandidateCount = stringInputCandidates == null ? 0 : stringInputCandidates.Count,
+                Notes = new List<string> { "String metadata was found, but no matching skill data node was found." }
+            };
+        }
+
+        public static SkillLinkerStatusDto ForNode(
+            string dataInputPath,
+            string stringInputPath,
+            IReadOnlyList<string> dataInputCandidates,
+            IReadOnlyList<string> stringInputCandidates,
+            HeadlessSkillModel model,
+            SkillStringInfo skillString,
+            string rawSummary,
+            int unresolvedPlaceholderCount)
+        {
+            bool foundStats = model != null && model.StatPropertyCount > 0;
+            bool foundVisuals = model != null && (model.Icons.Count > 0 || model.VisualBranches.Count > 0);
+            bool foundString = skillString != null && skillString.Values.Count > 0;
+            bool foundSummary = !string.IsNullOrEmpty(rawSummary);
+            var notes = new List<string>();
+            if (!foundString)
+            {
+                notes.Add("No String.wz metadata was linked for this skill id.");
+            }
+            if (!foundStats && foundVisuals)
+            {
+                notes.Add("Skill data contains visual/canvas branches but no scalar common/level stats.");
+            }
+            if (foundSummary && unresolvedPlaceholderCount > 0)
+            {
+                notes.Add("Summary template still contains placeholders because matching scalar stats were not available.");
+            }
+
+            return new SkillLinkerStatusDto
+            {
+                Resolver = "cli-headless",
+                Status = DetermineStatus(foundString, foundStats, foundVisuals, foundSummary, unresolvedPlaceholderCount),
+                FoundData = model != null,
+                FoundString = foundString,
+                FoundStats = foundStats,
+                FoundVisuals = foundVisuals,
+                FoundSummaryTemplate = foundSummary,
+                SummaryFullyResolved = foundSummary && unresolvedPlaceholderCount == 0,
+                UnresolvedPlaceholderCount = unresolvedPlaceholderCount,
+                GuiStringLinkerLoaded = false,
+                DataInputPath = dataInputPath,
+                StringInputPath = stringInputPath,
+                DataInputCandidateCount = dataInputCandidates == null ? 0 : dataInputCandidates.Count,
+                StringInputCandidateCount = stringInputCandidates == null ? 0 : stringInputCandidates.Count,
+                Notes = notes
+            };
+        }
+
+        private static string DetermineStatus(bool foundString, bool foundStats, bool foundVisuals, bool foundSummary, int unresolvedPlaceholderCount)
+        {
+            if (!foundString)
+            {
+                return "missing-string";
+            }
+            if (!foundStats && foundVisuals)
+            {
+                return "visual-only";
+            }
+            if (!foundSummary)
+            {
+                return "missing-summary";
+            }
+            if (unresolvedPlaceholderCount > 0)
+            {
+                return "partial";
+            }
+            return "resolved";
+        }
+    }
+
+    internal static class SkillFullDtoPlaceholderCounter
+    {
+        public static int Count(IEnumerable<string> texts)
+        {
+            var placeholders = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string text in texts ?? Enumerable.Empty<string>())
+            {
+                CliSkillSummaryResolver.CollectPlaceholders(text, placeholders);
+            }
+            return placeholders.Count;
         }
     }
 
@@ -5748,6 +5918,11 @@ namespace WzComparerR2.Cli
 
         public static string Resolve(string template, int level, Dictionary<string, string> properties, List<string> diagnostics)
         {
+            return Resolve(template, level, properties, diagnostics, null);
+        }
+
+        public static string Resolve(string template, int level, Dictionary<string, string> properties, List<string> diagnostics, ISet<string> unresolvedPlaceholders)
+        {
             if (template == null)
             {
                 return null;
@@ -5778,6 +5953,10 @@ namespace WzComparerR2.Cli
                         }
 
                         diagnostics.Add("Unresolved summary placeholder: #" + key);
+                        if (unresolvedPlaceholders != null)
+                        {
+                            unresolvedPlaceholders.Add("#" + key);
+                        }
                         output.Append("#").Append(key);
                         index += length + 1;
                         continue;
@@ -5813,6 +5992,35 @@ namespace WzComparerR2.Cli
             }
 
             return output.ToString().Replace("\t", string.Empty).TrimEnd('\r', '\n');
+        }
+
+        public static void CollectPlaceholders(string template, ISet<string> placeholders)
+        {
+            if (string.IsNullOrEmpty(template) || placeholders == null)
+            {
+                return;
+            }
+
+            int index = 0;
+            while (index < template.Length)
+            {
+                if (template[index] == '#')
+                {
+                    int length = ReadPlaceholderLength(template, index + 1);
+                    if (index + 1 < template.Length && template[index + 1] == 'c')
+                    {
+                        index += 2;
+                        continue;
+                    }
+                    if (length > 0)
+                    {
+                        placeholders.Add("#" + template.Substring(index + 1, length));
+                        index += length + 1;
+                        continue;
+                    }
+                }
+                index++;
+            }
         }
 
         private static string EvaluateValue(string key, string value, int level, List<string> diagnostics)
@@ -5908,6 +6116,28 @@ namespace WzComparerR2.Cli
                     WriteElement(writer, "name", dto.Name);
                     WriteElement(writer, "description", dto.Description);
                     WriteElement(writer, "passiveDescription", dto.PassiveDescription);
+                    if (dto.LinkerStatus != null)
+                    {
+                        writer.WriteStartElement("linkerStatus");
+                        writer.WriteAttributeString("resolver", dto.LinkerStatus.Resolver);
+                        writer.WriteAttributeString("status", dto.LinkerStatus.Status);
+                        writer.WriteAttributeString("foundData", dto.LinkerStatus.FoundData.ToString().ToLowerInvariant());
+                        writer.WriteAttributeString("foundString", dto.LinkerStatus.FoundString.ToString().ToLowerInvariant());
+                        writer.WriteAttributeString("foundStats", dto.LinkerStatus.FoundStats.ToString().ToLowerInvariant());
+                        writer.WriteAttributeString("foundVisuals", dto.LinkerStatus.FoundVisuals.ToString().ToLowerInvariant());
+                        writer.WriteAttributeString("foundSummaryTemplate", dto.LinkerStatus.FoundSummaryTemplate.ToString().ToLowerInvariant());
+                        writer.WriteAttributeString("summaryFullyResolved", dto.LinkerStatus.SummaryFullyResolved.ToString().ToLowerInvariant());
+                        writer.WriteAttributeString("unresolvedPlaceholderCount", dto.LinkerStatus.UnresolvedPlaceholderCount.ToString());
+                        writer.WriteAttributeString("guiStringLinkerLoaded", dto.LinkerStatus.GuiStringLinkerLoaded.ToString().ToLowerInvariant());
+                        if (dto.LinkerStatus.Notes != null)
+                        {
+                            foreach (string note in dto.LinkerStatus.Notes)
+                            {
+                                WriteElement(writer, "note", note);
+                            }
+                        }
+                        writer.WriteEndElement();
+                    }
                     writer.WriteStartElement("summary");
                     if (dto.Level.HasValue)
                     {
@@ -5965,6 +6195,15 @@ namespace WzComparerR2.Cli
                         if (icon.Width.HasValue) writer.WriteAttributeString("width", icon.Width.Value.ToString());
                         if (icon.Height.HasValue) writer.WriteAttributeString("height", icon.Height.Value.ToString());
                         writer.WriteEndElement();
+                    }
+                    writer.WriteEndElement();
+                    writer.WriteStartElement("unresolvedPlaceholders");
+                    if (dto.UnresolvedPlaceholders != null)
+                    {
+                        foreach (string placeholder in dto.UnresolvedPlaceholders)
+                        {
+                            WriteElement(writer, "placeholder", placeholder);
+                        }
                     }
                     writer.WriteEndElement();
                     writer.WriteStartElement("diagnostics");

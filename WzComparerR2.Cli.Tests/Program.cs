@@ -98,13 +98,17 @@ namespace WzComparerR2.Cli.Tests
 
         private static void ExtendedDomainHelpListsInfoCommands(CliRunner runner)
         {
-            foreach (string command in new[] { "mob", "npc", "quest" })
+            foreach (string command in new[] { "gear", "mob", "npc", "quest" })
             {
                 CommandResult result = runner.Run(command, "--help");
                 AssertExitCode(result, 0);
                 AssertContains(result.Stdout, "wcr2 " + command + " info [<wz-file-or-dir>] --id <id>");
                 AssertContains(result.Stdout, "--data-dir <dir>");
             }
+
+            CommandResult gear = runner.Run("gear", "--help");
+            AssertExitCode(gear, 0);
+            AssertContains(gear.Stdout, "--character-wz <file-or-dir>");
         }
 
         private static void SkillHelpListsRepositoryInputs(CliRunner runner)
@@ -114,6 +118,7 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "--data-dir <dir>");
             AssertContains(result.Stdout, "--skill-wz <path>");
             AssertContains(result.Stdout, "wcr2 skill full [<skill-wz-file-or-dir>]");
+            AssertContains(result.Stdout, "UnresolvedPlaceholders");
         }
 
         private static void UnknownCommandReturnsUsageError(CliRunner runner)

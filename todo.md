@@ -323,7 +323,8 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [x] 현재 `--string-wz` 단일 보강은 구현됨.
   - [ ] `StringLinker.Load(stringNode, itemNode, etcNode, questNode)`와 호환되는 입력 로딩을 제공한다.
   - [x] `skill full --allow-string-only`에서 string-only 상태를 출력에 명확히 표시한다.
-  - [ ] full-linker 상태를 출력에 명확히 표시한다.
+  - [x] CLI headless full-linker 상태를 출력에 명확히 표시한다.
+    - `LinkerStatus`로 data/string/stats/visuals/summary 해석 여부와 `GuiStringLinkerLoaded=false` 제한을 JSON/XML/text에 노출한다.
 - [x] `skill full` 또는 `skill detail` 명령을 추가한다.
   - 예: `wcr2 skill full <skill-wz> --id 11001025 --string-wz <string> --level max --json`
   - 출력: raw path, name, desc, h/ph/hch, common, pvpCommon, levelCommon, reqSkill, reqLevel, actions, flags, icon paths, maxLevel, masterLevel.
@@ -342,6 +343,8 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] canvas 중심 스킬 데이터 진단을 추가한다.
   - `skill full` 출력에 `SourceProfile`, `StatPropertyCount`, `VisualBranches`를 추가해 `common`/`level`이 비는 이유를 구분한다.
   - macOS CrossOver `Data/Skill`의 `1001008`은 `SourceProfile = visual-only`, `StatPropertyCount = 0`으로 확인됨.
+- [x] 미해결 summary placeholder를 구조화한다.
+  - `Diagnostics` 문자열 외에 `UnresolvedPlaceholders` 배열과 `LinkerStatus.UnresolvedPlaceholderCount`를 출력한다.
 - [ ] 렌더링 단계는 별도 Phase 8B로 분리한다.
   - `skill tooltip --out <png>`는 Windows 우선.
   - macOS는 `System.Drawing/GDI+` 오류 해결 전까지 제한으로 문서화한다.
