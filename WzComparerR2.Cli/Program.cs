@@ -2211,6 +2211,10 @@ namespace WzComparerR2.Cli
         {
             writer.WriteLine("skill " + dto.Id);
             writer.WriteLine("Mode: " + dto.Mode);
+            if (!string.IsNullOrEmpty(dto.SourceProfile))
+            {
+                writer.WriteLine("SourceProfile: " + dto.SourceProfile);
+            }
             if (!string.IsNullOrEmpty(dto.DataPath))
             {
                 writer.WriteLine("Path: " + dto.DataPath);
@@ -2237,6 +2241,7 @@ namespace WzComparerR2.Cli
                 writer.WriteLine("NextSummary: " + dto.NextResolvedSummary);
             }
             writer.WriteLine("Common: " + dto.Common.Count + " Effective: " + dto.EffectiveProperties.Count + " LevelSets: " + dto.LevelProperties.Count);
+            writer.WriteLine("StatProperties: " + dto.StatPropertyCount + " VisualBranches: " + dto.VisualBranchCount);
             writer.WriteLine("Actions: " + dto.Actions.Count + " Icons: " + dto.Icons.Count + " Requirements: " + dto.RequiredSkills.Count);
             foreach (string diagnostic in dto.Diagnostics)
             {
@@ -4726,6 +4731,7 @@ namespace WzComparerR2.Cli
         public string Id { get; set; }
         public string Mode { get; set; }
         public bool FoundData { get; set; }
+        public string SourceProfile { get; set; }
         public string DataPath { get; set; }
         public string StringPath { get; set; }
         public string Name { get; set; }
@@ -4751,6 +4757,9 @@ namespace WzComparerR2.Cli
         public Dictionary<string, int> RequiredSkills { get; set; }
         public int? RequiredLevel { get; set; }
         public int? RequiredAmount { get; set; }
+        public int StatPropertyCount { get; set; }
+        public int VisualBranchCount { get; set; }
+        public List<string> VisualBranches { get; set; }
         public List<string> Actions { get; set; }
         public List<SkillIconDto> Icons { get; set; }
         public List<SkillVectorDto> Vectors { get; set; }
@@ -4767,6 +4776,7 @@ namespace WzComparerR2.Cli
                 Id = id,
                 Mode = "string-only",
                 FoundData = false,
+                SourceProfile = "string-only",
                 StringPath = stringInfo == null ? null : stringInfo.Values.GetValueOrDefault("__path"),
                 Name = skillString.Name,
                 Description = skillString.Description,
@@ -4779,6 +4789,7 @@ namespace WzComparerR2.Cli
                 Flags = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase),
                 SpecialProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                 RequiredSkills = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase),
+                VisualBranches = new List<string>(),
                 Actions = new List<string>(),
                 Icons = new List<SkillIconDto>(),
                 Vectors = new List<SkillVectorDto>(),
@@ -4814,6 +4825,10 @@ namespace WzComparerR2.Cli
             {
                 diagnostics.Add("No skill summary template was found in string metadata.");
             }
+            if (model.StatPropertyCount == 0 && (model.Icons.Count > 0 || model.VisualBranches.Count > 0))
+            {
+                diagnostics.Add("Skill data node contains visual/canvas data but no common/level scalar stat properties; MaxLevel and LevelCount may remain null for this input.");
+            }
 
             return new SkillFullDto
             {
@@ -4821,6 +4836,7 @@ namespace WzComparerR2.Cli
                 Id = id,
                 Mode = "charasim-headless",
                 FoundData = true,
+                SourceProfile = model.GetSourceProfile(),
                 DataPath = node.FullPath,
                 StringPath = stringInfo == null ? null : stringInfo.Values.GetValueOrDefault("__path"),
                 Name = skillString.Name,
@@ -4848,6 +4864,9 @@ namespace WzComparerR2.Cli
                 RequiredSkills = model.RequiredSkills,
                 RequiredLevel = model.RequiredLevel,
                 RequiredAmount = model.RequiredAmount,
+                StatPropertyCount = model.StatPropertyCount,
+                VisualBranchCount = model.VisualBranches.Count,
+                VisualBranches = model.VisualBranches,
                 Actions = model.Actions,
                 Icons = model.Icons,
                 Vectors = model.Vectors,
@@ -4912,9 +4931,11 @@ namespace WzComparerR2.Cli
         public Dictionary<string, int> RequiredSkills { get; private set; }
         public int? RequiredLevel { get; private set; }
         public int? RequiredAmount { get; private set; }
+        public int StatPropertyCount { get; private set; }
         public int MasterLevel { get; private set; }
         public int MaxLevel { get; private set; }
         public bool PreBigBangSkill { get; private set; }
+        public List<string> VisualBranches { get; private set; }
         public List<string> Actions { get; private set; }
         public List<SkillIconDto> Icons { get; private set; }
         public List<SkillVectorDto> Vectors { get; private set; }
@@ -4928,6 +4949,7 @@ namespace WzComparerR2.Cli
             Flags = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
             SpecialProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             RequiredSkills = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            VisualBranches = new List<string>();
             Actions = new List<string>();
             Icons = new List<SkillIconDto>();
             Vectors = new List<SkillVectorDto>();
@@ -4998,14 +5020,40 @@ namespace WzComparerR2.Cli
                         {
                             model.SpecialProperties[name] = value;
                         }
+                        else if (child.Nodes.Count > 0)
+                        {
+                            model.VisualBranches.Add(name);
+                        }
                         break;
                 }
             }
 
             model.MaxLevel = model.ResolveMaxLevel();
+            model.StatPropertyCount = model.Common.Count
+                + model.PvpCommon.Count
+                + model.LevelProperties.Values.Sum(item => item.Count);
             model.PreBigBangSkill = model.LevelProperties.Count > 0
                 && (model.Common.Count == 0 || model.Common.ContainsKey("maxLevel"));
             return model;
+        }
+
+        public string GetSourceProfile()
+        {
+            bool hasStats = StatPropertyCount > 0 || MasterLevel > 0 || RequiredLevel.HasValue || RequiredAmount.HasValue || RequiredSkills.Count > 0;
+            bool hasVisuals = Icons.Count > 0 || VisualBranches.Count > 0;
+            if (hasStats && hasVisuals)
+            {
+                return "mixed";
+            }
+            if (hasStats)
+            {
+                return "scalar";
+            }
+            if (hasVisuals)
+            {
+                return "visual-only";
+            }
+            return "metadata-only";
         }
 
         public Dictionary<string, string> GetEffectiveProperties(int level)
@@ -5459,6 +5507,7 @@ namespace WzComparerR2.Cli
                     writer.WriteAttributeString("id", dto.Id);
                     writer.WriteAttributeString("mode", dto.Mode);
                     writer.WriteAttributeString("foundData", dto.FoundData.ToString().ToLowerInvariant());
+                    WriteElement(writer, "sourceProfile", dto.SourceProfile);
                     WriteElement(writer, "name", dto.Name);
                     WriteElement(writer, "description", dto.Description);
                     WriteElement(writer, "passiveDescription", dto.PassiveDescription);
@@ -5498,6 +5547,15 @@ namespace WzComparerR2.Cli
                     foreach (string action in dto.Actions)
                     {
                         WriteElement(writer, "action", action);
+                    }
+                    writer.WriteEndElement();
+                    writer.WriteStartElement("visualBranches");
+                    if (dto.VisualBranches != null)
+                    {
+                        foreach (string branch in dto.VisualBranches)
+                        {
+                            WriteElement(writer, "branch", branch);
+                        }
                     }
                     writer.WriteEndElement();
                     writer.WriteStartElement("icons");

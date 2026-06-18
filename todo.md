@@ -338,6 +338,9 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - macOS CrossOver 실클라에서 확인한 후보: `10000074`, `11001025`, `11100027`.
   - 검증 포인트: 이름 한글 정상 디코딩, common/level 존재 여부, summary placeholder 치환 여부, string-only 진단.
   - fixture가 없을 때는 자동 테스트를 skip/gate 처리한다.
+- [x] canvas 중심 스킬 데이터 진단을 추가한다.
+  - `skill full` 출력에 `SourceProfile`, `StatPropertyCount`, `VisualBranches`를 추가해 `common`/`level`이 비는 이유를 구분한다.
+  - macOS CrossOver `Data/Skill`의 `1001008`은 `SourceProfile = visual-only`, `StatPropertyCount = 0`으로 확인됨.
 - [ ] 렌더링 단계는 별도 Phase 8B로 분리한다.
   - `skill tooltip --out <png>`는 Windows 우선.
   - macOS는 `System.Drawing/GDI+` 오류 해결 전까지 제한으로 문서화한다.

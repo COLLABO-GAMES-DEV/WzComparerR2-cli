@@ -236,7 +236,8 @@ If `String.wz`, `Map.wz`, `Skill.wz`, or similar root files load but do not cont
 현재는 텍스트/JSON 메타데이터 조회가 중심이며, tooltip image 렌더링은 아직 포함하지 않습니다.
 
 `skill full`은 렌더링 없이 CharaSim 스타일의 headless 스킬 해석 결과를 내보냅니다.
-출력에는 `common`, `PVPcommon`, `level`, 요구 스킬, 액션, 플래그, 아이콘 메타데이터, 원문 요약, `resolvedSummary`, 가능한 경우 `nextResolvedSummary`, 미해결 placeholder 진단이 포함됩니다.
+출력에는 `sourceProfile`, `common`, `PVPcommon`, `level`, 요구 스킬, 액션, 플래그, 아이콘 메타데이터, 원문 요약, `resolvedSummary`, 가능한 경우 `nextResolvedSummary`, 미해결 placeholder 진단이 포함됩니다.
+`sourceProfile`이 `visual-only`이면 입력 WZ 노드에 아이콘/이펙트 같은 canvas 계열 데이터는 있지만 `common`/`level` 수치 property가 없다는 뜻입니다. 이 경우 `MaxLevel`, `LevelCount`, placeholder 치환 값이 `null` 또는 미해결로 남을 수 있습니다.
 `--format json|xml|text`와 `--out <path>`를 지원합니다.
 실제 skill node가 없고 `String/Skill.img` 문자열만 있는 ID는 기본적으로 실패하지만, `--allow-string-only`를 주면 `Mode: string-only` 결과로 이름/설명/문자열 속성을 확인할 수 있습니다.
 툴팁 PNG 렌더링은 아직 포함하지 않으며 Windows-only 후속 단계로 분리되어 있습니다.
