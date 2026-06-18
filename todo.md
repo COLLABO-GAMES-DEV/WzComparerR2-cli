@@ -316,8 +316,8 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - 결정: Phase 8A에서는 후보 C를 선택했다. `Calculator.cs`만 링크하고, GUI/GDI 의존 없이 스킬 headless DTO/요약 파서를 CLI에 둔다.
 - [x] CLI용 WZ repository/find service를 만든다.
   - `PluginManager.FindWz` 이벤트/WinForms 의존 없이 `FindWz("Skill/1100.img/skill/11001025")` 같은 경로 조회를 제공한다.
-  - 입력 후보: `--skill-wz`, `--string-wz`, `--data-dir`.
-  - 현재 적용 범위: `skill full`의 skill/string repository. `item/gear/etc/quest/base` 후보 확장은 후속 단계.
+  - 입력 후보: `--skill-wz`, `--item-wz`, `--character-wz`, `--map-wz`, `--mob-wz`, `--npc-wz`, `--quest-wz`, `--string-wz`, `--data-dir`.
+  - 현재 적용 범위: `skill full`과 `skill/item/gear/mob/npc/quest/map info`의 data/string repository. `etc/base` 후보 확장은 후속 단계.
   - split layout 후보: `Data/Skill`, `Data/String`, `Data/Item`, `Data/Etc`, `Data/Quest`.
 - [ ] `StringLinker` 초기화를 CLI에서 수행한다.
   - [x] 현재 `--string-wz` 단일 보강은 구현됨.

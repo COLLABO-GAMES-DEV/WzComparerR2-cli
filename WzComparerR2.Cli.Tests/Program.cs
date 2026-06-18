@@ -102,7 +102,8 @@ namespace WzComparerR2.Cli.Tests
             {
                 CommandResult result = runner.Run(command, "--help");
                 AssertExitCode(result, 0);
-                AssertContains(result.Stdout, "wcr2 " + command + " info <wz-file-or-dir> --id <id>");
+                AssertContains(result.Stdout, "wcr2 " + command + " info [<wz-file-or-dir>] --id <id>");
+                AssertContains(result.Stdout, "--data-dir <dir>");
             }
         }
 

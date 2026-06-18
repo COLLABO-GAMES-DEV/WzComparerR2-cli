@@ -320,36 +320,49 @@ namespace WzComparerR2.Cli
             {
                 throw new UsageException("Unknown " + kind + " command: " + args.Positionals[0]);
             }
-            string input = RequireInputAt(args, 1, kind + " info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            string input = ResolveDomainInfoInput(args, kind);
             string id = args.GetValue("id");
             bool json = args.HasFlag("json");
-            string stringWz = args.GetValue("string-wz");
             if (string.IsNullOrEmpty(id))
             {
                 throw new UsageException(kind + " info requires --id <id>.");
             }
 
-            using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+            using (var repository = CliWzRepository.ForDomain(kind, input, args))
             {
-                Wz_Node dataNode = DomainInfoFinder.FindDataNode(context.Root, kind, id);
-                if (dataNode == null)
+                var dataResult = repository.FindDataNode(kind, id);
+                if (dataResult == null)
                 {
                     throw new UsageException(kind + " id not found: " + id);
                 }
 
                 DomainStringInfo stringInfo = null;
-                if (!string.IsNullOrEmpty(stringWz))
+                var stringResult = repository.FindStringInfo(kind, id);
+                if (stringResult != null)
                 {
-                    using (var stringContext = WzLoadContext.Load(stringWz, WzLoadOptions.FromArgs(args)))
-                    {
-                        stringInfo = DomainInfoFinder.FindStringInfo(stringContext.Root, kind, id);
-                    }
+                    stringInfo = stringResult.StringInfo;
                 }
 
-                var dto = DomainInfoDto.FromNode(kind, id, dataNode, stringInfo);
+                var dto = DomainInfoDto.FromNode(
+                    kind,
+                    id,
+                    dataResult.Node,
+                    stringInfo,
+                    dataResult.InputPath,
+                    stringResult == null ? null : stringResult.InputPath,
+                    repository.DataInputPaths,
+                    repository.StringInputPaths);
                 WriteOutput(dto, json, writer =>
                 {
                     writer.WriteLine(kind + " " + id);
+                    if (!string.IsNullOrEmpty(dto.DataInputPath))
+                    {
+                        writer.WriteLine("DataInput: " + dto.DataInputPath);
+                    }
+                    if (!string.IsNullOrEmpty(dto.StringInputPath))
+                    {
+                        writer.WriteLine("StringInput: " + dto.StringInputPath);
+                    }
                     writer.WriteLine("Path: " + dto.Path);
                     if (!string.IsNullOrEmpty(dto.Name))
                     {
@@ -364,6 +377,43 @@ namespace WzComparerR2.Cli
             }
 
             return ExitSuccess;
+        }
+
+        private static string ResolveDomainInfoInput(ParsedArgs args, string kind)
+        {
+            if (args.Positionals.Count > 1 && !IsHelp(args.Positionals[1]))
+            {
+                return args.Positionals[1];
+            }
+
+            string domainInput = GetDomainInputOption(args, kind);
+            if (!string.IsNullOrEmpty(domainInput))
+            {
+                return domainInput;
+            }
+
+            string dataDir = args.GetValue("data-dir");
+            if (!string.IsNullOrEmpty(dataDir))
+            {
+                return Path.Combine(dataDir, CliWzRepository.GetDefaultDataFolderName(kind));
+            }
+
+            string optionName = string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase) ? "character-wz" : kind + "-wz";
+            throw new UsageException(kind + " info requires <wz-file-or-dir>, --" + optionName + " <path>, or --data-dir <dir>.");
+        }
+
+        private static string GetDomainInputOption(ParsedArgs args, string kind)
+        {
+            string direct = args.GetValue(kind + "-wz");
+            if (!string.IsNullOrEmpty(direct))
+            {
+                return direct;
+            }
+            if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase))
+            {
+                return args.GetValue("character-wz") ?? args.GetValue("item-wz");
+            }
+            return null;
         }
 
         private static int RunSkill(ParsedArgs args)
@@ -2368,14 +2418,14 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 compare <old-file-or-dir> <new-file-or-dir> [--path <wz-path>] [--type added|removed|changed] [--format json|markdown] [--out <path>] [--json]");
             Console.WriteLine("  wcr2 dump <file-or-dir> --path <wz-path> [--format json|xml|raw] [--out <path>]");
             Console.WriteLine("  wcr2 extract <file-or-dir> --path <wz-path> --out <output-dir> [--recursive] [--manifest <json>] [--json]");
-            Console.WriteLine("  wcr2 skill info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 skill info [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
-            Console.WriteLine("  wcr2 item info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
-            Console.WriteLine("  wcr2 gear info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
-            Console.WriteLine("  wcr2 mob info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
-            Console.WriteLine("  wcr2 npc info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
-            Console.WriteLine("  wcr2 quest info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
-            Console.WriteLine("  wcr2 map info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
+            Console.WriteLine("  wcr2 gear info [<wz-file-or-dir>] --id <id> [--character-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
+            Console.WriteLine("  wcr2 mob info [<wz-file-or-dir>] --id <id> [--mob-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
+            Console.WriteLine("  wcr2 npc info [<wz-file-or-dir>] --id <id> [--npc-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
+            Console.WriteLine("  wcr2 quest info [<wz-file-or-dir>] --id <id> [--quest-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
+            Console.WriteLine("  wcr2 map info [<wz-file-or-dir>] --id <id> [--map-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 map objects <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]");
             Console.WriteLine("  wcr2 animate frames <wz-file-or-dir> --path <wz-path> --out <dir> [--json]");
@@ -2474,7 +2524,10 @@ namespace WzComparerR2.Cli
             Console.WriteLine("wcr2 " + kind + " - " + kind + " lookup tools");
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  wcr2 " + kind + " info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
+            Console.WriteLine("  wcr2 " + kind + " info [<wz-file-or-dir>] --id <id> [--" + kind + "-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
+            Console.WriteLine();
+            Console.WriteLine("Options:");
+            Console.WriteLine("  --data-dir <dir>   Add split Data layout candidates such as <dir>/" + CliWzRepository.GetDefaultDataFolderName(kind) + " and <dir>/String.");
             if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
             {
                 Console.WriteLine("  wcr2 skill full [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text]");
@@ -3250,33 +3303,86 @@ namespace WzComparerR2.Cli
 
         public static CliWzRepository ForSkill(string skillInput, ParsedArgs args)
         {
+            return ForDomain("skill", skillInput, args);
+        }
+
+        public static CliWzRepository ForDomain(string kind, string input, ParsedArgs args)
+        {
             var repository = new CliWzRepository();
             var options = WzLoadOptions.FromArgs(args);
             var dataCandidates = new List<CliWzRepositoryCandidate>();
             var stringCandidates = new List<CliWzRepositoryCandidate>();
 
-            AddCandidate(dataCandidates, skillInput, true);
-            AddCandidate(dataCandidates, args.GetValue("skill-wz"), true);
+            AddCandidate(dataCandidates, input, true);
+            AddCandidate(dataCandidates, args.GetValue(kind + "-wz"), true);
+            AddAliasCandidates(dataCandidates, kind, args);
 
             string dataDir = args.GetValue("data-dir");
             if (!string.IsNullOrEmpty(dataDir))
             {
-                AddCandidate(dataCandidates, Path.Combine(dataDir, "Skill"), false);
+                AddCandidate(dataCandidates, Path.Combine(dataDir, GetDefaultDataFolderName(kind)), false);
                 AddCandidate(stringCandidates, Path.Combine(dataDir, "String"), false);
             }
 
             AddCandidate(stringCandidates, args.GetValue("string-wz"), true);
-            AddCandidate(stringCandidates, InferSiblingDataFolder(skillInput, "String"), false);
+            AddCandidate(stringCandidates, InferSiblingDataFolder(input, "String"), false);
 
-            repository.LoadContexts(repository.dataContexts, dataCandidates, options, "skill data");
-            repository.LoadContexts(repository.stringContexts, stringCandidates, options, "skill string");
+            repository.LoadContexts(repository.dataContexts, dataCandidates, options, kind + " data");
+            repository.LoadContexts(repository.stringContexts, stringCandidates, options, kind + " string");
             if (repository.dataContexts.Count == 0)
             {
                 repository.Dispose();
-                throw new UsageException("No skill WZ input candidates were available. Provide <skill-wz-file-or-dir>, --skill-wz, or --data-dir.");
+                throw new UsageException("No " + kind + " WZ input candidates were available. Provide <wz-file-or-dir>, --" + kind + "-wz, or --data-dir.");
             }
 
             return repository;
+        }
+
+        public static string GetDefaultDataFolderName(string kind)
+        {
+            if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Character";
+            }
+            if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Skill";
+            }
+            if (string.Equals(kind, "item", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Item";
+            }
+            if (string.Equals(kind, "map", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Map";
+            }
+            if (string.Equals(kind, "mob", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Mob";
+            }
+            if (string.Equals(kind, "npc", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Npc";
+            }
+            if (string.Equals(kind, "quest", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Quest";
+            }
+
+            return kind;
+        }
+
+        private static void AddAliasCandidates(List<CliWzRepositoryCandidate> dataCandidates, string kind, ParsedArgs args)
+        {
+            if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase))
+            {
+                AddCandidate(dataCandidates, args.GetValue("character-wz"), true);
+                AddCandidate(dataCandidates, args.GetValue("item-wz"), true);
+            }
+            if (string.Equals(kind, "item", StringComparison.OrdinalIgnoreCase))
+            {
+                AddCandidate(dataCandidates, args.GetValue("item-wz"), true);
+            }
         }
 
         public CliWzDataResult FindDataNode(string kind, string id)
@@ -3381,8 +3487,7 @@ namespace WzComparerR2.Cli
 
             string fullPath = Path.GetFullPath(inputPath);
             string fileName = Path.GetFileName(fullPath);
-            if (string.Equals(fileName, "Skill", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(fileName, "Skill.wz", StringComparison.OrdinalIgnoreCase))
+            if (IsKnownDataFolderOrWz(fileName))
             {
                 string parent = Directory.Exists(fullPath)
                     ? Path.GetDirectoryName(fullPath)
@@ -3394,6 +3499,19 @@ namespace WzComparerR2.Cli
             }
 
             return null;
+        }
+
+        private static bool IsKnownDataFolderOrWz(string fileName)
+        {
+            foreach (string name in new[] { "Skill", "Item", "Character", "Map", "Mob", "Npc", "Quest", "Etc" })
+            {
+                if (string.Equals(fileName, name, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(fileName, name + ".wz", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static bool PathExists(string path)
@@ -4848,6 +4966,10 @@ namespace WzComparerR2.Cli
     {
         public string Kind { get; set; }
         public string Id { get; set; }
+        public string DataInputPath { get; set; }
+        public string StringInputPath { get; set; }
+        public List<string> DataInputCandidates { get; set; }
+        public List<string> StringInputCandidates { get; set; }
         public string Path { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
@@ -4858,12 +4980,24 @@ namespace WzComparerR2.Cli
         public Dictionary<string, string> StringProperties { get; set; }
         public List<string> IconPaths { get; set; }
 
-        public static DomainInfoDto FromNode(string kind, string id, Wz_Node node, DomainStringInfo stringInfo)
+        public static DomainInfoDto FromNode(
+            string kind,
+            string id,
+            Wz_Node node,
+            DomainStringInfo stringInfo,
+            string dataInputPath,
+            string stringInputPath,
+            IReadOnlyList<string> dataInputCandidates,
+            IReadOnlyList<string> stringInputCandidates)
         {
             var dto = new DomainInfoDto
             {
                 Kind = kind,
                 Id = id,
+                DataInputPath = dataInputPath,
+                StringInputPath = stringInputPath,
+                DataInputCandidates = dataInputCandidates == null ? new List<string>() : dataInputCandidates.ToList(),
+                StringInputCandidates = stringInputCandidates == null ? new List<string>() : stringInputCandidates.ToList(),
                 Path = node.FullPath,
                 Name = stringInfo == null ? null : stringInfo.Name,
                 Description = stringInfo == null ? null : stringInfo.Description,

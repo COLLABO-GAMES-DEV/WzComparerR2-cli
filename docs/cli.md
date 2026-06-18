@@ -28,14 +28,14 @@ wcr2 search <file-or-dir> --match-path <glob-or-regex> [--type <type>] [--json]
 wcr2 compare <old-file-or-dir> <new-file-or-dir> [--path <wz-path>] [--type added|removed|changed] [--format json|markdown] [--out <path>] [--json]
 wcr2 dump <file-or-dir> --path <wz-path> [--format json|xml|raw] [--out <path>]
 wcr2 extract <file-or-dir> --path <wz-path> --out <output-dir> [--recursive] [--manifest <json>] [--json]
-wcr2 skill info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
+wcr2 skill info [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n|max>] [--format json|xml|text] [--out <path>]
-wcr2 item info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
-wcr2 gear info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
-wcr2 mob info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
-wcr2 npc info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
-wcr2 quest info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
-wcr2 map info <wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]
+wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
+wcr2 gear info [<wz-file-or-dir>] --id <id> [--character-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
+wcr2 mob info [<wz-file-or-dir>] --id <id> [--mob-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
+wcr2 npc info [<wz-file-or-dir>] --id <id> [--npc-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
+wcr2 quest info [<wz-file-or-dir>] --id <id> [--quest-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
+wcr2 map info [<wz-file-or-dir>] --id <id> [--map-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 map objects <map-wz-file-or-dir> --id <map-id> [--json]
 wcr2 map portals <map-wz-file-or-dir> --id <map-id> [--json]
 wcr2 map life <map-wz-file-or-dir> --id <map-id> [--json]
@@ -234,6 +234,7 @@ If `String.wz`, `Map.wz`, `Skill.wz`, or similar root files load but do not cont
 컨테이너 노드를 선택하면 `--recursive`가 필요합니다.
 
 `skill/item/gear/map info`는 먼저 데이터 WZ에서 id 노드를 찾고, `--string-wz`가 있으면 String.wz의 이름/설명 값을 추가합니다.
+`--data-dir <Data>`를 주면 `Skill`, `Item`, `Character`, `Map`, `Mob`, `Npc`, `Quest`와 sibling `String` 후보를 자동으로 사용합니다. JSON에는 `DataInputPath`, `StringInputPath`, 후보 목록이 포함됩니다.
 현재는 텍스트/JSON 메타데이터 조회가 중심이며, tooltip image 렌더링은 아직 포함하지 않습니다.
 
 `skill full`은 렌더링 없이 CharaSim 스타일의 headless 스킬 해석 결과를 내보냅니다.
