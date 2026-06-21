@@ -100,7 +100,11 @@ namespace WzComparerR2.Cli
             catch (Exception ex)
             {
                 structure.Clear();
-                throw new WzLoadException("Failed to load input: " + inputPath, ex);
+                var diagnostic = WzLoadDiagnostic.FromPath(fullPath, ex);
+                string message = diagnostic != null && diagnostic.IsUnsupportedPackage
+                    ? "Failed to load input: " + inputPath + " (unsupported WZ package format)"
+                    : "Failed to load input: " + inputPath;
+                throw new WzLoadException(message, ex, diagnostic);
             }
         }
 
@@ -280,7 +284,7 @@ namespace WzComparerR2.Cli
                 {
                     if (candidate.Explicit)
                     {
-                        throw new WzLoadException("Failed to load " + label + " candidate: " + candidate.Path, ex);
+                        throw new WzLoadException("Failed to load " + label + " candidate: " + candidate.Path, ex, ex.Diagnostic);
                     }
                 }
             }
@@ -364,6 +368,171 @@ namespace WzComparerR2.Cli
     {
         public string Path { get; set; }
         public bool Explicit { get; set; }
+    }
+
+    internal sealed class WzLoadDiagnostic
+    {
+        private static readonly int[] Pkg2RandomHeaderDataSizeOffsets = { 0x15, 0x19, 0x39, 0x41 };
+
+        public string Path { get; set; }
+        public string FileName { get; set; }
+        public long FileSize { get; set; }
+        public string Extension { get; set; }
+        public string First4Ascii { get; set; }
+        public string First4Hex { get; set; }
+        public string HeaderHex { get; set; }
+        public string DetectedFormat { get; set; }
+        public bool IsUnsupportedPackage { get; set; }
+        public long ExpectedPkg2RandomDataSize { get; set; }
+        public long CurrentPkg2RandomDataSizeProbe { get; set; }
+        public bool CurrentPkg2RandomDataSizeMatches { get; set; }
+        public string Note { get; set; }
+
+        public static WzLoadDiagnostic FromPath(string path, Exception loadException)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return null;
+            }
+
+            try
+            {
+                var info = new FileInfo(path);
+                int bytesToRead = (int)Math.Min(80, info.Length);
+                byte[] header = new byte[bytesToRead];
+                using (var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    int read = stream.Read(header, 0, header.Length);
+                    if (read != header.Length)
+                    {
+                        Array.Resize(ref header, read);
+                    }
+                }
+
+                string first4Ascii = header.Length >= 4 ? ToPrintableAscii(header, 0, 4) : null;
+                string first4Hex = header.Length >= 4 ? ToHex(header, 0, 4) : ToHex(header, 0, header.Length);
+                bool isWzExtension = string.Equals(info.Extension, ".wz", StringComparison.OrdinalIgnoreCase);
+                bool isKnownSignature = string.Equals(first4Ascii, "PKG1", StringComparison.Ordinal)
+                    || string.Equals(first4Ascii, "PKG2", StringComparison.Ordinal);
+
+                long expectedPkg2DataSize = info.Length >= 68 ? info.Length - 68 : -1;
+                long probedPkg2DataSize = header.Length >= 68
+                    ? GatherAsUInt32(header, Pkg2RandomHeaderDataSizeOffsets)
+                    : -1;
+                bool currentPkg2RandomMatch = expectedPkg2DataSize >= 0
+                    && probedPkg2DataSize == expectedPkg2DataSize;
+
+                var diagnostic = new WzLoadDiagnostic
+                {
+                    Path = path,
+                    FileName = info.Name,
+                    FileSize = info.Length,
+                    Extension = info.Extension,
+                    First4Ascii = first4Ascii,
+                    First4Hex = first4Hex,
+                    HeaderHex = ToHex(header, 0, header.Length),
+                    ExpectedPkg2RandomDataSize = expectedPkg2DataSize,
+                    CurrentPkg2RandomDataSizeProbe = probedPkg2DataSize,
+                    CurrentPkg2RandomDataSizeMatches = currentPkg2RandomMatch
+                };
+
+                if (isKnownSignature)
+                {
+                    diagnostic.DetectedFormat = first4Ascii;
+                    diagnostic.Note = "The file has a known WZ signature, but loading still failed.";
+                }
+                else if (isWzExtension && info.Length >= 68)
+                {
+                    diagnostic.DetectedFormat = currentPkg2RandomMatch
+                        ? "pkg2-random-header"
+                        : "unsupported-randomized-or-encrypted-wz";
+                    diagnostic.IsUnsupportedPackage = !currentPkg2RandomMatch
+                        && IsInvalidWzMessage(loadException);
+                    diagnostic.Note = diagnostic.IsUnsupportedPackage
+                        ? "Header does not match PKG1, PKG2, or the currently supported KMST1201 random-header layout. This client may use encrypted or newer package shards."
+                        : "The file does not start with PKG1 or PKG2.";
+                }
+                else
+                {
+                    diagnostic.DetectedFormat = "unknown";
+                    diagnostic.Note = "The file does not look like a supported WZ package.";
+                }
+
+                return diagnostic;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool IsInvalidWzMessage(Exception ex)
+        {
+            while (ex != null)
+            {
+                if (ex.Message != null
+                    && ex.Message.IndexOf("not a valid wz file", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+                ex = ex.InnerException;
+            }
+            return false;
+        }
+
+        private static uint GatherAsUInt32(byte[] bytes, int[] offsets)
+        {
+            uint value = 0;
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                int offset = offsets[i];
+                if (offset < 0 || offset >= bytes.Length)
+                {
+                    return 0;
+                }
+                value |= (uint)bytes[offset] << (8 * i);
+            }
+            return value;
+        }
+
+        private static string ToPrintableAscii(byte[] bytes, int offset, int count)
+        {
+            char[] chars = new char[count];
+            for (int i = 0; i < count; i++)
+            {
+                byte value = bytes[offset + i];
+                chars[i] = value >= 0x20 && value <= 0x7e ? (char)value : '.';
+            }
+            return new string(chars);
+        }
+
+        private static string ToHex(byte[] bytes, int offset, int count)
+        {
+            if (bytes == null || count <= 0)
+            {
+                return string.Empty;
+            }
+
+            char[] chars = new char[count * 3 - 1];
+            int pos = 0;
+            for (int i = 0; i < count; i++)
+            {
+                if (i > 0)
+                {
+                    chars[pos++] = ' ';
+                }
+
+                byte value = bytes[offset + i];
+                chars[pos++] = GetHexNibble(value >> 4);
+                chars[pos++] = GetHexNibble(value & 0x0f);
+            }
+            return new string(chars);
+        }
+
+        private static char GetHexNibble(int value)
+        {
+            return (char)(value < 10 ? '0' + value : 'a' + value - 10);
+        }
     }
 
     internal sealed class CliWzDataResult

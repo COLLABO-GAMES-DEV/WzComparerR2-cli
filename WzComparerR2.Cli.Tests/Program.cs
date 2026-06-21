@@ -26,6 +26,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("media commands validate required inputs", () => MediaCommandsValidateRequiredInputs(runner)),
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
                 TestCase.Create("missing input returns not found", () => MissingInputReturnsNotFound(runner)),
+                TestCase.Create("unsupported wz package emits json diagnostic", () => UnsupportedWzPackageEmitsJsonDiagnostic(runner)),
                 TestCase.Create("invalid regex returns usage error before WZ load", () => InvalidRegexReturnsUsageError(runner)),
                 TestCase.Create("avatar inspect emits stable json", () => AvatarInspectEmitsStableJson(runner)),
                 TestCase.Create("avatar render dry-run emits blocked plan", () => AvatarRenderDryRunEmitsBlockedPlan(runner)),
@@ -162,6 +163,33 @@ namespace WzComparerR2.Cli.Tests
             CommandResult result = runner.Run("info", missing);
             AssertExitCode(result, 2);
             AssertContains(result.Stderr, "Input path not found");
+        }
+
+        private static void UnsupportedWzPackageEmitsJsonDiagnostic(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string input = Path.Combine(temp.Path, "Unsupported_000.wz");
+                byte[] bytes = Enumerable.Range(0, 80).Select(i => (byte)i).ToArray();
+                File.WriteAllBytes(input, bytes);
+
+                CommandResult result = runner.Run("info", input, "--json");
+                AssertExitCode(result, 3);
+                AssertEqual(string.Empty, result.Stdout, "unsupported package stdout");
+                using (JsonDocument doc = JsonDocument.Parse(result.Stderr))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("wz-load-failed", root.GetProperty("Error").GetString(), "load error code");
+                    AssertContains(root.GetProperty("Message").GetString(), "unsupported WZ package format");
+
+                    JsonElement diagnostic = root.GetProperty("Diagnostic");
+                    AssertEqual("Unsupported_000.wz", diagnostic.GetProperty("FileName").GetString(), "diagnostic file name");
+                    AssertEqual("unsupported-randomized-or-encrypted-wz", diagnostic.GetProperty("DetectedFormat").GetString(), "diagnostic format");
+                    AssertEqual(true, diagnostic.GetProperty("IsUnsupportedPackage").GetBoolean(), "unsupported package marker");
+                    AssertEqual("00 01 02 03", diagnostic.GetProperty("First4Hex").GetString(), "first bytes");
+                    AssertEqual(false, diagnostic.GetProperty("CurrentPkg2RandomDataSizeMatches").GetBoolean(), "pkg2 random size probe");
+                }
+            }
         }
 
         private static void InvalidRegexReturnsUsageError(CliRunner runner)

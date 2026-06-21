@@ -276,6 +276,9 @@ WZ/MS 파일 포맷을 다루는 가장 낮은 레벨입니다.
 - 기본 body/head/face/hair ID는 장비 prefix와 다르게 `00002000`, `00012000`, `00020000`, `00030000`처럼 8자리 문자열에 앞자리 0이 포함될 수 있습니다. CLI의 avatar parser는 이제 이 범위를 `body`, `head`, `face`, `hair`로 따로 분류합니다.
 - Phase 11에서 `map render --dry-run`을 추가했습니다. 이 명령은 실제 screenshot을 만들지 않고 map id에서 `Map/Map/MapN/<id>.img`와 split layout 후보 `Data/Map/Map/MapN/MapN_###.wz`를 계산하며, `--layer`, `--include-life`, `--include-reactor`, `--include-tooltip` 옵션과 MonoGame/EmptyKeys/native dependency blocker를 JSON으로 출력합니다.
 - 실제 map screenshot export는 `WzComparerR2.MapRender`의 MonoGame `Game`/`GraphicsDevice` lifecycle, offscreen render target 생성, Bass/native runtime 배치, real-client split shard layout 확인이 필요합니다. 따라서 현재 `map render`의 `CanRender = false`는 의도된 계약입니다.
+- 2026-06-22 macOS MapleStory 설치 경로는 `~/Library/Application Support/MapleStory/Bottles/maplestory/drive_c/Nexon/Maple`로 확인했습니다. `Data/Mob/_Canvas/_Canvas_000.wz`와 `Data/Character/Cap/Cap_000.wz`는 `PKG1` 헤더라 CLI/WzLib에서 로딩됩니다.
+- 같은 설치의 `Data/Item/Cash/Cash.wz`, `Data/Item/Cash/Cash_000.wz`, `Data/Item/Cash/_Canvas/_Canvas_000.wz`, `Data/String/String_000.wz`, `Data/Skill/_Canvas/_Canvas_000.wz`는 첫 4바이트가 `PKG1/PKG2`가 아니고, 현재 WzLib의 KMST1201 random-header dataSize probe도 파일 크기-68과 일치하지 않았습니다. 현재 판단은 “지원되지 않는 최신 randomized/encrypted package shard”이며 정확한 복호화/컨테이너 포맷은 추가 조사가 필요합니다.
+- Phase 5B에서 CLI 로딩 실패 진단을 추가했습니다. `--json`이 있는 로딩 실패는 exit code `3`을 유지하고 stderr JSON에 `Diagnostic.FileName`, `First4Hex`, `HeaderHex`, `DetectedFormat`, `ExpectedPkg2RandomDataSize`, `CurrentPkg2RandomDataSizeProbe`를 출력합니다. 성공 JSON stdout 계약은 변경하지 않았습니다.
 
 ## 처음 작업할 때 주의할 점
 

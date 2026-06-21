@@ -21,6 +21,7 @@ namespace WzComparerR2.Cli
         private static bool QuietOutput;
         private static bool VerboseErrors;
         private static bool NoColor;
+        private static bool JsonErrors;
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
@@ -33,6 +34,7 @@ namespace WzComparerR2.Cli
             QuietOutput = HasRawFlag(args, "quiet");
             VerboseErrors = HasRawFlag(args, "verbose");
             NoColor = HasRawFlag(args, "no-color");
+            JsonErrors = HasRawFlag(args, "json");
 
             try
             {
@@ -129,11 +131,7 @@ namespace WzComparerR2.Cli
             }
             catch (WzLoadException ex)
             {
-                Console.Error.WriteLine(ex.Message);
-                if (ex.InnerException != null)
-                {
-                    Console.Error.WriteLine(ex.InnerException.Message);
-                }
+                WriteLoadError(ex);
                 WriteVerboseError(ex);
                 return ExitLoadFailed;
             }
@@ -184,6 +182,32 @@ namespace WzComparerR2.Cli
             if (!string.IsNullOrEmpty(ex.StackTrace))
             {
                 Console.Error.WriteLine(ex.StackTrace);
+            }
+        }
+
+        private static void WriteLoadError(WzLoadException ex)
+        {
+            if (JsonErrors)
+            {
+                Console.Error.WriteLine(JsonSerializer.Serialize(new CliErrorDto
+                {
+                    Error = "wz-load-failed",
+                    Message = ex.Message,
+                    InnerMessage = ex.InnerException != null ? ex.InnerException.Message : null,
+                    Diagnostic = ex.Diagnostic
+                }, JsonOptions));
+                return;
+            }
+
+            Console.Error.WriteLine(ex.Message);
+            if (ex.InnerException != null)
+            {
+                Console.Error.WriteLine(ex.InnerException.Message);
+            }
+            if (ex.Diagnostic != null && ex.Diagnostic.IsUnsupportedPackage)
+            {
+                Console.Error.WriteLine(ex.Diagnostic.Note);
+                Console.Error.WriteLine("Header: " + ex.Diagnostic.HeaderHex);
             }
         }
 

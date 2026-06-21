@@ -21,5 +21,21 @@ namespace WzComparerR2.Cli
             : base(message, innerException)
         {
         }
+
+        public WzLoadException(string message, Exception innerException, WzLoadDiagnostic diagnostic)
+            : base(message, innerException)
+        {
+            this.Diagnostic = diagnostic;
+        }
+
+        public WzLoadDiagnostic Diagnostic { get; private set; }
+    }
+
+    internal sealed class CliErrorDto
+    {
+        public string Error { get; set; }
+        public string Message { get; set; }
+        public string InnerMessage { get; set; }
+        public WzLoadDiagnostic Diagnostic { get; set; }
     }
 }

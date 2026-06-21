@@ -235,8 +235,14 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - 같은 설치에서도 `Data/Mob/_Canvas`와 `Data/Character/Cap`은 정상 로딩된다.
 - 헤더 증거:
   - 정상 로딩 예: `Data/Mob/_Canvas/_Canvas_000.wz` = `PKG1...`
+  - 정상 로딩 예: `Data/Character/Cap/Cap_000.wz` = `PKG1...`
+  - 실패 예: `Data/Item/Cash/Cash.wz` = `a3 f3 00 f9 ...`
+  - 실패 예: `Data/Item/Cash/Cash_000.wz` = `1c 15 1f aa ...`
   - 실패 예: `Data/Item/Cash/_Canvas/_Canvas_000.wz` = `c3 08 31 86 ...`
   - 실패 예: `Data/String/String_000.wz` = `07 79 dd be ...`
+  - 실패 예: `Data/Skill/_Canvas/_Canvas_000.wz` = `cc 05 e4 3e ...`
+- 현재 `Wz_File.GetHeader`는 `PKG1`, `PKG2`, 그리고 KMST1201 random header 후보만 유효 헤더로 받아들인다. 위 실패 샘플들은 첫 4바이트가 `PKG1/PKG2`가 아니며, 현재 KMST1201 dataSize gather 오프셋도 파일 크기-68과 일치하지 않았다.
+- `Data/Item/*.ini`와 `Data/String/String.ini`는 현재 확인한 범위에서 `LastWzIndex|0` 정도만 담고 있어 복호화/컨테이너 메타데이터로 쓰기 어렵다.
 - 이 문제 때문에 `미라클 큐브`, `호신부적`, `운명의 수레바퀴`, `보따리상인 묘묘(7일)`, `고성능 순간이동의 돌`, `MSW 아바타 코디 이용권(30일)`, `펫`, `고성능 확성기`, `아이템 확성기` 같은 Cash/Item 아이콘의 `info/icon` PNG를 macOS 로컬 데이터에서 추출하지 못한다.
 
 작업:
@@ -247,7 +253,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `Item/Consume/Consume_000.wz`
   - `Item/Pet/Pet_000.wz`
   - `String/String_000.wz`
-- [ ] 기존 `Wz_Structure.LoadFile`이 `PKG1`만 유효 WZ로 보는 경로와 새 패키지 포맷의 차이를 정리한다.
+- [x] 기존 `Wz_Structure.LoadFile`이 지원하는 헤더 경로와 새 패키지 포맷의 차이를 정리한다.
 - [ ] GUI 또는 upstream WzComparerR2 계열에서 같은 포맷을 읽는 코드가 있는지 조사한다.
 - [ ] 코어 로직 변경 범위를 정한다.
   - 최소안: CLI 전용 pre-decode/adapter로 기존 WzLib 입력에 맞춘다.
@@ -259,7 +265,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `Item`/`_Canvas`에서 `<id>.img/info/icon` 또는 `iconRaw` 조회
   - `image export`로 PNG 저장
 - [ ] 요청 샘플 9개 아이템의 실제 `info/icon` PNG를 `.test` 아래에 생성한다.
-- [ ] 실패 시 `not valid wz` 대신 “지원되지 않는 macOS package format” 진단과 대상 파일 헤더를 JSON으로 보고한다.
+- [x] 실패 시 `not valid wz` 대신 “지원되지 않는 macOS package format” 진단과 대상 파일 헤더를 JSON으로 보고한다.
 
 완료 기준:
 
