@@ -201,11 +201,114 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] export 결과 manifest 생성 옵션 추가
   - `--manifest export.json`
 
+### Phase 5A. 이미지/사운드 전용 추출 UX 보강
+
+- [x] `sound list` 또는 `asset list --type sound`로 사운드 노드 경로/길이/채널/주파수를 먼저 찾을 수 있게 한다.
+- [x] `sound export` / `sound export-all` 전용 명령을 추가한다.
+  - 기존 `Wz_Sound.ExtractSound()`와 `ExtractExporter` 경로를 재사용한다.
+  - MP3/PCM WAV/raw fallback, manifest, hash/bytes 검증 값을 출력한다.
+- [x] `image list` 또는 `asset list --type png`로 PNG 노드 경로/크기/format/pages를 먼저 찾을 수 있게 한다.
+- [x] `image export` 전용 명령을 추가한다.
+  - Windows에서는 기존 `Wz_Png.ExtractPng()` 기반 PNG 저장 경로를 재사용한다.
+  - macOS/Linux에서는 CLI cross-platform PNG writer로 common texture format을 직접 저장하고, 미지원 포맷은 명확한 진단을 반환한다.
+- [x] macOS PNG 직접 저장 가능성을 별도 조사한다.
+  - 코어 로직 변경 최소화를 우선하고, CLI 전용 PNG writer로 `ARGB4444`, `ARGB8888`, `ARGB1555`, `RGB565`, `DXT3`, `DXT5`, `A8`, `RGBA1010102`, `BC7`를 우선 지원한다.
+- [x] split `Data` layout 경로 차이를 문서화한다.
+  - Windows 예: `Data\Mob_Canvas`
+  - macOS/CrossOver 예: `Data/Mob/_Canvas`
+- [ ] 실제 WZ 샘플 기반 media golden 검증을 추가한다.
+  - PNG dimensions/hash
+  - sound bytes/hash
+  - recursive export manifest
+
 완료 기준:
 
 - [ ] 이미지 노드를 PNG 파일로 추출 가능
 - [ ] 사운드 노드를 파일로 추출 가능
 - [ ] export 실패 시 실패 노드 목록을 JSON으로 받을 수 있음
+
+### Phase 5B. macOS/CrossOver Item/String 패키지 로딩 지원
+
+배경:
+
+- macOS/CrossOver 설치의 `Data/Item`, `Data/Item/Cash`, `Data/Item/Cash/_Canvas`, `Data/Item/Consume`, `Data/Item/Pet`, `Data/String`은 현재 `WzLoadContext.Load(...)`에서 `The file is not a valid wz file.`로 실패한다.
+- 같은 설치에서도 `Data/Mob/_Canvas`와 `Data/Character/Cap`은 정상 로딩된다.
+- 헤더 증거:
+  - 정상 로딩 예: `Data/Mob/_Canvas/_Canvas_000.wz` = `PKG1...`
+  - 실패 예: `Data/Item/Cash/_Canvas/_Canvas_000.wz` = `c3 08 31 86 ...`
+  - 실패 예: `Data/String/String_000.wz` = `07 79 dd be ...`
+- 이 문제 때문에 `미라클 큐브`, `호신부적`, `운명의 수레바퀴`, `보따리상인 묘묘(7일)`, `고성능 순간이동의 돌`, `MSW 아바타 코디 이용권(30일)`, `펫`, `고성능 확성기`, `아이템 확성기` 같은 Cash/Item 아이콘의 `info/icon` PNG를 macOS 로컬 데이터에서 추출하지 못한다.
+
+작업:
+
+- [ ] 실패 파일의 컨테이너/암호화/압축 포맷을 식별한다.
+  - `Item/Cash/Cash_000.wz`
+  - `Item/Cash/_Canvas/_Canvas_000.wz`
+  - `Item/Consume/Consume_000.wz`
+  - `Item/Pet/Pet_000.wz`
+  - `String/String_000.wz`
+- [ ] 기존 `Wz_Structure.LoadFile`이 `PKG1`만 유효 WZ로 보는 경로와 새 패키지 포맷의 차이를 정리한다.
+- [ ] GUI 또는 upstream WzComparerR2 계열에서 같은 포맷을 읽는 코드가 있는지 조사한다.
+- [ ] 코어 로직 변경 범위를 정한다.
+  - 최소안: CLI 전용 pre-decode/adapter로 기존 WzLib 입력에 맞춘다.
+  - 중간안: WzLib에 새 package reader를 추가하되 기존 `PKG1` 경로는 건드리지 않는다.
+  - 보류안: Windows에서 추출 가능한 데이터만 공식 지원하고 macOS Item/String은 제한으로 문서화한다.
+- [ ] `info/tree/search/image list/image export`가 새 Item/String 패키지에서 동작하게 한다.
+- [ ] 이름 기반 아이템 아이콘 추출 플로우를 추가한다.
+  - `String`에서 item name -> item id 조회
+  - `Item`/`_Canvas`에서 `<id>.img/info/icon` 또는 `iconRaw` 조회
+  - `image export`로 PNG 저장
+- [ ] 요청 샘플 9개 아이템의 실제 `info/icon` PNG를 `.test` 아래에 생성한다.
+- [ ] 실패 시 `not valid wz` 대신 “지원되지 않는 macOS package format” 진단과 대상 파일 헤더를 JSON으로 보고한다.
+
+완료 기준:
+
+- [ ] macOS/CrossOver `Data/Item/Cash/_Canvas`를 CLI에서 로딩할 수 있다.
+- [ ] macOS/CrossOver `Data/String`에서 한국어 아이템 이름 검색이 가능하다.
+- [ ] 위 9개 아이템 중 확인 가능한 항목의 실제 WZ icon PNG가 추출된다.
+- [ ] Windows 기존 `Data\Item`/`Data\String` 동작이 깨지지 않는다.
+
+### Phase 5C. CLI Program.cs 행동 유지형 리팩토링
+
+배경:
+
+- `WzComparerR2.Cli/Program.cs`가 8천 줄을 넘어 CLI 라우팅, 인자 파싱, WZ 로딩, repository, media export, DTO, plugin/update/patch 로직이 한 파일에 누적되어 있다.
+- Phase 5B의 Item/String 패키지 로딩은 `WzLoadContext`, `CliWzRepository`, `MediaAssetFinder`, `ExtractExporter`를 함께 건드릴 가능성이 높아, 먼저 파일 경계를 정리해야 변경 리스크와 토큰 사용량을 줄일 수 있다.
+- 현재 목표는 기능 변경이 아니라 동작을 유지한 채 읽기 쉬운 파일 단위로 이동하는 것이다.
+
+작업:
+
+- [x] 리팩토링 전 `WzComparerR2.Cli.Tests` Release harness를 통과시켜 현재 동작을 잠근다.
+- [x] `ParsedArgs`를 별도 파일로 분리한다.
+- [x] 공통 CLI context/plugin 타입을 별도 파일로 분리한다.
+- [x] `WzLoadContext`, `WzLoadOptions`, `CliWzRepository` 계층을 별도 파일로 분리한다.
+- [x] media/image/sound 탐색과 export 계층을 별도 파일로 분리한다.
+- [x] domain info 탐색/DTO 계층을 별도 파일로 분리한다.
+- [x] 공통 WZ node/search DTO와 path helper를 별도 파일로 분리한다.
+- [x] compare/patch DTO와 helper 타입을 별도 파일로 분리한다.
+- [x] config store/DTO 계층을 별도 파일로 분리한다.
+- [x] update DTO/client 계층을 별도 파일로 분리한다.
+- [x] lua/network DTO와 실행 helper를 별도 파일로 분리한다.
+- [x] animation frame/GIF export DTO와 helper를 별도 파일로 분리한다.
+- [x] skill DTO와 writer/helper 타입을 기능별 파일로 분리한다.
+- [x] map/avatar DTO와 render plan 타입을 기능별 파일로 분리한다.
+- [x] help/plugin option helper를 `Program.Help.cs` partial 파일로 분리한다.
+- [x] patch 명령 실행 흐름을 `Program.Patch.cs` partial 파일로 분리한다.
+- [x] compare 명령 실행 흐름과 node diff helper를 `Program.Compare.cs` partial 파일로 분리한다.
+- [x] dump/extract/media 명령 실행 흐름을 `Program.Media.cs` partial 파일로 분리한다.
+- [x] domain/skill/animate/avatar/map/lua/network 명령 실행 흐름을 `Program.DomainCommands.cs` partial 파일로 분리한다.
+- [x] update/config/plugin 명령 실행 흐름을 `Program.AppCommands.cs` partial 파일로 분리한다.
+- [x] `Program.cs`는 `Main`, command routing, 공통 helper 중심으로 축소한다.
+- [x] 커밋 전 CLI 생성 파일을 `Commands/`, `Infrastructure/`, `Wz/`, `Domain/`, `Media/`, `Models/` 폴더로 정리한다.
+- [x] 각 분리 단계 후 build/test를 실행하고 `git diff --check`를 확인한다.
+
+완료 기준:
+
+- [x] `Program.cs`가 command routing 중심으로 축소된다.
+- [x] 현재 분리 범위에서 CLI 공개 동작과 JSON 계약이 변경되지 않는다.
+- [x] `dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Release --no-restore` 통과
+- [x] `dotnet run --project WzComparerR2.Cli.Tests/WzComparerR2.Cli.Tests.csproj -c Release --no-restore -- --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll` 통과
+- [x] `git diff --check` 통과
 
 ## Phase 6. 비교 기능 CLI화
 

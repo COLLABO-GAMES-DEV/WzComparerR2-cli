@@ -22,6 +22,8 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("verbose adds exception details", () => VerboseAddsExceptionDetails(runner)),
                 TestCase.Create("extended domain help lists info commands", () => ExtendedDomainHelpListsInfoCommands(runner)),
                 TestCase.Create("skill help lists repository inputs", () => SkillHelpListsRepositoryInputs(runner)),
+                TestCase.Create("media help lists dedicated commands", () => MediaHelpListsDedicatedCommands(runner)),
+                TestCase.Create("media commands validate required inputs", () => MediaCommandsValidateRequiredInputs(runner)),
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
                 TestCase.Create("missing input returns not found", () => MissingInputReturnsNotFound(runner)),
                 TestCase.Create("invalid regex returns usage error before WZ load", () => InvalidRegexReturnsUsageError(runner)),
@@ -67,6 +69,8 @@ namespace WzComparerR2.Cli.Tests
             AssertExitCode(result, 0);
             AssertContains(result.Stdout, "wcr2 info <file-or-dir>");
             AssertContains(result.Stdout, "wcr2 compare <old-file-or-dir> <new-file-or-dir>");
+            AssertContains(result.Stdout, "wcr2 sound list <file-or-dir>");
+            AssertContains(result.Stdout, "wcr2 image export <file-or-dir>");
             AssertContains(result.Stdout, "wcr2 plugin list|commands");
         }
 
@@ -119,6 +123,30 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "--skill-wz <path>");
             AssertContains(result.Stdout, "wcr2 skill full [<skill-wz-file-or-dir>]");
             AssertContains(result.Stdout, "UnresolvedPlaceholders");
+        }
+
+        private static void MediaHelpListsDedicatedCommands(CliRunner runner)
+        {
+            CommandResult sound = runner.Run("sound", "--help");
+            AssertExitCode(sound, 0);
+            AssertContains(sound.Stdout, "wcr2 sound list <file-or-dir>");
+            AssertContains(sound.Stdout, "wcr2 sound export-all <file-or-dir>");
+
+            CommandResult image = runner.Run("image", "--help");
+            AssertExitCode(image, 0);
+            AssertContains(image.Stdout, "wcr2 image list <file-or-dir>");
+            AssertContains(image.Stdout, "System.Drawing PNG path");
+        }
+
+        private static void MediaCommandsValidateRequiredInputs(CliRunner runner)
+        {
+            CommandResult list = runner.Run("sound", "list");
+            AssertExitCode(list, 1);
+            AssertContains(list.Stderr, "Usage: wcr2 sound list <file-or-dir>");
+
+            CommandResult export = runner.Run("image", "export", "/no/such.wz", "--path", "x");
+            AssertExitCode(export, 1);
+            AssertContains(export.Stderr, "image export requires --out <output-dir>.");
         }
 
         private static void UnknownCommandReturnsUsageError(CliRunner runner)

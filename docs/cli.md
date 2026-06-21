@@ -28,6 +28,12 @@ wcr2 search <file-or-dir> --match-path <glob-or-regex> [--type <type>] [--json]
 wcr2 compare <old-file-or-dir> <new-file-or-dir> [--path <wz-path>] [--type added|removed|changed] [--format json|markdown] [--out <path>] [--json]
 wcr2 dump <file-or-dir> --path <wz-path> [--format json|xml|raw] [--out <path>]
 wcr2 extract <file-or-dir> --path <wz-path> --out <output-dir> [--recursive] [--manifest <json>] [--json]
+wcr2 sound list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
+wcr2 sound export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
+wcr2 sound export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
+wcr2 image list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
+wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
+wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 skill info [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n|max>] [--format json|xml|text] [--out <path>]
 wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
@@ -103,6 +109,10 @@ wcr2 dump Base.wz --path String --format xml --out out/string.xml
 wcr2 extract Base.wz --path String --out out/string --recursive
 wcr2 extract Base.wz --path String --out out/string --recursive --manifest out/string/manifest.json
 wcr2 extract Base.wz --path String --out out/string.xml --format xml
+wcr2 sound list Data/Sound --max-results 20 --json
+wcr2 sound export Data/Sound --path AchievementEff.img/GradeUp --out out/sound --manifest out/sound/manifest.json --json
+wcr2 image list Data/Mob_Canvas --path 0100100.img --max-results 20 --json
+wcr2 image export Data/Mob_Canvas --path 0100100.img/stand/0 --out out/image --manifest out/image/manifest.json --json
 wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json
 wcr2 skill full Data/Skill --id 11001025 --string-wz Data/String --format json --out out/skill-11001025.json
 wcr2 skill full --data-dir Data --id 1001008 --format json --out out/skill-1001008.json
@@ -229,9 +239,16 @@ Snapshot and real-client verification rules are documented in [`docs/cli-test-st
 
 Real Maple clients can use a split `Data` layout.
 If `String.wz`, `Map.wz`, `Skill.wz`, or similar root files load but do not contain the expected path/id, try the data-bearing folder or shard instead, for example `Data\String`, `Data\Skill`, `Data\Character\Cap`, `Data\Map\Map\Map1\Map1_000.wz`, or `Data\Mob_Canvas`.
+On macOS/CrossOver installs, the same canvas data may appear under split folders such as `Data/Mob/_Canvas`.
 
 `extract`는 PNG, sound, raw data, video blob, scalar 값을 자동으로 파일로 내보냅니다.
 컨테이너 노드를 선택하면 `--recursive`가 필요합니다.
+`sound list`와 `image list`는 실제 export 전에 경로와 메타데이터를 찾는 전용 명령입니다.
+`sound export`는 기존 `Wz_Sound.ExtractSound()` 경로를 재사용해 MP3, PCM WAV, raw fallback 파일을 씁니다.
+`image export`는 Windows에서 기존 `Wz_Png.ExtractPng()`/`System.Drawing` PNG 저장 경로를 재사용합니다.
+macOS/Linux에서는 CLI의 cross-platform PNG writer가 `ARGB4444`, `ARGB8888`, `ARGB1555`, `RGB565`, `DXT3`, `DXT5`, `A8`, `RGBA1010102`, `BC7` 같은 일반 WZ texture format을 직접 저장합니다.
+아직 지원하지 않는 texture format은 명확한 진단을 반환하며, 이 경우 `image list` 메타데이터 조회는 계속 사용할 수 있습니다.
+export manifest의 각 파일 항목에는 `Bytes`와 `Sha256`이 포함됩니다.
 
 `skill/item/gear/map info`는 먼저 데이터 WZ에서 id 노드를 찾고, `--string-wz`가 있으면 String.wz의 이름/설명 값을 추가합니다.
 `--data-dir <Data>`를 주면 `Skill`, `Item`, `Character`, `Map`, `Mob`, `Npc`, `Quest`와 sibling `String` 후보를 자동으로 사용합니다. JSON에는 `DataInputPath`, `StringInputPath`, 후보 목록이 포함됩니다.
