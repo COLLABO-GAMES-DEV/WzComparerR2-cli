@@ -247,31 +247,37 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 
 작업:
 
-- [ ] 실패 파일의 컨테이너/암호화/압축 포맷을 식별한다.
+- [x] 실패 파일의 컨테이너/암호화/압축 포맷을 식별한다.
   - `Item/Cash/Cash_000.wz`
   - `Item/Cash/_Canvas/_Canvas_000.wz`
   - `Item/Consume/Consume_000.wz`
   - `Item/Pet/Pet_000.wz`
   - `String/String_000.wz`
+  - 2026-06-25 확인: Kagamia upstream의 KMST1202 150-byte randomized PKG2 header와 일치한다.
 - [x] 기존 `Wz_Structure.LoadFile`이 지원하는 헤더 경로와 새 패키지 포맷의 차이를 정리한다.
-- [ ] GUI 또는 upstream WzComparerR2 계열에서 같은 포맷을 읽는 코드가 있는지 조사한다.
-- [ ] 코어 로직 변경 범위를 정한다.
+- [x] GUI 또는 upstream WzComparerR2 계열에서 같은 포맷을 읽는 코드가 있는지 조사한다.
+  - Kagamia master의 KMST1202 64-bit PKG2 header/read path를 기준으로 최소 이식했다.
+- [x] 코어 로직 변경 범위를 정한다.
   - 최소안: CLI 전용 pre-decode/adapter로 기존 WzLib 입력에 맞춘다.
-  - 중간안: WzLib에 새 package reader를 추가하되 기존 `PKG1` 경로는 건드리지 않는다.
+  - 중간안: WzLib에 새 package reader를 추가하되 기존 `PKG1` 경로는 건드리지 않는다. 선택됨.
   - 보류안: Windows에서 추출 가능한 데이터만 공식 지원하고 macOS Item/String은 제한으로 문서화한다.
-- [ ] `info/tree/search/image list/image export`가 새 Item/String 패키지에서 동작하게 한다.
+- [x] `info/tree/search/image list/image export`가 새 Item/String 패키지에서 동작하게 한다.
+  - `String_000.wz` info/search, `Cash_000.wz` tree, `Cash/_Canvas` image list/export 검증.
 - [ ] 이름 기반 아이템 아이콘 추출 플로우를 추가한다.
   - `String`에서 item name -> item id 조회
   - `Item`/`_Canvas`에서 `<id>.img/info/icon` 또는 `iconRaw` 조회
   - `image export`로 PNG 저장
 - [ ] 요청 샘플 9개 아이템의 실제 `info/icon` PNG를 `.test` 아래에 생성한다.
+  - 확인 가능한 7개 생성: `.test/wcr2-requested-item-icons-kmst1202-20260625`
+  - `MSW 아바타 코디 이용권(30일)`은 현재 `String_000.wz` 검색 결과 없음.
+  - `펫`은 단일 exact item name이 아니라 카테고리/묶음명으로 보여 ID 확정 필요.
 - [x] 실패 시 `not valid wz` 대신 “지원되지 않는 macOS package format” 진단과 대상 파일 헤더를 JSON으로 보고한다.
 
 완료 기준:
 
-- [ ] macOS/CrossOver `Data/Item/Cash/_Canvas`를 CLI에서 로딩할 수 있다.
-- [ ] macOS/CrossOver `Data/String`에서 한국어 아이템 이름 검색이 가능하다.
-- [ ] 위 9개 아이템 중 확인 가능한 항목의 실제 WZ icon PNG가 추출된다.
+- [x] macOS/CrossOver `Data/Item/Cash/_Canvas`를 CLI에서 로딩할 수 있다.
+- [x] macOS/CrossOver `Data/String`에서 한국어 아이템 이름 검색이 가능하다.
+- [x] 위 9개 아이템 중 확인 가능한 항목의 실제 WZ icon PNG가 추출된다.
 - [ ] Windows 기존 `Data\Item`/`Data\String` 동작이 깨지지 않는다.
 
 ### Phase 5C. CLI Program.cs 행동 유지형 리팩토링

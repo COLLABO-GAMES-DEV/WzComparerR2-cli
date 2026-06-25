@@ -373,6 +373,7 @@ namespace WzComparerR2.Cli
     internal sealed class WzLoadDiagnostic
     {
         private static readonly int[] Pkg2RandomHeaderDataSizeOffsets = { 0x15, 0x19, 0x39, 0x41 };
+        private static readonly int[] Pkg2RandomHeader64DataSizeOffsets = { 0x12, 0x09, 0x02, 0x95 };
 
         public string Path { get; set; }
         public string FileName { get; set; }
@@ -386,6 +387,9 @@ namespace WzComparerR2.Cli
         public long ExpectedPkg2RandomDataSize { get; set; }
         public long CurrentPkg2RandomDataSizeProbe { get; set; }
         public bool CurrentPkg2RandomDataSizeMatches { get; set; }
+        public long ExpectedPkg2RandomHeader64DataSize { get; set; }
+        public long CurrentPkg2RandomHeader64DataSizeProbe { get; set; }
+        public bool CurrentPkg2RandomHeader64DataSizeMatches { get; set; }
         public string Note { get; set; }
 
         public static WzLoadDiagnostic FromPath(string path, Exception loadException)
@@ -398,7 +402,7 @@ namespace WzComparerR2.Cli
             try
             {
                 var info = new FileInfo(path);
-                int bytesToRead = (int)Math.Min(80, info.Length);
+                int bytesToRead = (int)Math.Min(150, info.Length);
                 byte[] header = new byte[bytesToRead];
                 using (var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
@@ -421,6 +425,12 @@ namespace WzComparerR2.Cli
                     : -1;
                 bool currentPkg2RandomMatch = expectedPkg2DataSize >= 0
                     && probedPkg2DataSize == expectedPkg2DataSize;
+                long expectedPkg2Header64DataSize = info.Length >= 150 ? info.Length - 150 : -1;
+                long probedPkg2Header64DataSize = header.Length >= 150
+                    ? GatherAsUInt32(header, Pkg2RandomHeader64DataSizeOffsets)
+                    : -1;
+                bool currentPkg2Header64RandomMatch = expectedPkg2Header64DataSize >= 0
+                    && probedPkg2Header64DataSize == expectedPkg2Header64DataSize;
 
                 var diagnostic = new WzLoadDiagnostic
                 {
@@ -433,7 +443,10 @@ namespace WzComparerR2.Cli
                     HeaderHex = ToHex(header, 0, header.Length),
                     ExpectedPkg2RandomDataSize = expectedPkg2DataSize,
                     CurrentPkg2RandomDataSizeProbe = probedPkg2DataSize,
-                    CurrentPkg2RandomDataSizeMatches = currentPkg2RandomMatch
+                    CurrentPkg2RandomDataSizeMatches = currentPkg2RandomMatch,
+                    ExpectedPkg2RandomHeader64DataSize = expectedPkg2Header64DataSize,
+                    CurrentPkg2RandomHeader64DataSizeProbe = probedPkg2Header64DataSize,
+                    CurrentPkg2RandomHeader64DataSizeMatches = currentPkg2Header64RandomMatch
                 };
 
                 if (isKnownSignature)
@@ -443,13 +456,18 @@ namespace WzComparerR2.Cli
                 }
                 else if (isWzExtension && info.Length >= 68)
                 {
-                    diagnostic.DetectedFormat = currentPkg2RandomMatch
+                    diagnostic.DetectedFormat = currentPkg2Header64RandomMatch
+                        ? "pkg2-random-header-64"
+                        : currentPkg2RandomMatch
                         ? "pkg2-random-header"
                         : "unsupported-randomized-or-encrypted-wz";
-                    diagnostic.IsUnsupportedPackage = !currentPkg2RandomMatch
+                    diagnostic.IsUnsupportedPackage = !currentPkg2Header64RandomMatch
+                        && !currentPkg2RandomMatch
                         && IsInvalidWzMessage(loadException);
-                    diagnostic.Note = diagnostic.IsUnsupportedPackage
-                        ? "Header does not match PKG1, PKG2, or the currently supported KMST1201 random-header layout. This client may use encrypted or newer package shards."
+                    diagnostic.Note = currentPkg2Header64RandomMatch
+                        ? "Header matches the KMST1202 64-bit PKG2 random-header layout."
+                        : diagnostic.IsUnsupportedPackage
+                        ? "Header does not match PKG1, PKG2, or the currently supported KMST1201/KMST1202 random-header layouts. This client may use encrypted or newer package shards."
                         : "The file does not start with PKG1 or PKG2.";
                 }
                 else

@@ -104,4 +104,29 @@ namespace WzComparerR2.WzLib.Compatibility
             return (this.allNamesUseV2 || isFirstEntry) ? reader.ForceReadPkg2DirString(nodeType, fullpath, true) : reader.ReadStringWDirNameContainer(nodeType, fullpath, pkg1Keys);
         }
     }
+
+    /// <summary>
+    /// 64-bit PKG2: first entry uses a 16-bit length prefix with the PKG2 key, rest use PKG1 string encoding.
+    /// </summary>
+    internal sealed class Pkg2KmstDirStringReader64 : IPkg2DirStringReader
+    {
+        public Pkg2KmstDirStringReader64(IWzDecrypter firstNameKey, IWzDecrypter pkg1Keys)
+        {
+            this.firstNameKey = firstNameKey;
+            this.pkg1Keys = pkg1Keys;
+        }
+
+        private readonly IWzDecrypter firstNameKey;
+        private readonly IWzDecrypter pkg1Keys;
+
+        public string ReadName(WzBinaryReader reader, bool isFirstEntry)
+        {
+            return isFirstEntry ? reader.ReadPkg2DirStringV2(firstNameKey) : reader.ReadString(pkg1Keys);
+        }
+
+        public string ForceReadName(WzBinaryReader reader, bool isFirstEntry, byte nodeType, string fullpath)
+        {
+            return this.ReadName(reader, isFirstEntry);
+        }
+    }
 }

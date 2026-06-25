@@ -27,6 +27,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
                 TestCase.Create("missing input returns not found", () => MissingInputReturnsNotFound(runner)),
                 TestCase.Create("unsupported wz package emits json diagnostic", () => UnsupportedWzPackageEmitsJsonDiagnostic(runner)),
+                TestCase.Create("kmst1202 random header emits json diagnostic", () => Kmst1202RandomHeaderEmitsJsonDiagnostic(runner)),
                 TestCase.Create("invalid regex returns usage error before WZ load", () => InvalidRegexReturnsUsageError(runner)),
                 TestCase.Create("avatar inspect emits stable json", () => AvatarInspectEmitsStableJson(runner)),
                 TestCase.Create("avatar render dry-run emits blocked plan", () => AvatarRenderDryRunEmitsBlockedPlan(runner)),
@@ -189,6 +190,40 @@ namespace WzComparerR2.Cli.Tests
                     AssertEqual("00 01 02 03", diagnostic.GetProperty("First4Hex").GetString(), "first bytes");
                     AssertEqual(false, diagnostic.GetProperty("CurrentPkg2RandomDataSizeMatches").GetBoolean(), "pkg2 random size probe");
                 }
+            }
+        }
+
+        private static void Kmst1202RandomHeaderEmitsJsonDiagnostic(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string input = Path.Combine(temp.Path, "Kmst1202_000.wz");
+                byte[] bytes = Enumerable.Range(0, 150).Select(i => (byte)((i * 37) & 0xff)).ToArray();
+                SetUInt32AtGatherOffsets(bytes, new[] { 0x12, 0x09, 0x02, 0x95 }, 0);
+                File.WriteAllBytes(input, bytes);
+
+                CommandResult result = runner.Run("info", input, "--json");
+                AssertExitCode(result, 3);
+                AssertEqual(string.Empty, result.Stdout, "kmst1202 diagnostic stdout");
+                using (JsonDocument doc = JsonDocument.Parse(result.Stderr))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("wz-load-failed", root.GetProperty("Error").GetString(), "load error code");
+
+                    JsonElement diagnostic = root.GetProperty("Diagnostic");
+                    AssertEqual("Kmst1202_000.wz", diagnostic.GetProperty("FileName").GetString(), "diagnostic file name");
+                    AssertEqual("pkg2-random-header-64", diagnostic.GetProperty("DetectedFormat").GetString(), "diagnostic format");
+                    AssertEqual(true, diagnostic.GetProperty("CurrentPkg2RandomHeader64DataSizeMatches").GetBoolean(), "pkg2 random 64 size probe");
+                    AssertEqual(false, diagnostic.GetProperty("IsUnsupportedPackage").GetBoolean(), "unsupported package marker");
+                }
+            }
+        }
+
+        private static void SetUInt32AtGatherOffsets(byte[] bytes, int[] offsets, uint value)
+        {
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                bytes[offsets[i]] = (byte)(value >> (8 * i));
             }
         }
 

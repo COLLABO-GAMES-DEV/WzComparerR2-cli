@@ -240,9 +240,10 @@ Snapshot and real-client verification rules are documented in [`docs/cli-test-st
 Real Maple clients can use a split `Data` layout.
 If `String.wz`, `Map.wz`, `Skill.wz`, or similar root files load but do not contain the expected path/id, try the data-bearing folder or shard instead, for example `Data\String`, `Data\Skill`, `Data\Character\Cap`, `Data\Map\Map\Map1\Map1_000.wz`, or `Data\Mob_Canvas`.
 On macOS/CrossOver installs, the same canvas data may appear under split folders such as `Data/Mob/_Canvas`.
-Some macOS/CrossOver shards such as `Data/Item/Cash/Cash.wz`, `Data/Item/Cash/Cash_000.wz`, `Data/Item/Cash/_Canvas/_Canvas_000.wz`, and `Data/String/String_000.wz` may use a newer randomized or encrypted package header that is not yet readable by WzLib.
-When these fail with `--json`, the CLI reports exit code `3` and writes a structured error JSON to stderr with the first header bytes, file size, and the current PKG2 random-header probe result.
-This is diagnostic support only; item/string loading for those shards still needs a package reader or pre-decode adapter.
+Current KMS-style macOS/CrossOver shards such as `Data/String/String_000.wz`, `Data/Item/Cash/Cash_000.wz`, and `Data/Item/Cash/_Canvas/_Canvas_000.wz` can use the KMST1202 150-byte randomized PKG2 header. The CLI/WzLib reader recognizes this layout and reports `WzVersion: 1202` for those files.
+When loading still fails with `--json`, the CLI reports exit code `3` and writes a structured error JSON to stderr with the first header bytes, file size, and PKG2 random-header probe results including `CurrentPkg2RandomHeader64DataSizeMatches`.
+For searches inside `.img` nodes, pass `--extract-images`, for example `wcr2 search Data/String/String_000.wz --value "미라클 큐브" --extract-images --json`.
+Cash icons may be split across `_Canvas` shards; for example item `5062000` uses `Data/Item/Cash/_Canvas/_Canvas_001.wz` path `0506.img/05062000/info/icon`.
 
 `extract`는 PNG, sound, raw data, video blob, scalar 값을 자동으로 파일로 내보냅니다.
 컨테이너 노드를 선택하면 `--recursive`가 필요합니다.
