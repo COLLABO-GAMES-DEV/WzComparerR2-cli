@@ -24,6 +24,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("item help lists icon export command", () => ItemHelpListsIconExportCommand(runner)),
                 TestCase.Create("item icon validates required inputs", () => ItemIconValidatesRequiredInputs(runner)),
                 TestCase.Create("skill help lists repository inputs", () => SkillHelpListsRepositoryInputs(runner)),
+                TestCase.Create("skill sprite validates required inputs", () => SkillSpriteValidatesRequiredInputs(runner)),
                 TestCase.Create("media help lists dedicated commands", () => MediaHelpListsDedicatedCommands(runner)),
                 TestCase.Create("media commands validate required inputs", () => MediaCommandsValidateRequiredInputs(runner)),
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
@@ -146,7 +147,25 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "--data-dir <dir>");
             AssertContains(result.Stdout, "--skill-wz <path>");
             AssertContains(result.Stdout, "wcr2 skill full [<skill-wz-file-or-dir>]");
+            AssertContains(result.Stdout, "wcr2 skill sprite [<skill-wz-file-or-dir>]");
+            AssertContains(result.Stdout, "--canvas-wz <path>");
+            AssertContains(result.Stdout, "--branch <list>");
             AssertContains(result.Stdout, "UnresolvedPlaceholders");
+        }
+
+        private static void SkillSpriteValidatesRequiredInputs(CliRunner runner)
+        {
+            CommandResult missingId = runner.Run("skill", "sprite", "--out", "sprites");
+            AssertExitCode(missingId, 1);
+            AssertContains(missingId.Stderr, "skill sprite requires --id <id>.");
+
+            CommandResult missingOut = runner.Run("skill", "sprite", "--id", "1121008");
+            AssertExitCode(missingOut, 1);
+            AssertContains(missingOut.Stderr, "skill sprite requires --out <output-dir>.");
+
+            CommandResult missingInput = runner.Run("skill", "sprite", "--id", "1121008", "--out", "sprites");
+            AssertExitCode(missingInput, 1);
+            AssertContains(missingInput.Stderr, "skill full requires <skill-wz-file-or-dir>, --skill-wz <path>, or --data-dir <dir>.");
         }
 
         private static void MediaHelpListsDedicatedCommands(CliRunner runner)

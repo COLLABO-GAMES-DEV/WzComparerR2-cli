@@ -91,6 +91,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 skill info [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
+            Console.WriteLine("  wcr2 skill sprite [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--branch icon,effect,hit] [--json]");
             Console.WriteLine("  wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 item icon [<item-or-data-dir>] --name <exact-name>|--id <id> --out <dir> [--data-dir <dir>] [--string-wz <file-or-dir>] [--canvas-wz <file-or-dir>] [--category cash|consume|install|etc|pet] [--json]");
             Console.WriteLine("  wcr2 gear info [<wz-file-or-dir>] --id <id> [--character-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
@@ -148,6 +149,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json");
             Console.WriteLine("  wcr2 skill full Data/Skill --id 3001004 --string-wz Data/String --format json");
             Console.WriteLine("  wcr2 skill full --data-dir Data --id 1001008 --format json");
+            Console.WriteLine("  wcr2 skill sprite --data-dir Data --id 1121008 --branch effect,hit --out out/skill-1121008 --json");
             Console.WriteLine("  wcr2 item icon --data-dir Data --name \"미라클 큐브\" --out out/icons --json");
             Console.WriteLine("  wcr2 map portals Map.wz --id 100000000 --json");
             Console.WriteLine("  wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand");
@@ -189,11 +191,15 @@ namespace WzComparerR2.Cli
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 skill info <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             Console.WriteLine("  wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
+            Console.WriteLine("  wcr2 skill sprite [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--branch icon,effect,hit] [--json]");
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --allow-string-only  Emit string metadata when the skill id exists only in String.wz.");
             Console.WriteLine("  --data-dir <dir>     Add split Data layout candidates such as <dir>/Skill and <dir>/String.");
             Console.WriteLine("  --skill-wz <path>    Add or replace the skill WZ file/folder input candidate.");
+            Console.WriteLine("  --canvas-wz <path>   Override or add Skill/_Canvas input used to resolve _outlink sprite pixels.");
+            Console.WriteLine("  --branch <list>      Export icon/effect/hit or a comma-separated branch path such as effect,hit/0.");
+            Console.WriteLine("  --direct-only        Export only pixels present in the skill node and do not follow _outlink.");
             Console.WriteLine("  JSON/XML/text output includes SourceProfile, LinkerStatus, and UnresolvedPlaceholders.");
         }
 
@@ -224,6 +230,7 @@ namespace WzComparerR2.Cli
             if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
             {
                 Console.WriteLine("  wcr2 skill full [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text]");
+                Console.WriteLine("  wcr2 skill sprite [<wz-file-or-dir>] --id <id> --out <dir> [--canvas-wz <file-or-dir>] [--branch icon,effect,hit] [--json]");
             }
         }
 

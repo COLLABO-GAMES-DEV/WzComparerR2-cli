@@ -22,6 +22,10 @@ namespace WzComparerR2.Cli
             {
                 return RunSkillFull(args);
             }
+            if (subCommand == "sprite" || subCommand == "sprites")
+            {
+                return RunSkillSprite(args);
+            }
 
             throw new UsageException("Unknown skill command: " + args.Positionals[0]);
         }
@@ -86,6 +90,41 @@ namespace WzComparerR2.Cli
                 WriteSkillFullOutput(dto, format, output);
             }
 
+            return ExitSuccess;
+        }
+
+        private static int RunSkillSprite(ParsedArgs args)
+        {
+            string id = args.GetValue("id");
+            if (string.IsNullOrEmpty(id))
+            {
+                throw new UsageException("skill sprite requires --id <id>.");
+            }
+
+            string output = args.GetValue("out") ?? args.GetValue("output");
+            if (string.IsNullOrEmpty(output))
+            {
+                throw new UsageException("skill sprite requires --out <output-dir>.");
+            }
+
+            string input = ResolveSkillFullInput(args);
+            var options = SkillSpriteExportOptions.FromArgs(args);
+            SkillSpriteExportResultDto result = SkillSpriteExporter.Export(input, id, output, args, options);
+
+            WriteOutput(result, args.HasFlag("json"), writer =>
+            {
+                writer.WriteLine("Skill sprite export: " + result.SkillId);
+                writer.WriteLine("Exported files: " + result.ExportedFileCount);
+                writer.WriteLine("Output: " + result.OutputDirectory);
+                foreach (var branch in result.Branches)
+                {
+                    writer.WriteLine("- " + branch.Branch + "\t" + branch.Status + "\t" + branch.ExportedFileCount);
+                    if (!string.IsNullOrEmpty(branch.Diagnostic))
+                    {
+                        writer.WriteLine("  " + branch.Diagnostic);
+                    }
+                }
+            });
             return ExitSuccess;
         }
 

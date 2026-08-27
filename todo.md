@@ -337,6 +337,31 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `dotnet run --project WzComparerR2.Cli.Tests/WzComparerR2.Cli.Tests.csproj -c Release --no-restore -- --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll` 통과
 - [x] `git diff --check` 통과
 
+### Phase 5D. 스킬 스프라이트 `_outlink` 추출 인터페이스
+
+배경:
+
+- `Skill/112.img/skill/<id>` 같은 스킬 메타데이터 노드는 `icon`, `effect`, `hit`에 1x1 stub PNG를 들고, 실제 픽셀은 `_outlink = Skill/_Canvas/...`로 분리될 수 있다.
+- 일반 `image export`는 선택한 노드의 현재 PNG만 추출하므로, 사용자가 스킬 ID 기준으로 실제 스프라이트를 뽑으려면 `_outlink` 대상 Canvas 입력을 직접 찾아야 했다.
+- 기존 WzComparer/WzLib 엔진은 유지하고 CLI 레이어에서만 outlink 해석과 Canvas 후보 순회를 제공하는 것이 가장 안전하다.
+
+작업:
+
+- [x] `skill sprite [<skill-wz>] --id <id> --out <dir>` 명령을 추가한다.
+- [x] `--branch icon,effect,hit` 또는 `--branch effect,hit/0`처럼 스킬 하위 branch를 선택할 수 있게 한다.
+- [x] 스킬 branch의 첫 `_outlink`를 기준으로 branch 대상 경로를 계산한다.
+- [x] `--canvas-wz <path>` 명시 입력과 `--data-dir <Data>` 기반 `Data/Skill/_Canvas`, `Data/Packs/Skill*.ms` 후보를 순회한다.
+- [x] outlink 대상 context가 살아있는 동안 PNG export를 수행해 closed stream 문제를 피한다.
+- [x] JSON에 `Status`, `OutlinkPath`, `ResolvedPath`, `TriedCanvasInputs`, 파일 `Bytes/Sha256`을 출력한다.
+- [x] fixture-free CLI 테스트에 도움말/필수 인자 검증을 추가한다.
+- [x] macOS/CrossOver 실클라에서 `1121008`의 `icon`, `effect`, `hit/0` 실제 PNG 추출을 검증한다.
+
+완료 기준:
+
+- [x] 기존 WzLib/GUI 엔진 수정 없이 CLI 계층만으로 스킬 스프라이트 export 인터페이스가 생긴다.
+- [x] `_outlink` stub이 실제 Canvas PNG로 해석되면 1x1이 아닌 실제 치수의 PNG가 생성된다.
+- [x] Canvas 입력을 읽을 수 없거나 경로가 없으면 branch별 진단을 JSON으로 받을 수 있다.
+
 ## Phase 6. 비교 기능 CLI화
 
 - [ ] `WzComparerR2/Comparer/` 구조를 분석한다.

@@ -36,6 +36,7 @@ wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest 
 wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 skill info [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n|max>] [--format json|xml|text] [--out <path>]
+wcr2 skill sprite [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--branch icon,effect,hit] [--json]
 wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 item icon [<item-or-data-dir>] --name <exact-name>|--id <id> --out <dir> [--data-dir <dir>] [--string-wz <file-or-dir>] [--canvas-wz <file-or-dir>] [--category cash|consume|install|etc|pet] [--json]
 wcr2 gear info [<wz-file-or-dir>] --id <id> [--character-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
@@ -118,6 +119,7 @@ wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json
 wcr2 skill full Data/Skill --id 11001025 --string-wz Data/String --format json --out out/skill-11001025.json
 wcr2 skill full --data-dir Data --id 1001008 --format json --out out/skill-1001008.json
 wcr2 skill full Data/Skill --id 1001004 --string-wz Data/String --allow-string-only --format xml --out out/power-strike.xml
+wcr2 skill sprite --data-dir Data --id 1121008 --branch effect,hit --out out/skill-1121008 --json
 wcr2 item info Item.wz --id 2000000 --string-wz String.wz
 wcr2 item icon --data-dir Data --name "미라클 큐브" --out out/icons/miracle-cube --json
 wcr2 item icon --data-dir Data --name "보따리상인 묘묘(7일)" --out out/icons/myomyo-7day --json
@@ -271,6 +273,11 @@ export manifest의 각 파일 항목에는 `Bytes`와 `Sha256`이 포함됩니�
 `--format json|xml|text`와 `--out <path>`를 지원합니다.
 실제 skill node가 없고 `String/Skill.img` 문자열만 있는 ID는 기본적으로 실패하지만, `--allow-string-only`를 주면 `Mode: string-only` 결과로 이름/설명/문자열 속성을 확인할 수 있습니다.
 툴팁 PNG 렌더링은 아직 포함하지 않으며 Windows-only 후속 단계로 분리되어 있습니다.
+
+`skill sprite`는 스킬 ID 기준으로 `icon`, `effect`, `hit` 같은 스프라이트 branch를 PNG로 내보냅니다.
+스킬 메타데이터 안의 PNG가 `_outlink`가 달린 1x1 stub이면, CLI는 `_outlink` 값을 읽고 `--canvas-wz` 또는 `--data-dir <Data>`에서 찾은 `Data/Skill/_Canvas`와 `Data/Packs/Skill*.ms` 후보를 순회해 실제 Canvas 노드를 해석합니다.
+`--branch effect,hit/0`처럼 쉼표로 여러 branch를 지정할 수 있고, 출력 JSON에는 branch별 `Status`, `OutlinkPath`, `ResolvedPath`, `TriedCanvasInputs`, 추출된 파일의 `Bytes`와 `Sha256`이 포함됩니다.
+최신 클라이언트의 특정 Canvas shard가 현재 WzLib에서 읽히지 않으면 명령은 엔진을 우회해 복호화하지 않고 `outlink-not-resolved`와 로딩 진단을 남깁니다. 이 경우 명시적으로 읽히는 Canvas 파일을 `--canvas-wz`로 넘기거나 WzLib 패키지 포맷 지원을 별도 단계로 확장해야 합니다.
 
 `map objects/portals/life/reactors`는 map `.img` 안의 해당 섹션을 읽어 좌표, id, 이동 대상 같은 scalar property를 JSON으로 내보냅니다.
 `map render --dry-run`은 실제 PNG를 만들지 않고, map id 기반 후보 shard/path, layer/include 옵션, MonoGame headless 렌더링 blocker를 JSON으로 출력합니다.
