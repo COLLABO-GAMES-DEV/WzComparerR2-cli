@@ -263,12 +263,15 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - 보류안: Windows에서 추출 가능한 데이터만 공식 지원하고 macOS Item/String은 제한으로 문서화한다.
 - [x] `info/tree/search/image list/image export`가 새 Item/String 패키지에서 동작하게 한다.
   - `String_000.wz` info/search, `Cash_000.wz` tree, `Cash/_Canvas` image list/export 검증.
-- [ ] 이름 기반 아이템 아이콘 추출 플로우를 추가한다.
-  - `String`에서 item name -> item id 조회
-  - `Item`/`_Canvas`에서 `<id>.img/info/icon` 또는 `iconRaw` 조회
-  - `image export`로 PNG 저장
+- [x] 이름 기반 아이템 아이콘 추출 플로우를 추가한다.
+  - `item icon --name <exact-name>|--id <id> --out <dir>` 구현.
+  - `String`에서 item name -> item id/category 조회.
+  - `Item/<category>/_Canvas`에서 `<group>.img/<id>/info/icon` 또는 `iconRaw` 조회.
+  - `[7일]보따리상인 묘묘`처럼 기간 표기가 앞/뒤나 괄호 형태로 다른 경우 이름을 정규화해 조회.
+  - 기간제 string id에 개별 icon이 없으면 `5450007 -> 5450000`처럼 10/100/1000 단위 대표 icon fallback을 진단과 함께 출력.
 - [ ] 요청 샘플 9개 아이템의 실제 `info/icon` PNG를 `.test` 아래에 생성한다.
   - 확인 가능한 7개 생성: `.test/wcr2-requested-item-icons-kmst1202-20260625`
+  - `item icon` 명령으로 재생성한 결과: `.test/wcr2-item-icon-command-20260625`
   - `MSW 아바타 코디 이용권(30일)`은 현재 `String_000.wz` 검색 결과 없음.
   - `펫`은 단일 exact item name이 아니라 카테고리/묶음명으로 보여 ID 확정 필요.
 - [x] 실패 시 `not valid wz` 대신 “지원되지 않는 macOS package format” 진단과 대상 파일 헤더를 JSON으로 보고한다.
@@ -312,11 +315,23 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] update/config/plugin 명령 실행 흐름을 `Program.AppCommands.cs` partial 파일로 분리한다.
 - [x] `Program.cs`는 `Main`, command routing, 공통 helper 중심으로 축소한다.
 - [x] 커밋 전 CLI 생성 파일을 `Commands/`, `Infrastructure/`, `Wz/`, `Domain/`, `Media/`, `Models/` 폴더로 정리한다.
+- [x] 추가된 `item icon` 구현을 작은 파일로 분리한다.
+  - `ItemIconExporter`: 실행 흐름
+  - `ItemIconPaths`: 입력/카테고리/icon path 계산
+  - `ItemStringResolver`: String name/id 조회
+  - `ItemIconModels`: 출력 DTO
+- [x] `Program.DomainCommands.cs`의 대형 명령 블록을 기능별 partial 파일로 분리한다.
+  - `Program.Skill.cs`
+  - `Program.Animate.cs`
+  - `Program.Avatar.cs`
+  - `Program.Map.cs`
+  - `Program.LuaNetwork.cs`
 - [x] 각 분리 단계 후 build/test를 실행하고 `git diff --check`를 확인한다.
 
 완료 기준:
 
 - [x] `Program.cs`가 command routing 중심으로 축소된다.
+- [x] `Program.DomainCommands.cs`가 domain info/item icon 라우팅 중심으로 축소된다.
 - [x] 현재 분리 범위에서 CLI 공개 동작과 JSON 계약이 변경되지 않는다.
 - [x] `dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Release --no-restore` 통과
 - [x] `dotnet run --project WzComparerR2.Cli.Tests/WzComparerR2.Cli.Tests.csproj -c Release --no-restore -- --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll` 통과

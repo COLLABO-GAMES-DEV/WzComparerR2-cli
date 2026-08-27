@@ -92,6 +92,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 skill info [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
             Console.WriteLine("  wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
+            Console.WriteLine("  wcr2 item icon [<item-or-data-dir>] --name <exact-name>|--id <id> --out <dir> [--data-dir <dir>] [--string-wz <file-or-dir>] [--canvas-wz <file-or-dir>] [--category cash|consume|install|etc|pet] [--json]");
             Console.WriteLine("  wcr2 gear info [<wz-file-or-dir>] --id <id> [--character-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 mob info [<wz-file-or-dir>] --id <id> [--mob-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 npc info [<wz-file-or-dir>] --id <id> [--npc-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
@@ -147,6 +148,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json");
             Console.WriteLine("  wcr2 skill full Data/Skill --id 3001004 --string-wz Data/String --format json");
             Console.WriteLine("  wcr2 skill full --data-dir Data --id 1001008 --format json");
+            Console.WriteLine("  wcr2 item icon --data-dir Data --name \"미라클 큐브\" --out out/icons --json");
             Console.WriteLine("  wcr2 map portals Map.wz --id 100000000 --json");
             Console.WriteLine("  wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand");
             Console.WriteLine("  wcr2 animate gif Mob.wz --path 0100100.img/stand --out out/stand.gif");
@@ -202,9 +204,19 @@ namespace WzComparerR2.Cli
             Console.WriteLine();
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 " + kind + " info [<wz-file-or-dir>] --id <id> [--" + wzOption + "-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
+            if (string.Equals(kind, "item", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  wcr2 item icon [<item-or-data-dir>] --name <exact-name>|--id <id> --out <dir> [--data-dir <dir>] [--string-wz <file-or-dir>] [--canvas-wz <file-or-dir>] [--category cash|consume|install|etc|pet] [--json]");
+            }
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --data-dir <dir>   Add split Data layout candidates such as <dir>/" + CliWzRepository.GetDefaultDataFolderName(kind) + " and <dir>/String.");
+            if (string.Equals(kind, "item", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  --name <text>      Resolve an exact String.wz item name before exporting its info/icon PNG.");
+                Console.WriteLine("  --canvas-wz <path> Override the Item/<category>/_Canvas input used for icon PNG export.");
+                Console.WriteLine("  --category <kind>  Use when an id cannot be mapped through String.wz.");
+            }
             if (string.Equals(kind, "gear", StringComparison.OrdinalIgnoreCase))
             {
                 Console.WriteLine("  --item-wz <path>   Accepted alias for Character/Item-style gear data inputs.");

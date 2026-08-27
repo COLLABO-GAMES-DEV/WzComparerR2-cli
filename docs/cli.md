@@ -37,6 +37,7 @@ wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manif
 wcr2 skill info [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n|max>] [--format json|xml|text] [--out <path>]
 wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
+wcr2 item icon [<item-or-data-dir>] --name <exact-name>|--id <id> --out <dir> [--data-dir <dir>] [--string-wz <file-or-dir>] [--canvas-wz <file-or-dir>] [--category cash|consume|install|etc|pet] [--json]
 wcr2 gear info [<wz-file-or-dir>] --id <id> [--character-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 mob info [<wz-file-or-dir>] --id <id> [--mob-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 npc info [<wz-file-or-dir>] --id <id> [--npc-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
@@ -118,6 +119,9 @@ wcr2 skill full Data/Skill --id 11001025 --string-wz Data/String --format json -
 wcr2 skill full --data-dir Data --id 1001008 --format json --out out/skill-1001008.json
 wcr2 skill full Data/Skill --id 1001004 --string-wz Data/String --allow-string-only --format xml --out out/power-strike.xml
 wcr2 item info Item.wz --id 2000000 --string-wz String.wz
+wcr2 item icon --data-dir Data --name "미라클 큐브" --out out/icons/miracle-cube --json
+wcr2 item icon --data-dir Data --name "보따리상인 묘묘(7일)" --out out/icons/myomyo-7day --json
+wcr2 item icon --data-dir Data --id 5072000 --out out/icons/megaphone --json
 wcr2 gear info Character.wz --id 1002140 --string-wz String.wz --json
 wcr2 mob info Mob.wz --id 100100 --string-wz String.wz --json
 wcr2 npc info Npc.wz --id 9000000 --string-wz String.wz --json
@@ -244,6 +248,7 @@ Current KMS-style macOS/CrossOver shards such as `Data/String/String_000.wz`, `D
 When loading still fails with `--json`, the CLI reports exit code `3` and writes a structured error JSON to stderr with the first header bytes, file size, and PKG2 random-header probe results including `CurrentPkg2RandomHeader64DataSizeMatches`.
 For searches inside `.img` nodes, pass `--extract-images`, for example `wcr2 search Data/String/String_000.wz --value "미라클 큐브" --extract-images --json`.
 Cash icons may be split across `_Canvas` shards; for example item `5062000` uses `Data/Item/Cash/_Canvas/_Canvas_001.wz` path `0506.img/05062000/info/icon`.
+For item icons, prefer `item icon --data-dir Data --name "<item name>" --out <dir> --json`. It resolves the item id from `String`, chooses the matching `Item/<category>/_Canvas` folder, exports `info/icon` as PNG, and reports the source path/hash. Duration labels such as `[7일]name` and `name(7일)` are normalized for lookup; if a duration-specific id has no separate icon, the command tries representative id fallbacks such as `5450007 -> 5450000` and records that in `Diagnostics`.
 
 `extract`는 PNG, sound, raw data, video blob, scalar 값을 자동으로 파일로 내보냅니다.
 컨테이너 노드를 선택하면 `--recursive`가 필요합니다.

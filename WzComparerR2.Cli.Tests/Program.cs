@@ -21,6 +21,8 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("quiet suppresses success stdout", () => QuietSuppressesSuccessStdout(runner)),
                 TestCase.Create("verbose adds exception details", () => VerboseAddsExceptionDetails(runner)),
                 TestCase.Create("extended domain help lists info commands", () => ExtendedDomainHelpListsInfoCommands(runner)),
+                TestCase.Create("item help lists icon export command", () => ItemHelpListsIconExportCommand(runner)),
+                TestCase.Create("item icon validates required inputs", () => ItemIconValidatesRequiredInputs(runner)),
                 TestCase.Create("skill help lists repository inputs", () => SkillHelpListsRepositoryInputs(runner)),
                 TestCase.Create("media help lists dedicated commands", () => MediaHelpListsDedicatedCommands(runner)),
                 TestCase.Create("media commands validate required inputs", () => MediaCommandsValidateRequiredInputs(runner)),
@@ -115,6 +117,26 @@ namespace WzComparerR2.Cli.Tests
             CommandResult gear = runner.Run("gear", "--help");
             AssertExitCode(gear, 0);
             AssertContains(gear.Stdout, "--character-wz <file-or-dir>");
+        }
+
+        private static void ItemHelpListsIconExportCommand(CliRunner runner)
+        {
+            CommandResult result = runner.Run("item", "--help");
+            AssertExitCode(result, 0);
+            AssertContains(result.Stdout, "wcr2 item icon");
+            AssertContains(result.Stdout, "--canvas-wz <file-or-dir>");
+            AssertContains(result.Stdout, "--category cash|consume|install|etc|pet");
+        }
+
+        private static void ItemIconValidatesRequiredInputs(CliRunner runner)
+        {
+            CommandResult missingIdOrName = runner.Run("item", "icon", "--out", "icons");
+            AssertExitCode(missingIdOrName, 1);
+            AssertContains(missingIdOrName.Stderr, "item icon requires --id <id> or --name <exact-name>.");
+
+            CommandResult missingOut = runner.Run("item", "icon", "--id", "5062000");
+            AssertExitCode(missingOut, 1);
+            AssertContains(missingOut.Stderr, "item icon requires --out <output-dir>.");
         }
 
         private static void SkillHelpListsRepositoryInputs(CliRunner runner)
