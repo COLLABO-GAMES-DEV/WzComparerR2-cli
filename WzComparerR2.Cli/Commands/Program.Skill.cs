@@ -26,6 +26,10 @@ namespace WzComparerR2.Cli
             {
                 return RunSkillSprite(args);
             }
+            if (subCommand == "export")
+            {
+                return RunSkillExport(args);
+            }
 
             throw new UsageException("Unknown skill command: " + args.Positionals[0]);
         }
@@ -95,25 +99,35 @@ namespace WzComparerR2.Cli
 
         private static int RunSkillSprite(ParsedArgs args)
         {
+            return RunSkillAssetExport(args, "skill sprite", false);
+        }
+
+        private static int RunSkillExport(ParsedArgs args)
+        {
+            return RunSkillAssetExport(args, "skill export", true);
+        }
+
+        private static int RunSkillAssetExport(ParsedArgs args, string commandName, bool includeSoundsByDefault)
+        {
             string id = args.GetValue("id");
             if (string.IsNullOrEmpty(id))
             {
-                throw new UsageException("skill sprite requires --id <id>.");
+                throw new UsageException(commandName + " requires --id <id>.");
             }
 
             string output = args.GetValue("out") ?? args.GetValue("output");
             if (string.IsNullOrEmpty(output))
             {
-                throw new UsageException("skill sprite requires --out <output-dir>.");
+                throw new UsageException(commandName + " requires --out <output-dir>.");
             }
 
             string input = ResolveSkillFullInput(args);
-            var options = SkillSpriteExportOptions.FromArgs(args);
+            var options = SkillSpriteExportOptions.FromArgs(args, includeSoundsByDefault);
             SkillSpriteExportResultDto result = SkillSpriteExporter.Export(input, id, output, args, options);
 
             WriteOutput(result, args.HasFlag("json"), writer =>
             {
-                writer.WriteLine("Skill sprite export: " + result.SkillId);
+                writer.WriteLine("Skill asset export: " + result.SkillId);
                 writer.WriteLine("Exported files: " + result.ExportedFileCount);
                 writer.WriteLine("Output: " + result.OutputDirectory);
                 foreach (var branch in result.Branches)
@@ -122,6 +136,14 @@ namespace WzComparerR2.Cli
                     if (!string.IsNullOrEmpty(branch.Diagnostic))
                     {
                         writer.WriteLine("  " + branch.Diagnostic);
+                    }
+                }
+                if (result.Sound != null)
+                {
+                    writer.WriteLine("- sound\t" + result.Sound.Status + "\t" + result.Sound.ExportedFileCount);
+                    if (!string.IsNullOrEmpty(result.Sound.Diagnostic))
+                    {
+                        writer.WriteLine("  " + result.Sound.Diagnostic);
                     }
                 }
             });

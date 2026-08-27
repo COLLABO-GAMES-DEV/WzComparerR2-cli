@@ -148,7 +148,9 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "--skill-wz <path>");
             AssertContains(result.Stdout, "wcr2 skill full [<skill-wz-file-or-dir>]");
             AssertContains(result.Stdout, "wcr2 skill sprite [<skill-wz-file-or-dir>]");
+            AssertContains(result.Stdout, "wcr2 skill export [<skill-wz-file-or-dir>]");
             AssertContains(result.Stdout, "--canvas-wz <path>");
+            AssertContains(result.Stdout, "--sound-wz <path>");
             AssertContains(result.Stdout, "--branch <list>");
             AssertContains(result.Stdout, "UnresolvedPlaceholders");
         }
@@ -166,6 +168,10 @@ namespace WzComparerR2.Cli.Tests
             CommandResult missingInput = runner.Run("skill", "sprite", "--id", "1121008", "--out", "sprites");
             AssertExitCode(missingInput, 1);
             AssertContains(missingInput.Stderr, "skill full requires <skill-wz-file-or-dir>, --skill-wz <path>, or --data-dir <dir>.");
+
+            CommandResult exportMissingOut = runner.Run("skill", "export", "--id", "1121008");
+            AssertExitCode(exportMissingOut, 1);
+            AssertContains(exportMissingOut.Stderr, "skill export requires --out <output-dir>.");
         }
 
         private static void MediaHelpListsDedicatedCommands(CliRunner runner)

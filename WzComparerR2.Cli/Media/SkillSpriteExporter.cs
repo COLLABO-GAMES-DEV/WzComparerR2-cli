@@ -10,25 +10,42 @@ namespace WzComparerR2.Cli
     {
         public List<string> Branches { get; private set; }
         public List<string> CanvasInputs { get; private set; }
+        public List<string> SoundInputs { get; private set; }
         public int MaxCanvasInputs { get; private set; }
+        public int MaxSoundInputs { get; private set; }
         public bool DirectOnly { get; private set; }
+        public bool IncludeSounds { get; private set; }
 
         public static SkillSpriteExportOptions FromArgs(ParsedArgs args)
+        {
+            return FromArgs(args, false);
+        }
+
+        public static SkillSpriteExportOptions FromArgs(ParsedArgs args, bool includeSoundsByDefault)
         {
             var options = new SkillSpriteExportOptions
             {
                 Branches = ParseBranches(args.GetValue("branch") ?? args.GetValue("branches") ?? "icon,effect,hit"),
                 CanvasInputs = new List<string>(),
+                SoundInputs = new List<string>(),
                 MaxCanvasInputs = args.GetInt("max-canvas-inputs", 256),
-                DirectOnly = args.HasFlag("direct-only")
+                MaxSoundInputs = args.GetInt("max-sound-inputs", 64),
+                DirectOnly = args.HasFlag("direct-only"),
+                IncludeSounds = includeSoundsByDefault || args.HasFlag("include-sound") || args.HasFlag("include-sounds")
             };
 
             AddCanvasInput(options.CanvasInputs, args.GetValue("canvas-wz"));
             AddCanvasInput(options.CanvasInputs, args.GetValue("canvas"));
+            AddCanvasInput(options.SoundInputs, args.GetValue("sound-wz"));
+            AddCanvasInput(options.SoundInputs, args.GetValue("sound"));
 
             if (options.MaxCanvasInputs <= 0)
             {
                 throw new UsageException("skill sprite --max-canvas-inputs must be a positive integer.");
+            }
+            if (options.MaxSoundInputs <= 0)
+            {
+                throw new UsageException("skill export --max-sound-inputs must be a positive integer.");
             }
 
             return options;
@@ -107,15 +124,78 @@ namespace WzComparerR2.Cli
                     ? new List<string>()
                     : ResolveCanvasCandidates(args, skillInput, dataResult.InputPath, options, result.Diagnostics);
                 result.CanvasInputPaths.AddRange(canvasCandidates);
+                if (options.IncludeSounds)
+                {
+                    result.SoundInputPaths.AddRange(ResolveSoundCandidates(args, skillInput, dataResult.InputPath, options, result.Diagnostics));
+                }
 
                 foreach (string branch in options.Branches)
                 {
                     result.Branches.Add(ExportBranch(dataResult.Node, branch, fullOutputDirectory, args, options, canvasCandidates));
                 }
 
-                result.ExportedFileCount = result.Branches.Sum(branch => branch.ExportedFileCount);
+                if (options.IncludeSounds)
+                {
+                    result.Sound = ExportSounds(skillId, fullOutputDirectory, args, result.SoundInputPaths);
+                }
+
+                result.SpriteFileCount = result.Branches.Sum(branch => branch.ExportedFileCount);
+                result.SoundFileCount = result.Sound == null ? 0 : result.Sound.ExportedFileCount;
+                result.ExportedFileCount = result.SpriteFileCount + result.SoundFileCount;
                 return result;
             }
+        }
+
+        private static SkillSoundExportResultDto ExportSounds(string skillId, string outputDirectory, ParsedArgs args, List<string> soundCandidates)
+        {
+            var result = new SkillSoundExportResultDto
+            {
+                RequestedPath = "Skill.img/" + skillId,
+                Files = new List<ExtractedFileDto>(),
+                TriedSoundInputs = new List<string>(),
+                Diagnostics = new List<string>()
+            };
+
+            var triedInputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string input in soundCandidates)
+            {
+                if (!triedInputs.Add(input))
+                {
+                    continue;
+                }
+
+                result.TriedSoundInputs.Add(input);
+                try
+                {
+                    using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+                    {
+                        Wz_Node node = NodePath.Resolve(context.Root, result.RequestedPath, true);
+                        if (node == null)
+                        {
+                            continue;
+                        }
+
+                        result.SourcePath = node.FullPath;
+                        result.InputPath = input;
+                        result.Files.AddRange(ExtractExporter.ExportMedia(node, Path.Combine(outputDirectory, "sound"), true, "sound"));
+                        result.ExportedFileCount = result.Files.Count;
+                        result.Status = result.ExportedFileCount > 0 ? "exported" : "no-sound-assets";
+                        if (result.ExportedFileCount == 0)
+                        {
+                            result.Diagnostic = "Skill sound path exists but contains no sound assets.";
+                        }
+                        return result;
+                    }
+                }
+                catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException || ex is WzLoadException)
+                {
+                    result.Diagnostics.Add(Path.GetFileName(input) + ": " + ex.Message);
+                }
+            }
+
+            result.Status = "not-found";
+            result.Diagnostic = "No readable sound input contained " + result.RequestedPath + ".";
+            return result;
         }
 
         private static SkillSpriteBranchResultDto ExportBranch(Wz_Node skillNode, string branch, string outputDirectory, ParsedArgs args, SkillSpriteExportOptions options, List<string> canvasCandidates)
@@ -331,6 +411,30 @@ namespace WzComparerR2.Cli
             return candidates;
         }
 
+        private static List<string> ResolveSoundCandidates(ParsedArgs args, string skillInput, string dataInputPath, SkillSpriteExportOptions options, List<string> diagnostics)
+        {
+            var candidates = new List<string>();
+            foreach (string input in options.SoundInputs)
+            {
+                AddExistingCandidate(candidates, input);
+            }
+
+            string dataDir = ResolveDataDirectory(args.GetValue("data-dir"), skillInput, dataInputPath);
+            if (!string.IsNullOrEmpty(dataDir))
+            {
+                AddExistingCandidate(candidates, Path.Combine(dataDir, "Sound"));
+                AddExistingFiles(candidates, Path.Combine(dataDir, "Sound"), "Sound*.wz", options.MaxSoundInputs);
+            }
+
+            if (candidates.Count > options.MaxSoundInputs)
+            {
+                diagnostics.Add("Sound candidate list was truncated to " + options.MaxSoundInputs + " entries.");
+                candidates = candidates.Take(options.MaxSoundInputs).ToList();
+            }
+
+            return candidates;
+        }
+
         private static string ResolveDataDirectory(string explicitDataDir, string skillInput, string dataInputPath)
         {
             foreach (string path in new[] { explicitDataDir, skillInput, dataInputPath })
@@ -438,9 +542,13 @@ namespace WzComparerR2.Cli
         public string SkillNodePath { get; set; }
         public string OutputDirectory { get; set; }
         public int ExportedFileCount { get; set; }
+        public int SpriteFileCount { get; set; }
+        public int SoundFileCount { get; set; }
         public List<string> CanvasInputPaths { get; set; }
+        public List<string> SoundInputPaths { get; set; } = new List<string>();
         public List<string> Diagnostics { get; set; }
         public List<SkillSpriteBranchResultDto> Branches { get; set; }
+        public SkillSoundExportResultDto Sound { get; set; }
     }
 
     internal sealed class SkillSpriteBranchResultDto
@@ -456,6 +564,19 @@ namespace WzComparerR2.Cli
         public List<string> TriedOutlinkPaths { get; set; }
         public List<string> TriedCanvasInputs { get; set; }
         public List<string> Diagnostics { get; set; } = new List<string>();
+        public List<ExtractedFileDto> Files { get; set; }
+    }
+
+    internal sealed class SkillSoundExportResultDto
+    {
+        public string RequestedPath { get; set; }
+        public string InputPath { get; set; }
+        public string SourcePath { get; set; }
+        public string Status { get; set; }
+        public string Diagnostic { get; set; }
+        public int ExportedFileCount { get; set; }
+        public List<string> TriedSoundInputs { get; set; }
+        public List<string> Diagnostics { get; set; }
         public List<ExtractedFileDto> Files { get; set; }
     }
 }
