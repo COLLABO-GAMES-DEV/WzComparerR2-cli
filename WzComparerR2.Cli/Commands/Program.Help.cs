@@ -89,10 +89,13 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 image list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]");
             Console.WriteLine("  wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
+            Console.WriteLine("  wcr2 video list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]");
+            Console.WriteLine("  wcr2 video export <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]");
+            Console.WriteLine("  wcr2 video export-all <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 skill info [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
             Console.WriteLine("  wcr2 skill sprite [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--branch icon,effect,hit] [--json]");
-            Console.WriteLine("  wcr2 skill export [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--branch auto|icon,effect,hit] [--json]");
+            Console.WriteLine("  wcr2 skill export [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--related-key <name>] [--video-format mcv|frames|gif|both] [--branch auto|icon,effect,hit] [--json]");
             Console.WriteLine("  wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 item icon [<item-or-data-dir>] --name <exact-name>|--id <id> --out <dir> [--data-dir <dir>] [--string-wz <file-or-dir>] [--canvas-wz <file-or-dir>] [--category cash|consume|install|etc|pet] [--json]");
             Console.WriteLine("  wcr2 gear info [<wz-file-or-dir>] --id <id> [--character-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
@@ -147,11 +150,12 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 sound export Data/Sound --path AchievementEff.img/GradeUp --out out/sound");
             Console.WriteLine("  wcr2 image list Data/Mob_Canvas --path 0100100.img --max-results 20");
             Console.WriteLine("  wcr2 image export Data/Mob_Canvas --path 0100100.img/stand/0 --out out/image");
+            Console.WriteLine("  wcr2 video export Data/Packs/Skill_00006.ms --path Skill/524.img/skill/5241503/screen2/video --format gif --out out/firecracker-video");
             Console.WriteLine("  wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json");
             Console.WriteLine("  wcr2 skill full Data/Skill --id 3001004 --string-wz Data/String --format json");
             Console.WriteLine("  wcr2 skill full --data-dir Data --id 1001008 --format json");
             Console.WriteLine("  wcr2 skill sprite --data-dir Data --id 1121008 --branch effect,hit --out out/skill-1121008 --json");
-            Console.WriteLine("  wcr2 skill export --data-dir Data --id 1121008 --out out/skill-1121008 --json");
+            Console.WriteLine("  wcr2 skill export --data-dir Data --id 5241503 --video-format gif --out out/firecracker --json");
             Console.WriteLine("  wcr2 item icon --data-dir Data --name \"미라클 큐브\" --out out/icons --json");
             Console.WriteLine("  wcr2 map portals Map.wz --id 100000000 --json");
             Console.WriteLine("  wcr2 animate frames Mob.wz --path 0100100.img/stand --out out/stand");
@@ -194,7 +198,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 skill info <skill-wz-file-or-dir> --id <id> [--string-wz <file-or-dir>] [--json]");
             Console.WriteLine("  wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n>] [--format json|xml|text] [--out <path>]");
             Console.WriteLine("  wcr2 skill sprite [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--branch icon,effect,hit] [--json]");
-            Console.WriteLine("  wcr2 skill export [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--branch auto|icon,effect,hit] [--json]");
+            Console.WriteLine("  wcr2 skill export [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--video-format mcv|frames|gif|both] [--branch auto|icon,effect,hit] [--json]");
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --allow-string-only  Emit string metadata when the skill id exists only in String.wz.");
@@ -203,7 +207,15 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  --canvas-wz <path>   Override or add Skill/_Canvas input used to resolve _outlink sprite pixels.");
             Console.WriteLine("  --sound-wz <path>    Override or add Sound input used by skill export.");
             Console.WriteLine("  --include-sound      Also export Sound/Skill.img/<id> when using skill sprite.");
+            Console.WriteLine("  --include-video      Also export Wz_Video screen nodes when using skill sprite; skill export includes them by default.");
+            Console.WriteLine("  --skip-video         Disable Wz_Video export for skill export.");
+            Console.WriteLine("  --video-format <fmt> Export skill videos as mcv, frames, gif, or both; default mcv.");
+            Console.WriteLine("  --ffmpeg <path>      ffmpeg executable used when --video-format is frames/gif/both.");
             Console.WriteLine("  --branch <list>      Export auto/all/visual detected branches, or explicit paths such as effect,hit/0.");
+            Console.WriteLine("  --include-related    Search related Skill/Effect/Character inputs for action/delay keys.");
+            Console.WriteLine("  --related-key <name> Add a manual related key such as 6thFireCracker.");
+            Console.WriteLine("  --related-wz <path>  Add an input for related action/screen sprite lookup.");
+            Console.WriteLine("  --skip-related       Disable related action/delay lookup for skill export.");
             Console.WriteLine("  --direct-only        Export only pixels present in the skill node and do not follow _outlink.");
             Console.WriteLine("  JSON/XML/text output includes SourceProfile, LinkerStatus, and UnresolvedPlaceholders.");
         }
@@ -350,14 +362,30 @@ namespace WzComparerR2.Cli
             Console.WriteLine();
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2 " + kind + " list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]");
-            Console.WriteLine("  wcr2 " + kind + " export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
-            Console.WriteLine("  wcr2 " + kind + " export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
+            if (string.Equals(kind, "video", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  wcr2 video export <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]");
+                Console.WriteLine("  wcr2 video export-all <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]");
+            }
+            else
+            {
+                Console.WriteLine("  wcr2 " + kind + " export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
+                Console.WriteLine("  wcr2 " + kind + " export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
+            }
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --path <wz-path>       WZ node path to inspect or export.");
             Console.WriteLine("  --out <output-dir>     Directory for exported files.");
             Console.WriteLine("  --manifest <json>      Write export manifest JSON.");
             Console.WriteLine("  --max-results <n>      Limit list results; default 100.");
+            if (string.Equals(kind, "video", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  --format <format>      Video export format: mcv, frames, gif, or both; default mcv.");
+                Console.WriteLine("  --decode [format]      Alias for --format frames, or for the supplied frames/gif/both value.");
+                Console.WriteLine("  --ffmpeg <path>        ffmpeg executable used for frames/gif decode; default ffmpeg.");
+                Console.WriteLine("  --max-frames <n>       Decode only first n frames when format is frames/gif/both.");
+                Console.WriteLine("  --keep-video-work      Keep generated IVF work files next to decoded output.");
+            }
             Console.WriteLine("  --json                 Emit JSON output.");
             Console.WriteLine();
             if (string.Equals(kind, "image", StringComparison.OrdinalIgnoreCase))

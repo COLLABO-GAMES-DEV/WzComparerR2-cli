@@ -193,11 +193,15 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `Wz_Sound`
   - 확장자 자동 결정
   - raw 추출 fallback
-- [ ] `extract video` 구현 가능성 조사
+- [x] `extract video` 구현 가능성 조사
   - `Wz_Video`
   - `VpxVideoDecoder`
   - native `libvpx`, `libyuv` 필요성 확인
 - [x] `Wz_Video` 원본 blob `.mcv` 추출 구현
+- [x] `video list/export/export-all` 전용 명령을 추가한다.
+  - `video list`는 MCV 헤더의 FourCC, 해상도, frame count, alpha map 여부를 출력한다.
+  - `video export --format mcv`는 원본 `.mcv`를 저장한다.
+  - `video export --format frames|gif|both`는 ffmpeg로 MCV VP9 base/alpha stream을 디코딩한다.
 - [x] export 결과 manifest 생성 옵션 추가
   - `--manifest export.json`
 
@@ -354,6 +358,16 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `--canvas-wz <path>` 명시 입력과 `--data-dir <Data>` 기반 `Data/Skill/_Canvas`, `Data/Packs/Skill*.ms` 후보를 순회한다.
 - [x] `--sound-wz <path>` 명시 입력과 `--data-dir <Data>` 기반 `Data/Sound` 후보에서 `Sound/Skill.img/<skillId>` 사운드를 추출한다.
 - [x] `skill export` 기본 branch를 자동 감지로 바꿔 `screen2`, `screen3`, `tile`, `special*`, `effect2` 같은 실제 visual branch를 누락하지 않게 한다.
+- [x] `skill export`가 action/delay 기반 related asset key를 자동 수집하게 한다.
+  - 스킬 대표 노드에 action 값이 없으면 `Data/Packs/Skill*.ms` 메타데이터에서 `6thFireCracker` 같은 seed를 보강한다.
+  - `--related-key <name>`, `--related-wz <path>`, `--include-related`, `--skip-related` 옵션을 제공한다.
+  - related 검색 대상은 `Skill/_Canvas`, `Effect/_Canvas`, `Character/_Canvas`, `Character/Afterimage`로 제한한다.
+- [x] `skill export`가 같은 skill id의 내부 `Wz_Video` 컷신을 자동 포함한다.
+  - 대표 `Data/Skill` 노드에 비디오가 없으면 `Data/Packs/Skill*.ms`에서 같은 skill id의 메타데이터 노드를 찾아 `screen*/video`를 추출한다.
+  - 확인 사례: `5241503` 파이어크래커는 `Data/Packs/Skill_00006.ms :: Skill/524.img/skill/5241503/screen2/video`를 포함해 12개 MCV 컷신 레이어를 추출한다.
+  - `--video-format mcv|frames|gif|both`, `--skip-video`, `--ffmpeg <path>` 옵션을 제공한다.
+- [ ] action key와 실제 외부 컷신 이미지 경로가 이름으로 직접 매칭되지 않는 스킬을 위한 추가 매핑/역추적을 확장한다.
+  - 내부 `screen*/video`는 해결됨. 외부 Effect/Character 전용 컷신이 action key 이름과 다른 경로에 있을 경우는 추가 조사 대상이다.
 - [x] outlink 대상 context가 살아있는 동안 PNG export를 수행해 closed stream 문제를 피한다.
 - [x] JSON에 `Status`, `OutlinkPath`, `ResolvedPath`, `TriedCanvasInputs`, `TriedSoundInputs`, 파일 `Bytes/Sha256`을 출력한다.
 - [x] fixture-free CLI 테스트에 도움말/필수 인자 검증을 추가한다.

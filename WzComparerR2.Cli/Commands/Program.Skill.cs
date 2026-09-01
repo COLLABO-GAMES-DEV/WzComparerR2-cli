@@ -146,6 +146,23 @@ namespace WzComparerR2.Cli
                         writer.WriteLine("  " + result.Sound.Diagnostic);
                     }
                 }
+                if (result.Videos != null)
+                {
+                    writer.WriteLine("- video\t" + result.Videos.Status + "\t" + result.Videos.ExportedFileCount);
+                    if (!string.IsNullOrEmpty(result.Videos.Diagnostic))
+                    {
+                        writer.WriteLine("  " + result.Videos.Diagnostic);
+                    }
+                }
+                foreach (var related in result.RelatedAssets)
+                {
+                    writer.WriteLine("- related:" + related.Key + "\t" + related.Status + "\t" + related.ExportedFileCount);
+                    writer.WriteLine("  " + related.ExportRootPath);
+                    if (!string.IsNullOrEmpty(related.Diagnostic))
+                    {
+                        writer.WriteLine("  " + related.Diagnostic);
+                    }
+                }
             });
             return ExitSuccess;
         }

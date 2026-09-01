@@ -176,6 +176,10 @@ namespace WzComparerR2.Cli
             {
                 return node.Value is Wz_Png;
             }
+            if (string.Equals(kind, "video", StringComparison.OrdinalIgnoreCase))
+            {
+                return node.Value is Wz_Video;
+            }
 
             return false;
         }

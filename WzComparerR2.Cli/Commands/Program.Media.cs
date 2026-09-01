@@ -202,7 +202,14 @@ namespace WzComparerR2.Cli
 
                 try
                 {
-                    result.Files.AddRange(ExtractExporter.ExportMedia(node, output, recursive, kind));
+                    if (string.Equals(kind, "video", StringComparison.OrdinalIgnoreCase))
+                    {
+                        result.Files.AddRange(VideoExporter.Export(node, output, recursive, VideoExportOptions.FromArgs(args)));
+                    }
+                    else
+                    {
+                        result.Files.AddRange(ExtractExporter.ExportMedia(node, output, recursive, kind));
+                    }
                 }
                 catch (NotSupportedException ex) when (string.Equals(kind, "image", StringComparison.OrdinalIgnoreCase))
                 {

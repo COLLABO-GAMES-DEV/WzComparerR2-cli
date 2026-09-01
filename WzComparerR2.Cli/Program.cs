@@ -71,6 +71,8 @@ namespace WzComparerR2.Cli
                         return RunMedia(parsed, "sound");
                     case "image":
                         return RunMedia(parsed, "image");
+                    case "video":
+                        return RunMedia(parsed, "video");
                     case "patch":
                         return RunPatch(parsed);
                     case "skill":

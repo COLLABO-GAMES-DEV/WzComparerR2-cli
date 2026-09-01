@@ -76,6 +76,7 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "wcr2 compare <old-file-or-dir> <new-file-or-dir>");
             AssertContains(result.Stdout, "wcr2 sound list <file-or-dir>");
             AssertContains(result.Stdout, "wcr2 image export <file-or-dir>");
+            AssertContains(result.Stdout, "wcr2 video export <file-or-dir>");
             AssertContains(result.Stdout, "wcr2 plugin list|commands");
         }
 
@@ -151,8 +152,12 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "wcr2 skill export [<skill-wz-file-or-dir>]");
             AssertContains(result.Stdout, "--canvas-wz <path>");
             AssertContains(result.Stdout, "--sound-wz <path>");
+            AssertContains(result.Stdout, "--include-video");
+            AssertContains(result.Stdout, "--video-format <fmt>");
             AssertContains(result.Stdout, "--branch <list>");
             AssertContains(result.Stdout, "auto/all/visual detected branches");
+            AssertContains(result.Stdout, "--include-related");
+            AssertContains(result.Stdout, "--related-key <name>");
             AssertContains(result.Stdout, "UnresolvedPlaceholders");
         }
 

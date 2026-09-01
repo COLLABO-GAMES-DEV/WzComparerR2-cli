@@ -44,6 +44,8 @@ namespace WzComparerR2.Cli
         public int? Channels { get; set; }
         public int? Frequency { get; set; }
         public string SoundType { get; set; }
+        public int? FrameCount { get; set; }
+        public string VideoFlags { get; set; }
 
         public static MediaAssetDto FromNode(Wz_Node node)
         {
@@ -73,9 +75,35 @@ namespace WzComparerR2.Cli
                 dto.Channels = sound.Channels;
                 dto.Frequency = sound.Frequency;
                 dto.SoundType = sound.SoundType.ToString();
+                return dto;
+            }
+
+            var video = node.Value as Wz_Video;
+            if (video != null)
+            {
+                dto.DataLength = video.Length;
+                try
+                {
+                    var header = video.ReadVideoFileHeader();
+                    dto.Width = header.Width;
+                    dto.Height = header.Height;
+                    dto.FrameCount = header.FrameCount;
+                    dto.Format = FourCCToString(header.FourCC);
+                    dto.VideoFlags = header.DataFlag.ToString();
+                }
+                catch (Exception ex)
+                {
+                    dto.Value = "video header error: " + ex.Message;
+                }
             }
 
             return dto;
+        }
+
+        private static string FourCCToString(uint fourCC)
+        {
+            var bytes = BitConverter.GetBytes(fourCC);
+            return new string(bytes.Select(value => value >= 32 && value <= 126 ? (char)value : '?').ToArray());
         }
     }
 
@@ -143,6 +171,10 @@ namespace WzComparerR2.Cli
             if (string.Equals(kind, "image", StringComparison.OrdinalIgnoreCase))
             {
                 return node.Value is Wz_Png;
+            }
+            if (string.Equals(kind, "video", StringComparison.OrdinalIgnoreCase))
+            {
+                return node.Value is Wz_Video;
             }
 
             return false;
