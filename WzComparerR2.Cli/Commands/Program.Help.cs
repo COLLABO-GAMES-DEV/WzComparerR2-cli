@@ -202,7 +202,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --allow-string-only  Emit string metadata when the skill id exists only in String.wz.");
-            Console.WriteLine("  --data-dir <dir>     Add split Data layout candidates such as <dir>/Skill and <dir>/String.");
+            Console.WriteLine("  --data-dir <dir>     Add split Data candidates such as <dir>/Skill, <dir>/String, and lazy <dir>/Packs/Skill_*.ms fallback.");
             Console.WriteLine("  --skill-wz <path>    Add or replace the skill WZ file/folder input candidate.");
             Console.WriteLine("  --canvas-wz <path>   Override or add Skill/_Canvas input used to resolve _outlink sprite pixels.");
             Console.WriteLine("  --sound-wz <path>    Override or add Sound input used by skill export.");

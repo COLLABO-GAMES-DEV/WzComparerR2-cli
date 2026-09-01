@@ -276,14 +276,14 @@ export manifest의 각 파일 항목에는 `Bytes`와 `Sha256`이 포함됩니�
 출력에는 `SourceProfile`, `LinkerStatus`, `UnresolvedPlaceholders`, `DataInputPath`, `StringInputPath`, 입력 후보 목록, `Common`, `PvpCommon`, `LevelProperties`, 요구 스킬, 액션, 플래그, 아이콘 메타데이터, 원문 요약, `ResolvedSummary`, 가능한 경우 `NextResolvedSummary`, 미해결 placeholder 진단이 포함됩니다.
 `LinkerStatus`는 CLI headless resolver가 데이터 노드, String metadata, scalar stat, visual branch, summary template를 각각 찾았는지 보여줍니다. `GuiStringLinkerLoaded`는 아직 `false`이며, 이는 GUI의 전체 `StringLinker.Load(...)`를 직접 붙인 상태가 아니라 CLI 안전 범위의 headless 해석이라는 뜻입니다.
 `SourceProfile`이 `visual-only`이면 입력 WZ 노드에 아이콘/이펙트 같은 canvas 계열 데이터는 있지만 `common`/`level` 수치 property가 없다는 뜻입니다. 이 경우 `MaxLevel`, `LevelCount`, placeholder 치환 값이 `null` 또는 미해결로 남을 수 있습니다.
-`--data-dir <Data>`를 주면 `Data/Skill`과 `Data/String`을 자동 후보로 사용합니다. positional `Data/Skill`만 줘도 sibling `Data/String`이 있으면 문자열 후보로 자동 추가합니다.
+`--data-dir <Data>`를 주면 먼저 `Data/Skill`과 `Data/String`을 자동 후보로 사용합니다. `Data/Skill`에서 skill id를 못 찾으면 `Data/Packs/Skill_*.ms`를 lazy fallback으로 순회해 최신 split metadata 노드도 찾습니다. positional `Data/Skill`만 줘도 sibling `Data/String`이 있으면 문자열 후보로 자동 추가합니다.
 `--format json|xml|text`와 `--out <path>`를 지원합니다.
 실제 skill node가 없고 `String/Skill.img` 문자열만 있는 ID는 기본적으로 실패하지만, `--allow-string-only`를 주면 `Mode: string-only` 결과로 이름/설명/문자열 속성을 확인할 수 있습니다.
 툴팁 PNG 렌더링은 아직 포함하지 않으며 Windows-only 후속 단계로 분리되어 있습니다.
 
 `skill sprite`는 스킬 ID 기준으로 `icon`, `effect`, `hit` 같은 스프라이트 branch만 PNG로 내보냅니다. 소리까지 같이 뽑으려면 `skill export`를 쓰거나 `skill sprite --include-sound`를 추가합니다.
 스킬 메타데이터 안의 PNG가 `_outlink`가 달린 1x1 stub이면, CLI는 `_outlink` 값을 읽고 `--canvas-wz` 또는 `--data-dir <Data>`에서 찾은 `Data/Skill/_Canvas`와 `Data/Packs/Skill*.ms` 후보를 순회해 실제 Canvas 노드를 해석합니다.
-`skill export`는 실제 스킬 노드에서 감지한 visual branch를 자동 추출한 뒤 `Sound/Skill.img/<skillId>` 아래의 `Use`, `Hit` 같은 사운드를 함께 추출합니다. 자동 추출은 `screen`, `screen2`, `tile`, `special`, `special1`, `effect2`처럼 스킬마다 다른 branch 이름을 포함합니다.
+`skill export`는 실제 스킬 노드에서 감지한 visual branch를 자동 추출한 뒤 `Sound/Skill.img/<skillId>` 아래의 `Use`, `Hit` 같은 사운드를 함께 추출합니다. `--data-dir <Data>`만 준 경우에도 `Data/Skill`에서 못 찾은 스킬은 `Data/Packs/Skill_*.ms` metadata fallback으로 찾습니다. 자동 추출은 `screen`, `screen2`, `tile`, `special`, `special1`, `effect2`처럼 스킬마다 다른 branch 이름을 포함합니다.
 `skill export`는 같은 skill id의 노드 아래에 있는 `Wz_Video`도 자동으로 포함합니다. 먼저 대표 `Data/Skill` 노드를 확인하고, 없으면 `Data/Packs/Skill*.ms`에서 같은 skill id의 메타데이터 노드를 찾아 `screen/video`, `screen2/video` 같은 MCV 컷신을 `video/` 아래에 저장합니다. 기본은 `.mcv`이고, `--video-format frames|gif|both`를 주면 ffmpeg로 PNG 프레임 또는 GIF까지 만듭니다. 필요 없으면 `--skip-video`를 사용합니다.
 `--sound-wz <path>`로 Sound 입력을 직접 지정할 수 있고, `--data-dir <Data>`를 주면 `Data/Sound`를 자동 후보로 사용합니다.
 

@@ -118,6 +118,9 @@ namespace WzComparerR2.Cli
     {
         private readonly List<WzLoadContext> dataContexts = new List<WzLoadContext>();
         private readonly List<WzLoadContext> stringContexts = new List<WzLoadContext>();
+        private readonly List<CliWzRepositoryCandidate> lazyDataCandidates = new List<CliWzRepositoryCandidate>();
+        private WzLoadOptions loadOptions;
+        private string lazyDataLabel;
 
         private CliWzRepository()
         {
@@ -142,6 +145,8 @@ namespace WzComparerR2.Cli
         {
             var repository = new CliWzRepository();
             var options = WzLoadOptions.FromArgs(args);
+            repository.loadOptions = options;
+            repository.lazyDataLabel = kind + " data";
             var dataCandidates = new List<CliWzRepositoryCandidate>();
             var stringCandidates = new List<CliWzRepositoryCandidate>();
 
@@ -154,6 +159,10 @@ namespace WzComparerR2.Cli
             {
                 AddCandidate(dataCandidates, Path.Combine(dataDir, GetDefaultDataFolderName(kind)), false);
                 AddCandidate(stringCandidates, Path.Combine(dataDir, "String"), false);
+                if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddSkillPackCandidates(repository.lazyDataCandidates, dataDir);
+                }
             }
 
             AddCandidate(stringCandidates, args.GetValue("string-wz"), true);
@@ -232,7 +241,7 @@ namespace WzComparerR2.Cli
                 }
             }
 
-            return null;
+            return FindDataNodeInLazyContexts(kind, id);
         }
 
         public CliWzStringResult FindStringInfo(string kind, string id)
@@ -290,6 +299,68 @@ namespace WzComparerR2.Cli
             }
         }
 
+        private CliWzDataResult FindDataNodeInLazyContexts(string kind, string id)
+        {
+            for (int i = 0; i < lazyDataCandidates.Count; i++)
+            {
+                CliWzRepositoryCandidate candidate = lazyDataCandidates[i];
+                if (!candidate.Explicit && !PathExists(candidate.Path))
+                {
+                    continue;
+                }
+
+                WzLoadContext context = null;
+                try
+                {
+                    context = WzLoadContext.Load(candidate.Path, loadOptions);
+                    Wz_Node node = DomainInfoFinder.FindDataNode(context.Root, kind, id);
+                    if (node == null)
+                    {
+                        context.Dispose();
+                        context = null;
+                        continue;
+                    }
+
+                    dataContexts.Add(context);
+                    return new CliWzDataResult
+                    {
+                        Node = node,
+                        InputPath = context.InputPath
+                    };
+                }
+                catch (FileNotFoundException)
+                {
+                    if (candidate.Explicit)
+                    {
+                        throw;
+                    }
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    if (candidate.Explicit)
+                    {
+                        throw;
+                    }
+                }
+                catch (WzLoadException ex)
+                {
+                    if (candidate.Explicit)
+                    {
+                        throw new WzLoadException("Failed to load " + lazyDataLabel + " candidate: " + candidate.Path, ex, ex.Diagnostic);
+                    }
+                }
+                finally
+                {
+                    if (context != null && !dataContexts.Contains(context))
+                    {
+                        context.Dispose();
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private static void AddCandidate(List<CliWzRepositoryCandidate> candidates, string path, bool explicitCandidate)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -308,6 +379,25 @@ namespace WzComparerR2.Cli
                 Path = fullPath,
                 Explicit = explicitCandidate
             });
+        }
+
+        private static void AddSkillPackCandidates(List<CliWzRepositoryCandidate> candidates, string dataDir)
+        {
+            if (string.IsNullOrWhiteSpace(dataDir))
+            {
+                return;
+            }
+
+            string packsDir = Path.Combine(dataDir, "Packs");
+            if (!Directory.Exists(packsDir))
+            {
+                return;
+            }
+
+            foreach (string file in Directory.EnumerateFiles(packsDir, "Skill_*.ms").OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                AddCandidate(candidates, file, false);
+            }
         }
 
         private static string InferSiblingDataFolder(string inputPath, string siblingName)

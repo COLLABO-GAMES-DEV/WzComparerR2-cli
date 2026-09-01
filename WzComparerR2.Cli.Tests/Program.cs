@@ -152,6 +152,7 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "wcr2 skill export [<skill-wz-file-or-dir>]");
             AssertContains(result.Stdout, "--canvas-wz <path>");
             AssertContains(result.Stdout, "--sound-wz <path>");
+            AssertContains(result.Stdout, "Packs/Skill_*.ms fallback");
             AssertContains(result.Stdout, "--include-video");
             AssertContains(result.Stdout, "--video-format <fmt>");
             AssertContains(result.Stdout, "--branch <list>");
