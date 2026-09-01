@@ -353,6 +353,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] 스킬 branch의 첫 `_outlink`를 기준으로 branch 대상 경로를 계산한다.
 - [x] `--canvas-wz <path>` 명시 입력과 `--data-dir <Data>` 기반 `Data/Skill/_Canvas`, `Data/Packs/Skill*.ms` 후보를 순회한다.
 - [x] `--sound-wz <path>` 명시 입력과 `--data-dir <Data>` 기반 `Data/Sound` 후보에서 `Sound/Skill.img/<skillId>` 사운드를 추출한다.
+- [x] `skill export` 기본 branch를 자동 감지로 바꿔 `screen2`, `screen3`, `tile`, `special*`, `effect2` 같은 실제 visual branch를 누락하지 않게 한다.
 - [x] outlink 대상 context가 살아있는 동안 PNG export를 수행해 closed stream 문제를 피한다.
 - [x] JSON에 `Status`, `OutlinkPath`, `ResolvedPath`, `TriedCanvasInputs`, `TriedSoundInputs`, 파일 `Bytes/Sha256`을 출력한다.
 - [x] fixture-free CLI 테스트에 도움말/필수 인자 검증을 추가한다.

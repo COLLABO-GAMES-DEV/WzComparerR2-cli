@@ -15,6 +15,7 @@ namespace WzComparerR2.Cli
         public int MaxSoundInputs { get; private set; }
         public bool DirectOnly { get; private set; }
         public bool IncludeSounds { get; private set; }
+        public bool AutoVisualBranches { get; private set; }
 
         public static SkillSpriteExportOptions FromArgs(ParsedArgs args)
         {
@@ -23,15 +24,17 @@ namespace WzComparerR2.Cli
 
         public static SkillSpriteExportOptions FromArgs(ParsedArgs args, bool includeSoundsByDefault)
         {
+            string defaultBranches = includeSoundsByDefault ? "auto" : "icon,effect,hit";
             var options = new SkillSpriteExportOptions
             {
-                Branches = ParseBranches(args.GetValue("branch") ?? args.GetValue("branches") ?? "icon,effect,hit"),
+                Branches = ParseBranches(args.GetValue("branch") ?? args.GetValue("branches") ?? defaultBranches, out bool autoVisualBranches),
                 CanvasInputs = new List<string>(),
                 SoundInputs = new List<string>(),
                 MaxCanvasInputs = args.GetInt("max-canvas-inputs", 256),
                 MaxSoundInputs = args.GetInt("max-sound-inputs", 64),
                 DirectOnly = args.HasFlag("direct-only"),
-                IncludeSounds = includeSoundsByDefault || args.HasFlag("include-sound") || args.HasFlag("include-sounds")
+                IncludeSounds = includeSoundsByDefault || args.HasFlag("include-sound") || args.HasFlag("include-sounds"),
+                AutoVisualBranches = autoVisualBranches
             };
 
             AddCanvasInput(options.CanvasInputs, args.GetValue("canvas-wz"));
@@ -51,8 +54,9 @@ namespace WzComparerR2.Cli
             return options;
         }
 
-        private static List<string> ParseBranches(string value)
+        private static List<string> ParseBranches(string value, out bool autoVisualBranches)
         {
+            autoVisualBranches = false;
             var branches = new List<string>();
             foreach (string raw in value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
             {
@@ -61,14 +65,21 @@ namespace WzComparerR2.Cli
                 {
                     continue;
                 }
-                if (string.Equals(branch, "all", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(branch, "all", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(branch, "auto", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(branch, "visual", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(branch, "visuals", StringComparison.OrdinalIgnoreCase))
                 {
-                    return new List<string> { "icon", "effect", "hit" };
+                    autoVisualBranches = true;
+                    continue;
                 }
-                branches.Add(branch);
+                if (!branches.Any(item => string.Equals(item, branch, StringComparison.OrdinalIgnoreCase)))
+                {
+                    branches.Add(branch);
+                }
             }
 
-            if (branches.Count == 0)
+            if (branches.Count == 0 && !autoVisualBranches)
             {
                 throw new UsageException("skill sprite --branch must contain at least one branch name.");
             }
@@ -129,7 +140,8 @@ namespace WzComparerR2.Cli
                     result.SoundInputPaths.AddRange(ResolveSoundCandidates(args, skillInput, dataResult.InputPath, options, result.Diagnostics));
                 }
 
-                foreach (string branch in options.Branches)
+                var branches = ResolveRequestedBranches(dataResult.Node, options, result.Diagnostics);
+                foreach (string branch in branches)
                 {
                     result.Branches.Add(ExportBranch(dataResult.Node, branch, fullOutputDirectory, args, options, canvasCandidates));
                 }
@@ -144,6 +156,105 @@ namespace WzComparerR2.Cli
                 result.ExportedFileCount = result.SpriteFileCount + result.SoundFileCount;
                 return result;
             }
+        }
+
+        private static List<string> ResolveRequestedBranches(Wz_Node skillNode, SkillSpriteExportOptions options, List<string> diagnostics)
+        {
+            var branches = new List<string>();
+            if (options.AutoVisualBranches)
+            {
+                branches.AddRange(CollectVisualBranches(skillNode));
+            }
+
+            foreach (string branch in options.Branches)
+            {
+                AddBranch(branches, branch);
+            }
+
+            if (branches.Count == 0)
+            {
+                diagnostics.Add("No visual branches were detected for this skill id.");
+            }
+            else if (options.AutoVisualBranches)
+            {
+                diagnostics.Add("Auto-selected visual branches: " + string.Join(",", branches));
+            }
+
+            return branches;
+        }
+
+        private static List<string> CollectVisualBranches(Wz_Node skillNode)
+        {
+            var branches = new List<string>();
+            foreach (Wz_Node child in skillNode.Nodes)
+            {
+                string branch = SkillSpriteExportOptions.NormalizePath(child.Text);
+                if (branch.Length == 0 || IsNonVisualSkillBranch(branch))
+                {
+                    continue;
+                }
+
+                if (ContainsImageOrOutlink(child))
+                {
+                    AddBranch(branches, branch);
+                }
+            }
+            return branches;
+        }
+
+        private static bool IsNonVisualSkillBranch(string branch)
+        {
+            switch (branch.ToLowerInvariant())
+            {
+                case "common":
+                case "pvpcommon":
+                case "level":
+                case "req":
+                case "action":
+                case "masterlevel":
+                case "reqlev":
+                case "hyper":
+                case "vskill":
+                case "vehicleid":
+                case "hyperstat":
+                case "invisible":
+                case "combatorders":
+                case "notremoved":
+                case "origin":
+                case "ascent":
+                case "timelimited":
+                case "ispetautobuff":
+                case "issequenceon":
+                case "disablenextlevelinfo":
+                case "relationskill":
+                case "addattack":
+                case "assistskilllink":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool ContainsImageOrOutlink(Wz_Node root)
+        {
+            foreach (var item in TraverseWithRelativePath(root))
+            {
+                if (item.Node.Value is Wz_Png || !string.IsNullOrEmpty(ReadOutlink(item.Node)))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static void AddBranch(List<string> branches, string branch)
+        {
+            branch = SkillSpriteExportOptions.NormalizePath(branch);
+            if (branch.Length == 0 || branches.Any(item => string.Equals(item, branch, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+            branches.Add(branch);
         }
 
         private static SkillSoundExportResultDto ExportSounds(string skillId, string outputDirectory, ParsedArgs args, List<string> soundCandidates)

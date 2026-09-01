@@ -286,6 +286,7 @@ WZ/MS 파일 포맷을 다루는 가장 낮은 레벨입니다.
 - Phase 5B에서 CLI 로딩 실패 진단도 확장했습니다. `--json`이 있는 로딩 실패는 exit code `3`을 유지하고 stderr JSON에 `Diagnostic.FileName`, `First4Hex`, `HeaderHex`, `DetectedFormat`, `ExpectedPkg2RandomDataSize`, `CurrentPkg2RandomDataSizeProbe`, `ExpectedPkg2RandomHeader64DataSize`, `CurrentPkg2RandomHeader64DataSizeProbe`를 출력합니다. 성공 JSON stdout 계약은 변경하지 않았습니다.
 - `skill sprite` 명령을 추가해 스킬 ID 기준 실제 스프라이트 PNG를 추출할 수 있게 했습니다. 구현은 기존 WzComparer/WzLib 엔진을 수정하지 않고 CLI `SkillSpriteExporter`에서 스킬 메타데이터의 `_outlink`를 읽어 `Skill/_Canvas/...` 대상 경로를 계산한 뒤, `--canvas-wz` 또는 `--data-dir <Data>`로 찾은 `Data/Skill/_Canvas`와 `Data/Packs/Skill*.ms` 후보를 순회합니다. macOS/CrossOver 실클라에서 `Data/Packs/Skill_00000.ms`, skill `1121008`, branches `icon,effect,hit/0`을 대상으로 27개 PNG를 추출했고, 샘플 치수는 `icon 32x32`, `effect/4 740x440`, `hit/0/0 200x156`으로 1x1 stub이 아닌 실제 Canvas였습니다. 검증 산출물은 `.test/wcr2-skill-sprite-interface-20260827-165627`에 있습니다.
 - `skill sprite`는 이미지 전용이라 사운드를 포함하지 않습니다. 이 혼동을 줄이기 위해 `skill export` 명령을 추가했고, 이 명령은 스프라이트 추출 후 `Sound/Skill.img/<skillId>` 아래의 사운드를 함께 추출합니다. `1121008` 실클라 검증에서는 `icon/effect/hit_0` PNG 27개와 `sound/Use.mp3`, `sound/Hit.mp3` 2개를 함께 생성했습니다. 검증 산출물은 `.test/wcr2-skill-export-with-sound-20260827-171245`에 있습니다.
+- 2026-09-01 오리진/어센트 스킬 대량 추출 검증에서 `screen` 누락은 PNG 추출 실패가 아니라 수동 branch 목록 부족이 원인이었습니다. 예를 들어 `3141502`는 `screen2`, `screen3`, `1241501`은 `tile`, `5241503`은 `special*` branch가 추가로 있었습니다. 이에 따라 `skill export`는 기본적으로 스킬 노드에서 visual branch를 자동 감지하도록 바꾸고, `--branch auto|visual|all`로 같은 동작을 명시할 수 있게 했습니다.
 
 ## 처음 작업할 때 주의할 점
 

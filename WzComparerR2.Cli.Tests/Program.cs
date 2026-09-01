@@ -152,6 +152,7 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "--canvas-wz <path>");
             AssertContains(result.Stdout, "--sound-wz <path>");
             AssertContains(result.Stdout, "--branch <list>");
+            AssertContains(result.Stdout, "auto/all/visual detected branches");
             AssertContains(result.Stdout, "UnresolvedPlaceholders");
         }
 
