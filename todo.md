@@ -201,7 +201,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `video list/export/export-all` 전용 명령을 추가한다.
   - `video list`는 MCV 헤더의 FourCC, 해상도, frame count, alpha map 여부를 출력한다.
   - `video export --format mcv`는 원본 `.mcv`를 저장한다.
-  - `video export --format frames|gif|both`는 ffmpeg로 MCV VP9 base/alpha stream을 디코딩한다.
+  - `video export --format frames|png|gif|both`는 ffmpeg로 MCV VP9 base/alpha stream을 디코딩한다.
 - [x] export 결과 manifest 생성 옵션 추가
   - `--manifest export.json`
 
@@ -365,11 +365,35 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `skill export`가 같은 skill id의 내부 `Wz_Video` 컷신을 자동 포함한다.
   - 대표 `Data/Skill` 노드에 비디오가 없으면 `Data/Packs/Skill*.ms`에서 같은 skill id의 메타데이터 노드를 찾아 `screen*/video`를 추출한다.
   - 확인 사례: `5241503` 파이어크래커는 `Data/Packs/Skill_00006.ms :: Skill/524.img/skill/5241503/screen2/video`를 포함해 12개 MCV 컷신 레이어를 추출한다.
-  - `--video-format mcv|frames|gif|both`, `--skip-video`, `--ffmpeg <path>` 옵션을 제공한다.
+  - `--video-format mcv|frames|png|gif|both`, `--skip-video`, `--ffmpeg <path>` 옵션을 제공한다.
+  - `skill export`의 기본 비디오 출력은 PNG 프레임이며, 원본 `.mcv`가 필요할 때만 `--video-format mcv`를 사용한다.
 - [ ] action key와 실제 외부 컷신 이미지 경로가 이름으로 직접 매칭되지 않는 스킬을 위한 추가 매핑/역추적을 확장한다.
   - 내부 `screen*/video`는 해결됨. 외부 Effect/Character 전용 컷신이 action key 이름과 다른 경로에 있을 경우는 추가 조사 대상이다.
 - [x] outlink 대상 context가 살아있는 동안 PNG export를 수행해 closed stream 문제를 피한다.
 - [x] JSON에 `Status`, `OutlinkPath`, `ResolvedPath`, `TriedCanvasInputs`, `TriedSoundInputs`, 파일 `Bytes/Sha256`을 출력한다.
+- [x] `skill sprite/export` 출력 폴더에 `skill-info.json`, `resources.json` sidecar를 추가해 실제 스킬 설명과 리소스 branch 경로/상태/파일 목록을 같이 저장한다.
+- [x] `resources.json` 파일 항목에 PNG/sound/MCV intrinsic metadata와 frame `origin`/`z`/`delay`/`_outlink` direct metadata를 포함한다.
+- [x] `_outlink`를 따라 Canvas PNG를 저장한 경우 원래 skill metadata stub의 같은 relative frame 값을 파일 DTO에 다시 연결한다.
+- [x] `--data-dir` 스킬 조회가 canvas/visual-only 노드를 먼저 잡으면 `Data/Packs/Skill_*.ms`에서 더 풍부한 metadata 노드를 추가 확인한다.
+- [ ] `psdSkill` 같은 파생/모드 marker가 빈 노드이고 실제 variant PNG에도 `origin`/`delay`/`z`가 없는 경우, 대표 스킬과 variant 리소스의 결합 export 정책을 설계한다.
+- [x] 대량 추출 `skill-info.json`의 설명 누락을 점검하고, name-only 스킬과 같은 이름 설명 후보를 분리한 리포트를 남긴다.
+- [x] 스킬 설명 resolver가 `#c10...#` 색상 태그를 unresolved placeholder로 오인하지 않게 보정한다.
+- [ ] 같은 이름 설명 후보를 공식 필드에 덮어쓰지 않고 별도 fallback candidate 필드 또는 명시 옵션으로 노출하는 방식을 설계한다.
+- [x] 비디오가 없는 스킬에서 빈 `video/` 폴더가 생기지 않게 `VideoExporter` 출력 디렉터리 생성을 실제 비디오 발견 이후로 늦춘다.
+- [x] `skill export-batch`를 추가해 여러 스킬을 한 CLI 프로세스에서 추출하고 Skill/String repository 및 Canvas/Sound/Skill*.ms context를 재사용한다.
+  - `--ids`, `--ids-file`, `--out-root`, `--manifest`, `--skip-existing`, `--continue-on-error`를 지원한다.
+  - 텍스트 `--ids-file`은 `id` 또는 `id<TAB>relative/output` 형식을 지원해 같은 skill id를 여러 직업 폴더에 배치할 수 있다.
+  - 각 항목 폴더에 `skill-info.json`, `resources.json`, `export-result.json`을 직접 쓴다.
+- [x] 스킬 이름 기반 검색/해석 CLI를 추가한다.
+  - `skill search-name --name <text>`는 `String/Skill.img`에서 이름 후보를 찾고 data node 존재 여부, `SourceProfile`, visual branch 정보를 같이 보여준다.
+  - `skill resolve-name --name <text> --job-code <code>`는 단일 skill id로 확정 가능한지 확인하고, 동명이인/파생 ID가 남으면 `ambiguous`로 실패한다.
+  - `--job-code`는 `floor(skillId / 10000)` 기준으로 정확 매칭한다.
+  - 이름 비교는 공백/기호 차이를 정규화하고 짧은 오타는 fuzzy 후보로 노출한다.
+- [x] `skill export-batch --names-file <path>`를 추가한다.
+  - 텍스트 `--names-file`은 `name`, `jobCode<TAB>name`, `jobCode<TAB>name<TAB>relative/output`, `jobName<TAB>jobCode<TAB>name<TAB>relative/output` 형식을 지원한다.
+  - JSON `--names-file`은 문자열 이름 배열 또는 `{ name, jobCode, relativeOutput }` 객체 배열을 지원한다.
+  - 배치 내부에서 String 후보 목록과 data profile을 캐시한다.
+  - resolve 실패 항목은 manifest에 `ResolveStatus`와 후보 목록을 남긴다.
 - [x] fixture-free CLI 테스트에 도움말/필수 인자 검증을 추가한다.
 - [x] macOS/CrossOver 실클라에서 `1121008`의 `icon`, `effect`, `hit/0` 실제 PNG와 `Use/Hit.mp3` 추출을 검증한다.
 

@@ -228,20 +228,33 @@ namespace WzComparerR2.Cli
 
         public CliWzDataResult FindDataNode(string kind, string id)
         {
+            CliWzDataResult firstResult = null;
             foreach (WzLoadContext context in dataContexts)
             {
                 Wz_Node node = DomainInfoFinder.FindDataNode(context.Root, kind, id);
                 if (node != null)
                 {
-                    return new CliWzDataResult
+                    var result = new CliWzDataResult
                     {
                         Node = node,
                         InputPath = context.InputPath
                     };
+                    if (!ShouldSearchLazyDataForBetterMatch(kind, node))
+                    {
+                        return result;
+                    }
+
+                    firstResult = result;
+                    break;
                 }
             }
 
-            return FindDataNodeInLazyContexts(kind, id);
+            CliWzDataResult lazyResult = FindDataNodeInLazyContexts(kind, id);
+            if (IsBetterDomainNode(kind, lazyResult == null ? null : lazyResult.Node, firstResult == null ? null : firstResult.Node))
+            {
+                return lazyResult;
+            }
+            return firstResult ?? lazyResult;
         }
 
         public CliWzStringResult FindStringInfo(string kind, string id)
@@ -260,6 +273,25 @@ namespace WzComparerR2.Cli
             }
 
             return null;
+        }
+
+        public List<CliWzStringEntryResult> EnumerateStringInfos(string kind)
+        {
+            var results = new List<CliWzStringEntryResult>();
+            foreach (WzLoadContext context in stringContexts)
+            {
+                foreach (DomainStringEntry entry in DomainInfoFinder.EnumerateStringInfos(context.Root, kind))
+                {
+                    results.Add(new CliWzStringEntryResult
+                    {
+                        Id = entry.Id,
+                        Path = entry.Path,
+                        StringInfo = entry.StringInfo,
+                        InputPath = context.InputPath
+                    });
+                }
+            }
+            return results;
         }
 
         private void LoadContexts(List<WzLoadContext> contexts, List<CliWzRepositoryCandidate> candidates, WzLoadOptions options, string label)
@@ -359,6 +391,101 @@ namespace WzComparerR2.Cli
             }
 
             return null;
+        }
+
+        private static bool ShouldSearchLazyDataForBetterMatch(string kind, Wz_Node node)
+        {
+            return string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase)
+                && ScoreSkillDataNode(node) < 100;
+        }
+
+        private static bool IsBetterDomainNode(string kind, Wz_Node candidate, Wz_Node current)
+        {
+            if (candidate == null)
+            {
+                return false;
+            }
+            if (current == null)
+            {
+                return true;
+            }
+            if (!string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            return ScoreSkillDataNode(candidate) > ScoreSkillDataNode(current);
+        }
+
+        private static int ScoreSkillDataNode(Wz_Node node)
+        {
+            if (node == null)
+            {
+                return 0;
+            }
+
+            int score = 0;
+            if (node.Nodes["common"] != null)
+            {
+                score += 100;
+            }
+            if (node.Nodes["level"] != null)
+            {
+                score += 100;
+            }
+            if (node.Nodes["PVPcommon"] != null)
+            {
+                score += 50;
+            }
+            foreach (string name in new[] { "masterLevel", "reqLev", "req", "hyper", "vSkill", "relationSkill", "addAttack", "assistSkillLink" })
+            {
+                if (node.Nodes[name] != null)
+                {
+                    score += 20;
+                }
+            }
+
+            foreach (Wz_Node child in node.Nodes)
+            {
+                if (child.Value != null && !(child.Value is Wz_Png) && !(child.Value is Wz_Image) && !(child.Value is Wz_File))
+                {
+                    score += 2;
+                }
+            }
+            if (ContainsSkillVisuals(node))
+            {
+                score += 1;
+            }
+            return score;
+        }
+
+        private static bool ContainsSkillVisuals(Wz_Node root)
+        {
+            var stack = new Stack<Wz_Node>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                Wz_Node node = NodePath.ExtractImageNode(stack.Pop(), true);
+                if (node == null)
+                {
+                    continue;
+                }
+                if (node.Value is Wz_Png || node.Value is Wz_Video)
+                {
+                    return true;
+                }
+                Wz_Node outlink = node.Nodes["_outlink"];
+                if (outlink != null && !string.IsNullOrEmpty(outlink.GetValueEx<string>(null)))
+                {
+                    return true;
+                }
+
+                var children = node.Nodes.ToList();
+                for (int i = children.Count - 1; i >= 0; i--)
+                {
+                    stack.Push(children[i]);
+                }
+            }
+            return false;
         }
 
         private static void AddCandidate(List<CliWzRepositoryCandidate> candidates, string path, bool explicitCandidate)
@@ -651,6 +778,14 @@ namespace WzComparerR2.Cli
 
     internal sealed class CliWzStringResult
     {
+        public DomainStringInfo StringInfo { get; set; }
+        public string InputPath { get; set; }
+    }
+
+    internal sealed class CliWzStringEntryResult
+    {
+        public string Id { get; set; }
+        public string Path { get; set; }
         public DomainStringInfo StringInfo { get; set; }
         public string InputPath { get; set; }
     }

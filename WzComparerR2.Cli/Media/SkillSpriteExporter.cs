@@ -154,11 +154,54 @@ namespace WzComparerR2.Cli
     {
         public static SkillSpriteExportResultDto Export(string skillInput, string skillId, string outputDirectory, ParsedArgs args, SkillSpriteExportOptions options)
         {
-            string fullOutputDirectory = Path.GetFullPath(outputDirectory);
-            Directory.CreateDirectory(fullOutputDirectory);
-
-            using (var repository = CliWzRepository.ForSkill(skillInput, args))
+            using (var session = OpenSession(skillInput, args, options))
             {
+                return session.Export(skillId, outputDirectory);
+            }
+        }
+
+        internal static SkillSpriteExportSession OpenSession(string skillInput, ParsedArgs args, SkillSpriteExportOptions options)
+        {
+            return new SkillSpriteExportSession(skillInput, args, options);
+        }
+
+        internal sealed class SkillSpriteExportSession : IDisposable
+        {
+            private readonly string skillInput;
+            private readonly ParsedArgs args;
+            private readonly SkillSpriteExportOptions options;
+            private readonly WzLoadOptions loadOptions;
+            private readonly CliWzRepository repository;
+            private readonly Dictionary<string, WzLoadContext> cachedContexts;
+            private bool disposed;
+
+            public SkillSpriteExportSession(string skillInput, ParsedArgs args, SkillSpriteExportOptions options)
+            {
+                this.skillInput = skillInput;
+                this.args = args;
+                this.options = options;
+                this.loadOptions = WzLoadOptions.FromArgs(args);
+                this.repository = CliWzRepository.ForSkill(skillInput, args);
+                this.cachedContexts = new Dictionary<string, WzLoadContext>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            internal CliWzRepository Repository
+            {
+                get
+                {
+                    ThrowIfDisposed();
+                    return repository;
+                }
+            }
+
+            public SkillSpriteExportResultDto Export(string skillId, string outputDirectory)
+            {
+                ThrowIfDisposed();
+
+                string fullOutputDirectory = Path.GetFullPath(outputDirectory);
+                Directory.CreateDirectory(fullOutputDirectory);
+
+                var stringResult = repository.FindStringInfo("skill", skillId);
                 var dataResult = repository.FindDataNode("skill", skillId);
                 if (dataResult == null)
                 {
@@ -174,8 +217,10 @@ namespace WzComparerR2.Cli
                     CanvasInputPaths = new List<string>(),
                     Diagnostics = new List<string>(),
                     Branches = new List<SkillSpriteBranchResultDto>(),
-                    RelatedAssets = new List<SkillRelatedAssetResultDto>()
+                    RelatedAssets = new List<SkillRelatedAssetResultDto>(),
+                    MetadataPaths = new List<string>()
                 };
+                result.SkillInfo = SkillExportMetadataWriter.BuildSkillInfo(skillId, dataResult, stringResult, repository, result.Diagnostics);
 
                 List<string> canvasCandidates = options.DirectOnly
                     ? new List<string>()
@@ -189,17 +234,17 @@ namespace WzComparerR2.Cli
                 var branches = ResolveRequestedBranches(dataResult.Node, options, result.Diagnostics);
                 foreach (string branch in branches)
                 {
-                    result.Branches.Add(ExportBranch(dataResult.Node, branch, fullOutputDirectory, args, options, canvasCandidates));
+                    result.Branches.Add(ExportBranch(dataResult.Node, branch, fullOutputDirectory, args, options, canvasCandidates, this));
                 }
 
                 if (options.IncludeSounds)
                 {
-                    result.Sound = ExportSounds(skillId, fullOutputDirectory, args, result.SoundInputPaths);
+                    result.Sound = ExportSounds(skillId, fullOutputDirectory, args, result.SoundInputPaths, this);
                 }
 
                 if (options.IncludeVideos)
                 {
-                    result.Videos = ExportVideos(skillId, dataResult.Node, skillInput, dataResult.InputPath, fullOutputDirectory, args, options);
+                    result.Videos = ExportVideos(skillId, dataResult.Node, skillInput, dataResult.InputPath, fullOutputDirectory, args, options, this);
                 }
 
                 if (options.IncludeRelatedAssets && !options.DirectOnly)
@@ -212,7 +257,8 @@ namespace WzComparerR2.Cli
                         fullOutputDirectory,
                         args,
                         options,
-                        result.Diagnostics));
+                        result.Diagnostics,
+                        this));
                 }
 
                 result.SpriteFileCount = result.Branches.Sum(branch => branch.ExportedFileCount);
@@ -220,7 +266,64 @@ namespace WzComparerR2.Cli
                 result.SoundFileCount = result.Sound == null ? 0 : result.Sound.ExportedFileCount;
                 result.VideoFileCount = result.Videos == null ? 0 : result.Videos.ExportedFileCount;
                 result.ExportedFileCount = result.SpriteFileCount + result.SoundFileCount + result.VideoFileCount + result.RelatedFileCount;
+                result.Resources = SkillExportMetadataWriter.BuildResourceSummaries(result);
+                SkillExportMetadataWriter.WriteSidecars(result, fullOutputDirectory);
                 return result;
+            }
+
+            internal WzLoadContext LoadCachedContext(string input, List<string> diagnostics)
+            {
+                ThrowIfDisposed();
+                if (string.IsNullOrWhiteSpace(input))
+                {
+                    return null;
+                }
+
+                string fullPath = Path.GetFullPath(input);
+                WzLoadContext cached;
+                if (cachedContexts.TryGetValue(fullPath, out cached))
+                {
+                    return cached;
+                }
+
+                try
+                {
+                    cached = WzLoadContext.Load(fullPath, loadOptions);
+                    cachedContexts.Add(fullPath, cached);
+                    return cached;
+                }
+                catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException || ex is WzLoadException)
+                {
+                    if (diagnostics != null)
+                    {
+                        diagnostics.Add(Path.GetFileName(input) + ": " + ex.Message);
+                    }
+                    return null;
+                }
+            }
+
+            public void Dispose()
+            {
+                if (disposed)
+                {
+                    return;
+                }
+
+                foreach (var context in cachedContexts.Values)
+                {
+                    context.Dispose();
+                }
+                cachedContexts.Clear();
+                repository.Dispose();
+                disposed = true;
+            }
+
+            private void ThrowIfDisposed()
+            {
+                if (disposed)
+                {
+                    throw new ObjectDisposedException(nameof(SkillSpriteExportSession));
+                }
             }
         }
 
@@ -323,7 +426,12 @@ namespace WzComparerR2.Cli
             branches.Add(branch);
         }
 
-        private static SkillSoundExportResultDto ExportSounds(string skillId, string outputDirectory, ParsedArgs args, List<string> soundCandidates)
+        private static SkillSoundExportResultDto ExportSounds(
+            string skillId,
+            string outputDirectory,
+            ParsedArgs args,
+            List<string> soundCandidates,
+            SkillSpriteExportSession session)
         {
             var result = new SkillSoundExportResultDto
             {
@@ -342,32 +450,28 @@ namespace WzComparerR2.Cli
                 }
 
                 result.TriedSoundInputs.Add(input);
-                try
+                WzLoadContext context = session.LoadCachedContext(input, result.Diagnostics);
+                if (context == null)
                 {
-                    using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
-                    {
-                        Wz_Node node = NodePath.Resolve(context.Root, result.RequestedPath, true);
-                        if (node == null)
-                        {
-                            continue;
-                        }
+                    continue;
+                }
 
-                        result.SourcePath = node.FullPath;
-                        result.InputPath = input;
-                        result.Files.AddRange(ExtractExporter.ExportMedia(node, Path.Combine(outputDirectory, "sound"), true, "sound"));
-                        result.ExportedFileCount = result.Files.Count;
-                        result.Status = result.ExportedFileCount > 0 ? "exported" : "no-sound-assets";
-                        if (result.ExportedFileCount == 0)
-                        {
-                            result.Diagnostic = "Skill sound path exists but contains no sound assets.";
-                        }
-                        return result;
-                    }
-                }
-                catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException || ex is WzLoadException)
+                Wz_Node node = NodePath.Resolve(context.Root, result.RequestedPath, true);
+                if (node == null)
                 {
-                    result.Diagnostics.Add(Path.GetFileName(input) + ": " + ex.Message);
+                    continue;
                 }
+
+                result.SourcePath = node.FullPath;
+                result.InputPath = input;
+                result.Files.AddRange(ExtractExporter.ExportMedia(node, Path.Combine(outputDirectory, "sound"), true, "sound"));
+                result.ExportedFileCount = result.Files.Count;
+                result.Status = result.ExportedFileCount > 0 ? "exported" : "no-sound-assets";
+                if (result.ExportedFileCount == 0)
+                {
+                    result.Diagnostic = "Skill sound path exists but contains no sound assets.";
+                }
+                return result;
             }
 
             result.Status = "not-found";
@@ -382,7 +486,8 @@ namespace WzComparerR2.Cli
             string dataInputPath,
             string outputDirectory,
             ParsedArgs args,
-            SkillSpriteExportOptions options)
+            SkillSpriteExportOptions options,
+            SkillSpriteExportSession session)
         {
             var result = new SkillVideoExportResultDto
             {
@@ -396,10 +501,10 @@ namespace WzComparerR2.Cli
             try
             {
                 result.TriedVideoInputs.Add(dataInputPath);
-                result.Files.AddRange(VideoExporter.Export(skillNode, Path.Combine(outputDirectory, "video"), true, VideoExportOptions.FromArgs(args)));
+                result.Files.AddRange(VideoExporter.Export(skillNode, Path.Combine(outputDirectory, "video"), true, VideoExportOptions.FromArgs(args, "frames")));
                 if (result.Files.Count == 0)
                 {
-                    ExportVideosFromMetadataInputs(skillId, skillInput, dataInputPath, outputDirectory, args, options, result);
+                    ExportVideosFromMetadataInputs(skillId, skillInput, dataInputPath, outputDirectory, args, options, result, session);
                 }
 
                 result.ExportedFileCount = result.Files.Count;
@@ -426,7 +531,8 @@ namespace WzComparerR2.Cli
             string outputDirectory,
             ParsedArgs args,
             SkillSpriteExportOptions options,
-            SkillVideoExportResultDto result)
+            SkillVideoExportResultDto result,
+            SkillSpriteExportSession session)
         {
             string dataDir = ResolveDataDirectory(args.GetValue("data-dir"), skillInput, dataInputPath);
             if (string.IsNullOrEmpty(dataDir))
@@ -445,33 +551,36 @@ namespace WzComparerR2.Cli
                 }
 
                 result.TriedVideoInputs.Add(input);
-                try
+                WzLoadContext context = session.LoadCachedContext(input, result.Diagnostics);
+                if (context == null)
                 {
-                    using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
-                    {
-                        Wz_Node node = DomainInfoFinder.FindDataNode(context.Root, "skill", skillId);
-                        if (node == null)
-                        {
-                            continue;
-                        }
-
-                        int before = result.Files.Count;
-                        result.Files.AddRange(VideoExporter.Export(node, Path.Combine(outputDirectory, "video"), true, VideoExportOptions.FromArgs(args)));
-                        if (result.Files.Count > before)
-                        {
-                            result.SourcePath = node.FullPath;
-                            return;
-                        }
-                    }
+                    continue;
                 }
-                catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException || ex is WzLoadException)
+
+                Wz_Node node = DomainInfoFinder.FindDataNode(context.Root, "skill", skillId);
+                if (node == null)
                 {
-                    result.Diagnostics.Add(Path.GetFileName(input) + ": " + ex.Message);
+                    continue;
+                }
+
+                int before = result.Files.Count;
+                result.Files.AddRange(VideoExporter.Export(node, Path.Combine(outputDirectory, "video"), true, VideoExportOptions.FromArgs(args, "frames")));
+                if (result.Files.Count > before)
+                {
+                    result.SourcePath = node.FullPath;
+                    return;
                 }
             }
         }
 
-        private static SkillSpriteBranchResultDto ExportBranch(Wz_Node skillNode, string branch, string outputDirectory, ParsedArgs args, SkillSpriteExportOptions options, List<string> canvasCandidates)
+        private static SkillSpriteBranchResultDto ExportBranch(
+            Wz_Node skillNode,
+            string branch,
+            string outputDirectory,
+            ParsedArgs args,
+            SkillSpriteExportOptions options,
+            List<string> canvasCandidates,
+            SkillSpriteExportSession session)
         {
             var branchResult = new SkillSpriteBranchResultDto
             {
@@ -498,7 +607,7 @@ namespace WzComparerR2.Cli
                 branchResult.OutlinkPath = resolvedOutlink;
                 branchResult.TriedOutlinkPaths.AddRange(BuildOutlinkPathCandidates(resolvedOutlink));
 
-                if (TryExportOutlinkNode(canvasCandidates, branchResult, args, Path.Combine(outputDirectory, SanitizeSegment(branch))))
+                if (TryExportOutlinkNode(canvasCandidates, branchResult, args, Path.Combine(outputDirectory, SanitizeSegment(branch)), branchNode, session))
                 {
                     branchResult.ExportedFileCount = branchResult.Files.Count;
                     branchResult.Status = branchResult.ExportedFileCount > 0 ? "exported-outlink" : "no-image-assets";
@@ -524,7 +633,13 @@ namespace WzComparerR2.Cli
             return branchResult;
         }
 
-        private static bool TryExportOutlinkNode(List<string> canvasCandidates, SkillSpriteBranchResultDto branchResult, ParsedArgs args, string outputDirectory)
+        private static bool TryExportOutlinkNode(
+            List<string> canvasCandidates,
+            SkillSpriteBranchResultDto branchResult,
+            ParsedArgs args,
+            string outputDirectory,
+            Wz_Node metadataRoot,
+            SkillSpriteExportSession session)
         {
             var triedInputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string input in canvasCandidates)
@@ -535,25 +650,23 @@ namespace WzComparerR2.Cli
                 }
 
                 branchResult.TriedCanvasInputs.Add(input);
-                try
+                WzLoadContext context = session.LoadCachedContext(input, branchResult.Diagnostics);
+                if (context == null)
                 {
-                    using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
-                    {
-                        foreach (string outlinkPath in branchResult.TriedOutlinkPaths)
-                        {
-                            Wz_Node node = NodePath.Resolve(context.Root, outlinkPath, true);
-                            if (node != null)
-                            {
-                                branchResult.ResolvedPath = node.FullPath;
-                                branchResult.Files.AddRange(ExtractExporter.ExportMedia(node, outputDirectory, true, "image"));
-                                return true;
-                            }
-                        }
-                    }
+                    continue;
                 }
-                catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException || ex is WzLoadException)
+
+                foreach (string outlinkPath in branchResult.TriedOutlinkPaths)
                 {
-                    branchResult.Diagnostics.Add(Path.GetFileName(input) + ": " + ex.Message);
+                    Wz_Node node = NodePath.Resolve(context.Root, outlinkPath, true);
+                    if (node != null)
+                    {
+                        branchResult.ResolvedPath = node.FullPath;
+                        var files = ExtractExporter.ExportMedia(node, outputDirectory, true, "image");
+                        ExtractedFileMetadata.EnrichFromMetadataRoot(files, node, metadataRoot);
+                        branchResult.Files.AddRange(files);
+                        return true;
+                    }
                 }
             }
 
@@ -819,11 +932,15 @@ namespace WzComparerR2.Cli
         public int RelatedFileCount { get; set; }
         public int SoundFileCount { get; set; }
         public int VideoFileCount { get; set; }
+        public int MetadataFileCount { get; set; }
         public List<string> CanvasInputPaths { get; set; }
         public List<string> SoundInputPaths { get; set; } = new List<string>();
+        public List<string> MetadataPaths { get; set; }
         public List<string> Diagnostics { get; set; }
+        public SkillExportInfoDto SkillInfo { get; set; }
         public List<SkillSpriteBranchResultDto> Branches { get; set; }
         public List<SkillRelatedAssetResultDto> RelatedAssets { get; set; }
+        public List<SkillExportResourceDto> Resources { get; set; }
         public SkillSoundExportResultDto Sound { get; set; }
         public SkillVideoExportResultDto Videos { get; set; }
     }

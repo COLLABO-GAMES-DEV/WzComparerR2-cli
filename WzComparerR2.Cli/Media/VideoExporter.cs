@@ -17,7 +17,12 @@ namespace WzComparerR2.Cli
 
         public static VideoExportOptions FromArgs(ParsedArgs args)
         {
-            string format = args.GetValue("video-format") ?? args.GetValue("format") ?? "mcv";
+            return FromArgs(args, "mcv");
+        }
+
+        public static VideoExportOptions FromArgs(ParsedArgs args, string defaultFormat)
+        {
+            string format = args.GetValue("video-format") ?? args.GetValue("format") ?? defaultFormat ?? "mcv";
             string decode = args.GetValue("decode");
             if (!string.IsNullOrEmpty(decode))
             {
@@ -29,9 +34,13 @@ namespace WzComparerR2.Cli
             }
 
             format = format.ToLowerInvariant();
+            if (format == "png")
+            {
+                format = "frames";
+            }
             if (format != "mcv" && format != "frames" && format != "gif" && format != "both")
             {
-                throw new UsageException("video export --format must be one of: mcv, frames, gif, both.");
+                throw new UsageException("video export --format must be one of: mcv, frames, png, gif, both.");
             }
 
             int maxFrames = args.GetInt("max-frames", 0);
@@ -55,7 +64,6 @@ namespace WzComparerR2.Cli
         public static List<ExtractedFileDto> Export(Wz_Node node, string outputDirectory, bool recursive, VideoExportOptions options)
         {
             string fullOutputDirectory = Path.GetFullPath(outputDirectory);
-            Directory.CreateDirectory(fullOutputDirectory);
 
             var files = new List<ExtractedFileDto>();
             if (recursive)
@@ -126,7 +134,7 @@ namespace WzComparerR2.Cli
             {
                 string gifPath = Path.Combine(nodeOutputDirectory, SanitizeFileName(node.Text) + ".gif");
                 DecodeGif(baseIvf, alphaIvf, hasAlpha, header, gifPath, options.FfmpegPath, workDirectory);
-                files.Add(CreateFileDto(node, gifPath, "gif"));
+                files.Add(CreateFileDto(node, node, gifPath, "gif"));
             }
 
             if (!options.KeepWorkFiles)
@@ -168,7 +176,7 @@ namespace WzComparerR2.Cli
             string path = GetOutputPath(outputDirectory, root, node, ".mcv");
             EnsureParentDirectory(path);
             File.WriteAllBytes(path, CopyVideoData(node));
-            files.Add(CreateFileDto(node, path, "mcv"));
+            files.Add(CreateFileDto(node, root, path, "mcv"));
         }
 
         private static byte[] CopyVideoData(Wz_Node node)
@@ -312,7 +320,7 @@ namespace WzComparerR2.Cli
         {
             foreach (string path in Directory.EnumerateFiles(outputDirectory, "frame-*.png").OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
             {
-                files.Add(CreateFileDto(node, path, "png"));
+                files.Add(CreateFileDto(node, node, path, "png"));
             }
         }
 
@@ -396,16 +404,21 @@ namespace WzComparerR2.Cli
             }
         }
 
-        private static ExtractedFileDto CreateFileDto(Wz_Node node, string path, string type)
+        private static ExtractedFileDto CreateFileDto(Wz_Node node, Wz_Node root, string path, string type)
         {
-            return new ExtractedFileDto
+            var dto = new ExtractedFileDto
             {
                 SourcePath = node.FullPath,
                 OutputPath = path,
                 Type = type,
                 Bytes = new FileInfo(path).Length,
-                Sha256 = ComputeSha256(path)
+                Sha256 = ComputeSha256(path),
+                RelativePath = string.Join("/", GetRelativeSegments(root, node)),
+                FrameIndex = ExtractedFileMetadata.TryParseFrameIndex(node.Text)
             };
+            ExtractedFileMetadata.ApplyIntrinsicMetadata(dto, node);
+            ExtractedFileMetadata.ApplyNodeMetadata(dto, node);
+            return dto;
         }
 
         private static string ComputeSha256(string path)

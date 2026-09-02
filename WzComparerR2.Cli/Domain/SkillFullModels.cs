@@ -837,7 +837,7 @@ namespace WzComparerR2.Cli
                 if (template[index] == '#')
                 {
                     int length = ReadPlaceholderLength(template, index + 1);
-                    if (index + 1 < template.Length && template[index + 1] == 'c')
+                    if (IsColorTagStart(template, index))
                     {
                         index += 2;
                         continue;
@@ -909,7 +909,7 @@ namespace WzComparerR2.Cli
                 if (template[index] == '#')
                 {
                     int length = ReadPlaceholderLength(template, index + 1);
-                    if (index + 1 < template.Length && template[index + 1] == 'c')
+                    if (IsColorTagStart(template, index))
                     {
                         index += 2;
                         continue;
@@ -981,10 +981,7 @@ namespace WzComparerR2.Cli
             while (start + length < text.Length)
             {
                 char ch = text[start + length];
-                if (ch == '_'
-                    || (ch >= 'a' && ch <= 'z')
-                    || (ch >= 'A' && ch <= 'Z')
-                    || (length > 0 && ch >= '0' && ch <= '9'))
+                if (IsPlaceholderCharacter(ch, length))
                 {
                     length++;
                     continue;
@@ -992,6 +989,36 @@ namespace WzComparerR2.Cli
                 break;
             }
             return length;
+        }
+
+        private static bool IsColorTagStart(string text, int index)
+        {
+            if (index + 1 >= text.Length || text[index] != '#' || text[index + 1] != 'c')
+            {
+                return false;
+            }
+
+            if (index + 2 >= text.Length)
+            {
+                return true;
+            }
+
+            return !IsPlaceholderLeadingCharacter(text[index + 2]);
+        }
+
+        private static bool IsPlaceholderLeadingCharacter(char ch)
+        {
+            return ch == '_'
+                || (ch >= 'a' && ch <= 'z')
+                || (ch >= 'A' && ch <= 'Z');
+        }
+
+        private static bool IsPlaceholderCharacter(char ch, int length)
+        {
+            return ch == '_'
+                || (ch >= 'a' && ch <= 'z')
+                || (ch >= 'A' && ch <= 'Z')
+                || (length > 0 && ch >= '0' && ch <= '9');
         }
     }
 

@@ -148,18 +148,32 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "--data-dir <dir>");
             AssertContains(result.Stdout, "--skill-wz <path>");
             AssertContains(result.Stdout, "wcr2 skill full [<skill-wz-file-or-dir>]");
+            AssertContains(result.Stdout, "wcr2 skill search-name [<skill-wz-file-or-dir>]");
+            AssertContains(result.Stdout, "wcr2 skill resolve-name [<skill-wz-file-or-dir>]");
             AssertContains(result.Stdout, "wcr2 skill sprite [<skill-wz-file-or-dir>]");
             AssertContains(result.Stdout, "wcr2 skill export [<skill-wz-file-or-dir>]");
+            AssertContains(result.Stdout, "wcr2 skill export-batch [<skill-wz-file-or-dir>]");
+            AssertContains(result.Stdout, "--name <text>");
+            AssertContains(result.Stdout, "--job-code <code>");
             AssertContains(result.Stdout, "--canvas-wz <path>");
             AssertContains(result.Stdout, "--sound-wz <path>");
             AssertContains(result.Stdout, "Packs/Skill_*.ms fallback");
             AssertContains(result.Stdout, "--include-video");
             AssertContains(result.Stdout, "--video-format <fmt>");
+            AssertContains(result.Stdout, "mcv|frames|png|gif|both");
+            AssertContains(result.Stdout, "default PNG frames");
             AssertContains(result.Stdout, "--branch <list>");
             AssertContains(result.Stdout, "auto/all/visual detected branches");
             AssertContains(result.Stdout, "--include-related");
             AssertContains(result.Stdout, "--related-key <name>");
+            AssertContains(result.Stdout, "skill-info.json");
+            AssertContains(result.Stdout, "resources.json");
             AssertContains(result.Stdout, "UnresolvedPlaceholders");
+            AssertContains(result.Stdout, "Origin, Z, Delay");
+            AssertContains(result.Stdout, "--ids-file <path>");
+            AssertContains(result.Stdout, "--names-file <path>");
+            AssertContains(result.Stdout, "--out-root <dir>");
+            AssertContains(result.Stdout, "--skip-existing");
         }
 
         private static void SkillSpriteValidatesRequiredInputs(CliRunner runner)
@@ -179,6 +193,26 @@ namespace WzComparerR2.Cli.Tests
             CommandResult exportMissingOut = runner.Run("skill", "export", "--id", "1121008");
             AssertExitCode(exportMissingOut, 1);
             AssertContains(exportMissingOut.Stderr, "skill export requires --out <output-dir>.");
+
+            CommandResult batchMissingInput = runner.Run("skill", "export-batch", "--ids", "1121008", "--out-root", "sprites");
+            AssertExitCode(batchMissingInput, 1);
+            AssertContains(batchMissingInput.Stderr, "skill full requires <skill-wz-file-or-dir>, --skill-wz <path>, or --data-dir <dir>.");
+
+            CommandResult batchMissingOut = runner.Run("skill", "export-batch", "--data-dir", "Data", "--ids", "1121008");
+            AssertExitCode(batchMissingOut, 1);
+            AssertContains(batchMissingOut.Stderr, "skill export-batch requires --out-root <output-dir>.");
+
+            CommandResult batchMissingIds = runner.Run("skill", "export-batch", "--data-dir", "Data", "--out-root", "sprites");
+            AssertExitCode(batchMissingIds, 1);
+            AssertContains(batchMissingIds.Stderr, "skill export-batch requires --ids <id,id>, --ids-file <path>, --names <name,name>, or --names-file <path>.");
+
+            CommandResult nameSearchMissingInput = runner.Run("skill", "search-name", "--name", "파이어크래커");
+            AssertExitCode(nameSearchMissingInput, 1);
+            AssertContains(nameSearchMissingInput.Stderr, "skill search-name requires <skill-wz-file-or-dir>, --skill-wz <path>, or --data-dir <dir>.");
+
+            CommandResult nameSearchMissingName = runner.Run("skill", "search-name", "--data-dir", "Data");
+            AssertExitCode(nameSearchMissingName, 1);
+            AssertContains(nameSearchMissingName.Stderr, "skill name lookup requires --name <text>.");
         }
 
         private static void MediaHelpListsDedicatedCommands(CliRunner runner)
@@ -192,6 +226,12 @@ namespace WzComparerR2.Cli.Tests
             AssertExitCode(image, 0);
             AssertContains(image.Stdout, "wcr2 image list <file-or-dir>");
             AssertContains(image.Stdout, "System.Drawing PNG path");
+
+            CommandResult video = runner.Run("video", "--help");
+            AssertExitCode(video, 0);
+            AssertContains(video.Stdout, "wcr2 video export <file-or-dir>");
+            AssertContains(video.Stdout, "mcv|frames|png|gif|both");
+            AssertContains(video.Stdout, "default mcv");
         }
 
         private static void MediaCommandsValidateRequiredInputs(CliRunner runner)

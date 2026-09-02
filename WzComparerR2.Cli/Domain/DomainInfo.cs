@@ -66,6 +66,53 @@ namespace WzComparerR2.Cli
             return null;
         }
 
+        public static List<DomainStringEntry> EnumerateStringInfos(Wz_Node root, string kind)
+        {
+            var results = new List<DomainStringEntry>();
+            foreach (Wz_Node node in Traverse(root, true))
+            {
+                string id = TryReadStringInfoId(node.Text);
+                if (string.IsNullOrEmpty(id) || !IsPreferredStringPath(node, kind))
+                {
+                    continue;
+                }
+
+                var info = DomainStringInfo.FromNode(node);
+                if (!info.HasValues)
+                {
+                    continue;
+                }
+
+                results.Add(new DomainStringEntry
+                {
+                    Id = id,
+                    Path = node.FullPath,
+                    StringInfo = info
+                });
+            }
+
+            return results;
+        }
+
+        private static string TryReadStringInfoId(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            string id = text.Trim();
+            if (id.EndsWith(".img", StringComparison.OrdinalIgnoreCase))
+            {
+                id = id.Substring(0, id.Length - 4);
+            }
+
+            long numericId;
+            return long.TryParse(id, out numericId) && numericId >= 0
+                ? numericId.ToString()
+                : null;
+        }
+
         private static List<string> BuildIdCandidates(string kind, string id)
         {
             var candidates = new List<string>();
@@ -221,6 +268,13 @@ namespace WzComparerR2.Cli
                 }
             }
         }
+    }
+
+    internal sealed class DomainStringEntry
+    {
+        public string Id { get; set; }
+        public string Path { get; set; }
+        public DomainStringInfo StringInfo { get; set; }
     }
 
     internal sealed class DomainStringInfo

@@ -205,7 +205,7 @@ namespace WzComparerR2.Cli
                     CrossPlatformPngWriter.Save(png, page, path);
                 }
 
-                files.Add(CreateFileDto(node, path, "png"));
+                files.Add(CreateFileDto(node, root, path, "png"));
             }
         }
 
@@ -226,7 +226,7 @@ namespace WzComparerR2.Cli
             string path = GetOutputPath(outputDirectory, root, node, extension);
             EnsureParentDirectory(path);
             File.WriteAllBytes(path, data);
-            files.Add(CreateFileDto(node, path, type));
+            files.Add(CreateFileDto(node, root, path, type));
         }
 
         private static void ExportBlob(Wz_Node node, string outputDirectory, Wz_Node root, string type, string extension, List<ExtractedFileDto> files)
@@ -248,7 +248,7 @@ namespace WzComparerR2.Cli
             string path = GetOutputPath(outputDirectory, root, node, extension);
             EnsureParentDirectory(path);
             File.WriteAllBytes(path, data);
-            files.Add(CreateFileDto(node, path, type));
+            files.Add(CreateFileDto(node, root, path, type));
         }
 
         private static void ExportText(Wz_Node node, string outputDirectory, Wz_Node root, List<ExtractedFileDto> files)
@@ -257,7 +257,7 @@ namespace WzComparerR2.Cli
             string path = GetOutputPath(outputDirectory, root, node, ".txt");
             EnsureParentDirectory(path);
             File.WriteAllText(path, value);
-            files.Add(CreateFileDto(node, path, NodeDto.GetTypeName(node.Value)));
+            files.Add(CreateFileDto(node, root, path, NodeDto.GetTypeName(node.Value)));
         }
 
         private static string GetSoundExtension(Wz_SoundType type)
@@ -320,16 +320,21 @@ namespace WzComparerR2.Cli
             }
         }
 
-        private static ExtractedFileDto CreateFileDto(Wz_Node node, string path, string type)
+        private static ExtractedFileDto CreateFileDto(Wz_Node node, Wz_Node root, string path, string type)
         {
-            return new ExtractedFileDto
+            var dto = new ExtractedFileDto
             {
                 SourcePath = node.FullPath,
                 OutputPath = path,
                 Type = type,
                 Bytes = new FileInfo(path).Length,
-                Sha256 = ComputeSha256(path)
+                Sha256 = ComputeSha256(path),
+                RelativePath = string.Join("/", GetRelativeSegments(root, node)),
+                FrameIndex = ExtractedFileMetadata.TryParseFrameIndex(node.Text)
             };
+            ExtractedFileMetadata.ApplyIntrinsicMetadata(dto, node);
+            ExtractedFileMetadata.ApplyNodeMetadata(dto, node);
+            return dto;
         }
 
         private static string ComputeSha256(string path)
@@ -360,12 +365,4 @@ namespace WzComparerR2.Cli
         }
     }
 
-    internal sealed class ExtractedFileDto
-    {
-        public string SourcePath { get; set; }
-        public string OutputPath { get; set; }
-        public string Type { get; set; }
-        public long Bytes { get; set; }
-        public string Sha256 { get; set; }
-    }
 }

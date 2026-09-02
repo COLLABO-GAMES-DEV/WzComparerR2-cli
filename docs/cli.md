@@ -16,6 +16,28 @@ dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Debug --no-restore
 DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll --help
 ```
 
+## 처음 사용하는 순서
+
+MapleStory 설치 폴더의 `Data` 경로를 먼저 확인합니다. Windows 기본 예시는 `C:\Nexon\Maple\Data`, macOS/CrossOver 예시는 `~/Library/Application Support/MapleStory/Bottles/maplestory/drive_c/Nexon/Maple/Data`입니다.
+
+스킬을 뽑을 때는 아래 순서로 확인하면 실수를 줄일 수 있습니다.
+
+```bash
+# 1. 이름으로 후보 확인
+wcr2 skill search-name --data-dir Data --name "파이어크래커" --json
+
+# 2. 직업 코드까지 넣어 단일 skill id로 확정
+wcr2 skill resolve-name --data-dir Data --name "파이어크래커" --job-code 524 --json
+
+# 3. 확정된 id로 이미지/사운드/비디오/관련 리소스 추출
+wcr2 skill export --data-dir Data --id 5241503 --out out/firecracker --video-format png --json
+
+# 4. 여러 개는 한 프로세스에서 배치 추출
+wcr2 skill export-batch --data-dir Data --names-file skill-names.tsv --out-root out/skills --manifest out/skills/manifest.json --json
+```
+
+`resolve-name` 결과가 `ambiguous`이면 같은 이름 또는 비슷한 이름의 skill id가 여러 개 남아 있다는 뜻입니다. 이 경우 `Candidates`의 `Id`, `JobCode`, `FoundData`, `SourceProfile`, `VisualBranches`를 보고 `--job-code`를 추가하거나 ID를 직접 지정합니다.
+
 ## Commands
 
 ```bash
@@ -35,12 +57,15 @@ wcr2 image list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
 wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 video list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
-wcr2 video export <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]
-wcr2 video export-all <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]
+wcr2 video export <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|png|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]
+wcr2 video export-all <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|png|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]
 wcr2 skill info [<wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 skill full [<skill-wz-file-or-dir>] --id <id> [--skill-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--level <n|max>] [--format json|xml|text] [--out <path>]
+wcr2 skill search-name [<skill-wz-file-or-dir>] --name <text> [--job-code <code>] [--data-dir <dir>] [--max-results <n>] [--json]
+wcr2 skill resolve-name [<skill-wz-file-or-dir>] --name <text> [--job-code <code>] [--data-dir <dir>] [--json]
 wcr2 skill sprite [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--branch icon,effect,hit] [--json]
-wcr2 skill export [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--related-key <name>] [--video-format mcv|frames|gif|both] [--branch auto|icon,effect,hit] [--json]
+wcr2 skill export [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--related-key <name>] [--video-format mcv|frames|png|gif|both] [--branch auto|icon,effect,hit] [--json]
+wcr2 skill export-batch [<skill-wz-file-or-dir>] --ids <id,id>|--ids-file <path>|--names-file <path> --out-root <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--related-key <name>] [--video-format mcv|frames|png|gif|both] [--branch auto|icon,effect,hit] [--skip-existing] [--continue-on-error] [--manifest <json>] [--json]
 wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
 wcr2 item icon [<item-or-data-dir>] --name <exact-name>|--id <id> --out <dir> [--data-dir <dir>] [--string-wz <file-or-dir>] [--canvas-wz <file-or-dir>] [--category cash|consume|install|etc|pet] [--json]
 wcr2 gear info [<wz-file-or-dir>] --id <id> [--character-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]
@@ -123,8 +148,12 @@ wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json
 wcr2 skill full Data/Skill --id 11001025 --string-wz Data/String --format json --out out/skill-11001025.json
 wcr2 skill full --data-dir Data --id 1001008 --format json --out out/skill-1001008.json
 wcr2 skill full Data/Skill --id 1001004 --string-wz Data/String --allow-string-only --format xml --out out/power-strike.xml
+wcr2 skill search-name --data-dir Data --name "파이어크래커" --json
+wcr2 skill resolve-name --data-dir Data --name "파이어크래커" --job-code 524 --json
 wcr2 skill sprite --data-dir Data --id 1121008 --branch effect,hit --out out/skill-1121008 --json
 wcr2 skill export --data-dir Data --id 1121008 --out out/skill-1121008 --json
+wcr2 skill export-batch --data-dir Data --ids-file skills.tsv --out-root out/skills --skip-existing --manifest out/skills/manifest.json --json
+wcr2 skill export-batch --data-dir Data --names-file skill-names.tsv --out-root out/skills-by-name --skip-existing --manifest out/skills-by-name/manifest.json --json
 wcr2 item info Item.wz --id 2000000 --string-wz String.wz
 wcr2 item icon --data-dir Data --name "미라클 큐브" --out out/icons/miracle-cube --json
 wcr2 item icon --data-dir Data --name "보따리상인 묘묘(7일)" --out out/icons/myomyo-7day --json
@@ -274,9 +303,12 @@ export manifest의 각 파일 항목에는 `Bytes`와 `Sha256`이 포함됩니�
 
 `skill full`은 렌더링 없이 CharaSim 스타일의 headless 스킬 해석 결과를 내보냅니다.
 출력에는 `SourceProfile`, `LinkerStatus`, `UnresolvedPlaceholders`, `DataInputPath`, `StringInputPath`, 입력 후보 목록, `Common`, `PvpCommon`, `LevelProperties`, 요구 스킬, 액션, 플래그, 아이콘 메타데이터, 원문 요약, `ResolvedSummary`, 가능한 경우 `NextResolvedSummary`, 미해결 placeholder 진단이 포함됩니다.
+`ResolvedSummary`는 `String/Skill.img`의 `h` 템플릿을 기준으로 계산하며, `#c10...#` 같은 색상 태그는 표시용 markup으로 보고 제거합니다. 현재 skill id의 문자열 노드에 `desc`/`h`가 없으면 이름이 같은 다른 skill id에 설명이 있어도 자동으로 덮어쓰지 않으므로 `Description` 또는 `RawSummary`가 `null`일 수 있습니다.
 `LinkerStatus`는 CLI headless resolver가 데이터 노드, String metadata, scalar stat, visual branch, summary template를 각각 찾았는지 보여줍니다. `GuiStringLinkerLoaded`는 아직 `false`이며, 이는 GUI의 전체 `StringLinker.Load(...)`를 직접 붙인 상태가 아니라 CLI 안전 범위의 headless 해석이라는 뜻입니다.
 `SourceProfile`이 `visual-only`이면 입력 WZ 노드에 아이콘/이펙트 같은 canvas 계열 데이터는 있지만 `common`/`level` 수치 property가 없다는 뜻입니다. 이 경우 `MaxLevel`, `LevelCount`, placeholder 치환 값이 `null` 또는 미해결로 남을 수 있습니다.
-`--data-dir <Data>`를 주면 먼저 `Data/Skill`과 `Data/String`을 자동 후보로 사용합니다. `Data/Skill`에서 skill id를 못 찾으면 `Data/Packs/Skill_*.ms`를 lazy fallback으로 순회해 최신 split metadata 노드도 찾습니다. positional `Data/Skill`만 줘도 sibling `Data/String`이 있으면 문자열 후보로 자동 추가합니다.
+`--data-dir <Data>`를 주면 먼저 `Data/Skill`과 `Data/String`을 자동 후보로 사용합니다. `Data/Skill`에서 skill id를 못 찾거나 찾은 노드가 canvas/visual-only에 가까우면 `Data/Packs/Skill_*.ms`를 lazy fallback으로 순회해 더 풍부한 metadata 노드를 찾습니다. positional `Data/Skill`만 줘도 sibling `Data/String`이 있으면 문자열 후보로 자동 추가합니다.
+스킬 ID를 모르는 상태에서는 먼저 `skill search-name --data-dir Data --name "<스킬명>" --json`을 실행합니다. 이 명령은 `String/Skill.img`를 순회해 이름 후보를 찾고, 각 후보가 실제 `Data/Skill` 또는 `Data/Packs/Skill_*.ms`에 있는지 확인해 `FoundData`, `SourceProfile`, `StatPropertyCount`, `VisualBranches`, `DataPath`, `StringPath`를 함께 출력합니다.
+자동화 전에 단일 ID로 결정 가능한지 확인하려면 `skill resolve-name --data-dir Data --name "<스킬명>" --job-code <직업코드> --json`을 사용합니다. 이름의 공백/기호 차이는 정규화하고 짧은 오타는 fuzzy 후보로 보여주지만, 동명이인이나 파생 ID가 남으면 `Status: ambiguous`로 실패합니다. `--job-code`는 `floor(skillId / 10000)`로 계산되는 Maple job code와 정확히 비교합니다. 예를 들어 `1111010`은 `111`, `11111004`는 `1111`입니다. `--job-code`를 주면 해당 직업 코드에 맞는 후보만 resolved 대상이 되므로 엑셀 스킬명을 잘못 매칭하는 실수를 줄일 수 있습니다.
 `--format json|xml|text`와 `--out <path>`를 지원합니다.
 실제 skill node가 없고 `String/Skill.img` 문자열만 있는 ID는 기본적으로 실패하지만, `--allow-string-only`를 주면 `Mode: string-only` 결과로 이름/설명/문자열 속성을 확인할 수 있습니다.
 툴팁 PNG 렌더링은 아직 포함하지 않으며 Windows-only 후속 단계로 분리되어 있습니다.
@@ -284,12 +316,17 @@ export manifest의 각 파일 항목에는 `Bytes`와 `Sha256`이 포함됩니�
 `skill sprite`는 스킬 ID 기준으로 `icon`, `effect`, `hit` 같은 스프라이트 branch만 PNG로 내보냅니다. 소리까지 같이 뽑으려면 `skill export`를 쓰거나 `skill sprite --include-sound`를 추가합니다.
 스킬 메타데이터 안의 PNG가 `_outlink`가 달린 1x1 stub이면, CLI는 `_outlink` 값을 읽고 `--canvas-wz` 또는 `--data-dir <Data>`에서 찾은 `Data/Skill/_Canvas`와 `Data/Packs/Skill*.ms` 후보를 순회해 실제 Canvas 노드를 해석합니다.
 `skill export`는 실제 스킬 노드에서 감지한 visual branch를 자동 추출한 뒤 `Sound/Skill.img/<skillId>` 아래의 `Use`, `Hit` 같은 사운드를 함께 추출합니다. `--data-dir <Data>`만 준 경우에도 `Data/Skill`에서 못 찾은 스킬은 `Data/Packs/Skill_*.ms` metadata fallback으로 찾습니다. 자동 추출은 `screen`, `screen2`, `tile`, `special`, `special1`, `effect2`처럼 스킬마다 다른 branch 이름을 포함합니다.
-`skill export`는 같은 skill id의 노드 아래에 있는 `Wz_Video`도 자동으로 포함합니다. 먼저 대표 `Data/Skill` 노드를 확인하고, 없으면 `Data/Packs/Skill*.ms`에서 같은 skill id의 메타데이터 노드를 찾아 `screen/video`, `screen2/video` 같은 MCV 컷신을 `video/` 아래에 저장합니다. 기본은 `.mcv`이고, `--video-format frames|gif|both`를 주면 ffmpeg로 PNG 프레임 또는 GIF까지 만듭니다. 필요 없으면 `--skip-video`를 사용합니다.
+`skill sprite`와 `skill export`는 `--out` 폴더에 `skill-info.json`과 `resources.json`도 함께 저장합니다. `skill-info.json`에는 스킬 이름, 설명, 원본/치환된 설명 템플릿, 선택 레벨, unresolved placeholder, data/string 경로가 들어갑니다. `resources.json`에는 `icon`, `effect`, `hit`, `screen*`, `sound`, `video`, `related` 같은 리소스 branch 이름, `_outlink`/resolved 경로, 상태, 파일 수, 추출 파일 목록이 들어갑니다. 각 파일 항목에는 `Bytes`, `Sha256`, `RelativePath`, `FrameIndex`, PNG의 `Width`/`Height`/`Format`/`Pages`, 사운드의 `DataLength`/`Ms`/`Channels`/`Frequency`/`SoundType`, MCV의 `Width`/`Height`/`Format`/`FrameCount`/`VideoFlags`가 기록됩니다. 스킬 metadata stub에 `origin`, `lt`, `rb`, `z`, `delay`, `_outlink`, `_inlink` 또는 기타 scalar/vector child가 있으면 `Origin`, `Lt`, `Rb`, `Z`, `Delay`, `OutlinkPath`, `InlinkPath`, `Metadata`로 같이 남깁니다. CLI가 branch 이름을 해석해 만든 임의 용도 설명은 넣지 않습니다.
+`skill export`는 같은 skill id의 노드 아래에 있는 `Wz_Video`도 자동으로 포함합니다. 먼저 대표 `Data/Skill` 노드를 확인하고, 없으면 `Data/Packs/Skill*.ms`에서 같은 skill id의 메타데이터 노드를 찾아 `screen/video`, `screen2/video` 같은 MCV 컷신을 `video/` 아래에 저장합니다. 기본은 PNG 프레임 추출이며, `--video-format mcv`를 주면 원본 `.mcv`를 저장합니다. `--video-format frames|png|gif|both`를 주면 ffmpeg로 PNG 프레임 또는 GIF까지 만듭니다. 필요 없으면 `--skip-video`를 사용합니다.
+비디오가 없는 스킬은 `resources.json`/`--json`에 `Status: no-video-assets`로만 기록하고 빈 `video/` 폴더는 만들지 않습니다.
 `--sound-wz <path>`로 Sound 입력을 직접 지정할 수 있고, `--data-dir <Data>`를 주면 `Data/Sound`를 자동 후보로 사용합니다.
 
 `skill export`는 추가로 action/delay 기반 related asset lookup을 수행합니다. 대표 스킬 노드가 visual-only shard라 action 값이 비어 있으면 `Data/Packs/Skill*.ms` 메타데이터에서 `action/0 = 6thFireCracker` 같은 문자열 seed를 찾아 `Data/Skill/_Canvas`, `Data/Effect/_Canvas`, `Data/Character/_Canvas`, `Data/Character/Afterimage`를 검색합니다. 직접 seed를 줄 때는 `--related-key 6thFireCracker`를 사용합니다. 내부 `screen*/video`는 `Videos`로 붙고, 외부 action key 검색 결과는 JSON의 `RelatedAssets`와 `RelatedFileCount`에 기록됩니다.
+`skill export-batch`는 여러 스킬을 한 프로세스에서 연속 추출합니다. 단건 `skill export`와 같은 스프라이트/사운드/비디오/related 옵션을 사용하지만, Skill/String repository와 Canvas/Sound/Skill*.ms 입력 context를 세션 동안 캐시해서 다량 추출 시 반복 로딩 비용을 줄입니다. 기본은 첫 실패에서 중단하고 exit code 1을 반환합니다. 전체를 끝까지 돌리고 실패 항목만 manifest로 확인하려면 `--continue-on-error`를 사용합니다. 이미 뽑은 항목은 `--skip-existing`을 주면 `export-result.json`이 있는 폴더를 건너뜁니다.
+`--ids`는 `1121008,5241503`처럼 쉼표나 세미콜론으로 나열합니다. `--ids-file` 텍스트 파일은 한 줄에 `id` 또는 `id<TAB>relative/output`을 받습니다. 같은 스킬 ID를 여러 직업/역할 폴더에 넣어야 하면 두 번째 칸에 상대 출력 경로를 적습니다. JSON 파일도 가능하며 배열 원소는 문자열 ID 또는 `{ "id": "5241503", "relativeOutput": "522_캡틴/5241503_파이어크래커" }` 객체입니다. 배치 명령은 각 항목 폴더에 `skill-info.json`, `resources.json`, `export-result.json`을 쓰고, `--manifest <json>`을 주면 전체 요약을 별도 파일로 저장합니다.
+`--names-file`도 지원합니다. 텍스트 파일은 한 줄에 `name`, `jobCode<TAB>name`, `jobCode<TAB>name<TAB>relative/output`, 또는 `jobName<TAB>jobCode<TAB>name<TAB>relative/output`을 받습니다. JSON 파일은 문자열 이름 배열 또는 `{ "name": "파이어크래커", "jobCode": "524", "relativeOutput": "524_캡틴/5241503_파이어크래커" }` 객체 배열을 받습니다. 이름 기반 항목은 내부적으로 `resolve-name`과 같은 규칙을 사용하고, 단일 ID로 확정되지 않으면 해당 항목을 failed로 기록합니다.
 `--branch auto`, `--branch visual`, `--branch all`은 자동 감지된 visual branch를 추출합니다. `--branch effect,hit/0`처럼 쉼표로 여러 branch를 직접 지정할 수도 있고, `--branch auto,hit/0`처럼 자동 감지와 명시 branch를 합칠 수도 있습니다.
-출력 JSON에는 branch별 `Status`, `OutlinkPath`, `ResolvedPath`, `TriedCanvasInputs`, 사운드 `Status`, `TriedSoundInputs`, 추출된 파일의 `Bytes`와 `Sha256`이 포함됩니다.
+출력 JSON에는 branch별 `Status`, `OutlinkPath`, `ResolvedPath`, `TriedCanvasInputs`, 사운드 `Status`, `TriedSoundInputs`, 추출된 파일의 `Bytes`, `Sha256`, media metadata, frame metadata가 포함됩니다. 단, 특정 variant가 실제 canvas PNG만 갖고 있고 `origin`/`delay`/`z` child가 없는 경우에는 해당 값이 null로 남습니다.
 최신 클라이언트의 특정 Canvas shard가 현재 WzLib에서 읽히지 않으면 명령은 엔진을 우회해 복호화하지 않고 `outlink-not-resolved`와 로딩 진단을 남깁니다. 이 경우 명시적으로 읽히는 Canvas 파일을 `--canvas-wz`로 넘기거나 WzLib 패키지 포맷 지원을 별도 단계로 확장해야 합니다.
 
 스킬 ID만 알고 있을 때의 기본 경로 규칙은 다음과 같습니다.
@@ -303,6 +340,7 @@ wcr2 skill full --data-dir Data --id 1121008 --format json --out out/1121008-ful
 wcr2 image list Data/Packs/Skill_00000.ms --path 112.img/skill/1121008 --max-results 50 --json
 wcr2 skill sprite --data-dir Data --id 1121008 --branch icon,effect,hit/0 --out out/1121008-sprite --json
 wcr2 skill export --data-dir Data --id 1121008 --out out/1121008-assets --json
+wcr2 skill export-batch --data-dir Data --ids 1121008,5241503 --out-root out/skill-batch --video-format png --json
 wcr2 video list Data/Packs/Skill_00006.ms --path Skill/524.img/skill/5241503 --json
 wcr2 video export Data/Packs/Skill_00006.ms --path Skill/524.img/skill/5241503/screen2/video --format frames --out out/firecracker-screen2
 wcr2 skill export --data-dir Data --id 5241503 --video-format gif --out out/firecracker --json

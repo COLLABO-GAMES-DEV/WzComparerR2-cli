@@ -51,11 +51,12 @@ namespace WzComparerR2.Cli
             string outputDirectory,
             ParsedArgs args,
             SkillSpriteExportOptions options,
-            List<string> diagnostics)
+            List<string> diagnostics,
+            SkillSpriteExporter.SkillSpriteExportSession session)
         {
             var results = new List<SkillRelatedAssetResultDto>();
             var keys = CollectReferenceKeys(skillNode, options);
-            AddReferenceKeysFromMetadataInputs(keys, skillId, skillInput, dataInputPath, args, options, diagnostics);
+            AddReferenceKeysFromMetadataInputs(keys, skillId, skillInput, dataInputPath, args, options, diagnostics, session);
             if (keys.Count == 0)
             {
                 diagnostics.Add("No related asset keys were found in action/delay nodes; use --related-key <name> to seed a lookup.");
@@ -79,31 +80,27 @@ namespace WzComparerR2.Cli
                     break;
                 }
 
-                try
+                WzLoadContext context = session.LoadCachedContext(input, diagnostics);
+                if (context == null)
                 {
-                    using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
-                    {
-                        foreach (var match in FindMatches(context.Root, keys))
-                        {
-                            if (results.Count >= options.MaxRelatedMatches)
-                            {
-                                diagnostics.Add("Related asset matches were truncated to " + options.MaxRelatedMatches + " entries.");
-                                break;
-                            }
-
-                            string matchKey = input + "|" + match.Key + "|" + match.Node.FullPath;
-                            if (!seenMatches.Add(matchKey))
-                            {
-                                continue;
-                            }
-
-                            results.Add(ExportMatch(match, input, outputDirectory, skillId));
-                        }
-                    }
+                    continue;
                 }
-                catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException || ex is WzLoadException)
+
+                foreach (var match in FindMatches(context.Root, keys))
                 {
-                    diagnostics.Add(Path.GetFileName(input) + ": " + ex.Message);
+                    if (results.Count >= options.MaxRelatedMatches)
+                    {
+                        diagnostics.Add("Related asset matches were truncated to " + options.MaxRelatedMatches + " entries.");
+                        break;
+                    }
+
+                    string matchKey = input + "|" + match.Key + "|" + match.Node.FullPath;
+                    if (!seenMatches.Add(matchKey))
+                    {
+                        continue;
+                    }
+
+                    results.Add(ExportMatch(match, input, outputDirectory, skillId));
                 }
             }
 
@@ -147,7 +144,8 @@ namespace WzComparerR2.Cli
             string dataInputPath,
             ParsedArgs args,
             SkillSpriteExportOptions options,
-            List<string> diagnostics)
+            List<string> diagnostics,
+            SkillSpriteExporter.SkillSpriteExportSession session)
         {
             string dataDir = ResolveDataDirectory(args.GetValue("data-dir"), skillInput, dataInputPath);
             if (string.IsNullOrEmpty(dataDir))
@@ -165,23 +163,19 @@ namespace WzComparerR2.Cli
             var before = keys.Count;
             foreach (string input in inputs)
             {
-                try
+                WzLoadContext context = session.LoadCachedContext(input, diagnostics);
+                if (context == null)
                 {
-                    using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
-                    {
-                        Wz_Node node = DomainInfoFinder.FindDataNode(context.Root, "skill", skillId);
-                        if (node != null)
-                        {
-                            foreach (string key in CollectReferenceKeys(node, options))
-                            {
-                                AddReferenceKey(keys, key);
-                            }
-                        }
-                    }
+                    continue;
                 }
-                catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException || ex is WzLoadException)
+
+                Wz_Node node = DomainInfoFinder.FindDataNode(context.Root, "skill", skillId);
+                if (node != null)
                 {
-                    diagnostics.Add(Path.GetFileName(input) + ": " + ex.Message);
+                    foreach (string key in CollectReferenceKeys(node, options))
+                    {
+                        AddReferenceKey(keys, key);
+                    }
                 }
             }
 
