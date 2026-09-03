@@ -333,6 +333,8 @@ namespace WzComparerR2.Cli
 
         private CliWzDataResult FindDataNodeInLazyContexts(string kind, string id)
         {
+            CliWzDataResult bestResult = null;
+            WzLoadContext bestContext = null;
             for (int i = 0; i < lazyDataCandidates.Count; i++)
             {
                 CliWzRepositoryCandidate candidate = lazyDataCandidates[i];
@@ -353,12 +355,28 @@ namespace WzComparerR2.Cli
                         continue;
                     }
 
-                    dataContexts.Add(context);
-                    return new CliWzDataResult
+                    var result = new CliWzDataResult
                     {
                         Node = node,
                         InputPath = context.InputPath
                     };
+                    if (bestResult == null || IsBetterDomainNode(kind, result.Node, bestResult.Node))
+                    {
+                        if (bestContext != null)
+                        {
+                            bestContext.Dispose();
+                        }
+                        bestResult = result;
+                        bestContext = context;
+                        context = null;
+                    }
+
+                    if (!ShouldSearchLazyDataForBetterMatch(kind, bestResult.Node))
+                    {
+                        dataContexts.Add(bestContext);
+                        bestContext = null;
+                        return bestResult;
+                    }
                 }
                 catch (FileNotFoundException)
                 {
@@ -390,7 +408,11 @@ namespace WzComparerR2.Cli
                 }
             }
 
-            return null;
+            if (bestContext != null)
+            {
+                dataContexts.Add(bestContext);
+            }
+            return bestResult;
         }
 
         private static bool ShouldSearchLazyDataForBetterMatch(string kind, Wz_Node node)

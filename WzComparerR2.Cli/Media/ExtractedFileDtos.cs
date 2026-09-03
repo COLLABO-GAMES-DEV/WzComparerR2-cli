@@ -133,6 +133,11 @@ namespace WzComparerR2.Cli
             dto.Delay = ReadInt(metadata, "delay") ?? dto.Delay;
         }
 
+        public static Dictionary<string, ExtractedNodeValueDto> CollectDirectNodeMetadata(Wz_Node node)
+        {
+            return CollectDirectMetadata(node);
+        }
+
         public static void EnrichFromMetadataRoot(IList<ExtractedFileDto> files, Wz_Node exportedRoot, Wz_Node metadataRoot)
         {
             if (files == null || exportedRoot == null || metadataRoot == null)

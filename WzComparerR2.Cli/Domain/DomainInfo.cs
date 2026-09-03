@@ -10,6 +10,11 @@ namespace WzComparerR2.Cli
         public static Wz_Node FindDataNode(Wz_Node root, string kind, string id)
         {
             var candidates = BuildIdCandidates(kind, id);
+            if (string.Equals(kind, "skill", StringComparison.OrdinalIgnoreCase))
+            {
+                return FindSkillDataNode(root, candidates);
+            }
+
             foreach (Wz_Node node in Traverse(root, true))
             {
                 if (MatchesAny(node.Text, candidates))
@@ -30,6 +35,50 @@ namespace WzComparerR2.Cli
             }
 
             return null;
+        }
+
+        private static Wz_Node FindSkillDataNode(Wz_Node root, List<string> candidates)
+        {
+            Wz_Node preferred = null;
+            Wz_Node fallback = null;
+            foreach (Wz_Node node in Traverse(root, true))
+            {
+                if (!MatchesAny(node.Text, candidates))
+                {
+                    continue;
+                }
+
+                if (fallback == null)
+                {
+                    fallback = node;
+                }
+
+                if (IsDirectSkillDataPath(node, candidates))
+                {
+                    return node;
+                }
+
+                if (preferred == null && IsPreferredDomainPath(node, "skill"))
+                {
+                    preferred = node;
+                }
+            }
+
+            return preferred ?? fallback;
+        }
+
+        private static bool IsDirectSkillDataPath(Wz_Node node, List<string> candidates)
+        {
+            string path = NormalizePath(node.FullPath).Trim('/');
+            foreach (string candidate in candidates)
+            {
+                if (path.EndsWith("/skill/" + candidate, StringComparison.OrdinalIgnoreCase)
+                    || path.Equals("skill/" + candidate, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         public static DomainStringInfo FindStringInfo(Wz_Node root, string kind, string id)

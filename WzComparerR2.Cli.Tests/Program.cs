@@ -25,6 +25,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("item icon validates required inputs", () => ItemIconValidatesRequiredInputs(runner)),
                 TestCase.Create("skill help lists repository inputs", () => SkillHelpListsRepositoryInputs(runner)),
                 TestCase.Create("skill sprite validates required inputs", () => SkillSpriteValidatesRequiredInputs(runner)),
+                TestCase.Create("optional real data skill sprite merges pack metadata", () => OptionalRealDataSkillSpriteMergesPackMetadata(runner)),
                 TestCase.Create("media help lists dedicated commands", () => MediaHelpListsDedicatedCommands(runner)),
                 TestCase.Create("media commands validate required inputs", () => MediaCommandsValidateRequiredInputs(runner)),
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
@@ -213,6 +214,69 @@ namespace WzComparerR2.Cli.Tests
             CommandResult nameSearchMissingName = runner.Run("skill", "search-name", "--data-dir", "Data");
             AssertExitCode(nameSearchMissingName, 1);
             AssertContains(nameSearchMissingName.Stderr, "skill name lookup requires --name <text>.");
+        }
+
+        private static void OptionalRealDataSkillSpriteMergesPackMetadata(CliRunner runner)
+        {
+            string dataDir = Environment.GetEnvironmentVariable("WCR2_TEST_DATA_DIR");
+            if (string.IsNullOrWhiteSpace(dataDir) || !Directory.Exists(dataDir))
+            {
+                return;
+            }
+
+            using (var temp = TempDirectory.Create())
+            {
+                CommandResult result = runner.Run(
+                    "skill",
+                    "sprite",
+                    "--data-dir",
+                    dataDir,
+                    "--id",
+                    "3141000",
+                    "--branch",
+                    "prepare,keydown,keydownend",
+                    "--out",
+                    temp.Path,
+                    "--json");
+                AssertExitCode(result, 0);
+
+                string skillInfoPath = Path.Combine(temp.Path, "skill-info.json");
+                string resourcesPath = Path.Combine(temp.Path, "resources.json");
+                using (JsonDocument info = JsonDocument.Parse(File.ReadAllText(skillInfoPath)))
+                {
+                    JsonElement root = info.RootElement;
+                    AssertEqual("mixed", root.GetProperty("SourceProfile").GetString(), "3141000 source profile");
+                    AssertContains(root.GetProperty("DataInputPath").GetString(), "Packs");
+                    AssertEqual("314.img\\skill\\3141000", root.GetProperty("DataPath").GetString(), "3141000 data path");
+                }
+
+                using (JsonDocument resources = JsonDocument.Parse(File.ReadAllText(resourcesPath)))
+                {
+                    JsonElement keydown = FindResource(resources.RootElement, "keydown");
+                    AssertEqual("exported-outlink", keydown.GetProperty("Status").GetString(), "keydown status");
+                    AssertContains(keydown.GetProperty("OutlinkPath").GetString(), "Skill/_Canvas/314.img/skill/3141000/keydown");
+                    AssertContains(keydown.GetProperty("ResolvedInputPath").GetString(), "Skill");
+                    AssertEqual("6thStormArrowLoop", keydown.GetProperty("Metadata").GetProperty("action").GetProperty("Value").GetString(), "keydown action");
+
+                    JsonElement firstFrame = keydown.GetProperty("Files")[0];
+                    AssertEqual(316, firstFrame.GetProperty("Origin").GetProperty("X").GetInt32(), "keydown frame 0 origin x");
+                    AssertEqual(214, firstFrame.GetProperty("Origin").GetProperty("Y").GetInt32(), "keydown frame 0 origin y");
+                    AssertEqual(60, firstFrame.GetProperty("Delay").GetInt32(), "keydown frame 0 delay");
+                    AssertContains(firstFrame.GetProperty("MetadataPath").GetString(), "3141000\\keydown\\0");
+                }
+            }
+        }
+
+        private static JsonElement FindResource(JsonElement root, string resource)
+        {
+            foreach (JsonElement item in root.GetProperty("Resources").EnumerateArray())
+            {
+                if (string.Equals(item.GetProperty("Resource").GetString(), resource, StringComparison.OrdinalIgnoreCase))
+                {
+                    return item;
+                }
+            }
+            throw new Exception("Resource not found: " + resource);
         }
 
         private static void MediaHelpListsDedicatedCommands(CliRunner runner)

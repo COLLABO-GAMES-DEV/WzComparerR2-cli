@@ -55,12 +55,16 @@ namespace WzComparerR2.Cli
                     Kind = "image",
                     Resource = branch.Branch,
                     RequestedPath = branch.RequestedPath,
+                    InputPath = branch.InputPath,
                     SourcePath = branch.SourcePath,
+                    MetadataSourcePath = branch.MetadataSourcePath,
                     OutlinkPath = branch.OutlinkPath,
                     ResolvedPath = branch.ResolvedPath,
+                    ResolvedInputPath = branch.ResolvedInputPath,
                     Status = branch.Status,
                     Diagnostic = branch.Diagnostic,
                     ExportedFileCount = branch.ExportedFileCount,
+                    Metadata = branch.Metadata,
                     Files = branch.Files ?? new List<ExtractedFileDto>()
                 });
             }
@@ -231,13 +235,16 @@ namespace WzComparerR2.Cli
         public string Resource { get; set; }
         public string RequestedPath { get; set; }
         public string SourcePath { get; set; }
+        public string MetadataSourcePath { get; set; }
         public string OutlinkPath { get; set; }
         public string ResolvedPath { get; set; }
         public string InputPath { get; set; }
+        public string ResolvedInputPath { get; set; }
         public string OutputPath { get; set; }
         public string Status { get; set; }
         public string Diagnostic { get; set; }
         public int ExportedFileCount { get; set; }
+        public Dictionary<string, ExtractedNodeValueDto> Metadata { get; set; }
         public List<ExtractedFileDto> Files { get; set; }
     }
 }

@@ -375,6 +375,8 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `resources.json` 파일 항목에 PNG/sound/MCV intrinsic metadata와 frame `origin`/`z`/`delay`/`_outlink` direct metadata를 포함한다.
 - [x] `_outlink`를 따라 Canvas PNG를 저장한 경우 원래 skill metadata stub의 같은 relative frame 값을 파일 DTO에 다시 연결한다.
 - [x] `--data-dir` 스킬 조회가 canvas/visual-only 노드를 먼저 잡으면 `Data/Packs/Skill_*.ms`에서 더 풍부한 metadata 노드를 추가 확인한다.
+- [x] `Data/Packs/Skill_*.ms` 내부 검색에서 `psdSkill/<id>` marker보다 `.../skill/<id>` 실제 스킬 노드를 우선하고, 첫 약한 lazy match 대신 metadata 점수가 높은 후보를 선택한다.
+- [x] `resources.json` image resource에 metadata 입력/branch source, resolved canvas 입력, branch-level `action`/`time`/`repeat` metadata를 기록한다.
 - [ ] `psdSkill` 같은 파생/모드 marker가 빈 노드이고 실제 variant PNG에도 `origin`/`delay`/`z`가 없는 경우, 대표 스킬과 variant 리소스의 결합 export 정책을 설계한다.
 - [x] 대량 추출 `skill-info.json`의 설명 누락을 점검하고, name-only 스킬과 같은 이름 설명 후보를 분리한 리포트를 남긴다.
 - [x] 스킬 설명 resolver가 `#c10...#` 색상 태그를 unresolved placeholder로 오인하지 않게 보정한다.

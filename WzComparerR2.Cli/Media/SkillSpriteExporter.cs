@@ -234,7 +234,7 @@ namespace WzComparerR2.Cli
                 var branches = ResolveRequestedBranches(dataResult.Node, options, result.Diagnostics);
                 foreach (string branch in branches)
                 {
-                    result.Branches.Add(ExportBranch(dataResult.Node, branch, fullOutputDirectory, args, options, canvasCandidates, this));
+                    result.Branches.Add(ExportBranch(dataResult.Node, dataResult.InputPath, branch, fullOutputDirectory, args, options, canvasCandidates, this));
                 }
 
                 if (options.IncludeSounds)
@@ -575,6 +575,7 @@ namespace WzComparerR2.Cli
 
         private static SkillSpriteBranchResultDto ExportBranch(
             Wz_Node skillNode,
+            string skillInputPath,
             string branch,
             string outputDirectory,
             ParsedArgs args,
@@ -586,6 +587,7 @@ namespace WzComparerR2.Cli
             {
                 Branch = branch,
                 RequestedPath = SkillSpriteExportOptions.NormalizePath(skillNode.FullPath) + "/" + branch,
+                InputPath = skillInputPath,
                 Files = new List<ExtractedFileDto>(),
                 TriedOutlinkPaths = new List<string>(),
                 TriedCanvasInputs = new List<string>()
@@ -600,6 +602,12 @@ namespace WzComparerR2.Cli
             }
 
             branchResult.SourcePath = branchNode.FullPath;
+            branchResult.MetadataSourcePath = branchNode.FullPath;
+            var branchMetadata = ExtractedFileMetadata.CollectDirectNodeMetadata(branchNode);
+            if (branchMetadata.Count > 0)
+            {
+                branchResult.Metadata = branchMetadata;
+            }
             string outlink = FindBranchOutlink(branchNode, out string descendantRelativePath);
             if (!string.IsNullOrEmpty(outlink))
             {
@@ -662,6 +670,7 @@ namespace WzComparerR2.Cli
                     if (node != null)
                     {
                         branchResult.ResolvedPath = node.FullPath;
+                        branchResult.ResolvedInputPath = input;
                         var files = ExtractExporter.ExportMedia(node, outputDirectory, true, "image");
                         ExtractedFileMetadata.EnrichFromMetadataRoot(files, node, metadataRoot);
                         branchResult.Files.AddRange(files);
@@ -949,15 +958,19 @@ namespace WzComparerR2.Cli
     {
         public string Branch { get; set; }
         public string RequestedPath { get; set; }
+        public string InputPath { get; set; }
         public string SourcePath { get; set; }
+        public string MetadataSourcePath { get; set; }
         public string OutlinkPath { get; set; }
         public string ResolvedPath { get; set; }
+        public string ResolvedInputPath { get; set; }
         public string Status { get; set; }
         public string Diagnostic { get; set; }
         public int ExportedFileCount { get; set; }
         public List<string> TriedOutlinkPaths { get; set; }
         public List<string> TriedCanvasInputs { get; set; }
         public List<string> Diagnostics { get; set; } = new List<string>();
+        public Dictionary<string, ExtractedNodeValueDto> Metadata { get; set; }
         public List<ExtractedFileDto> Files { get; set; }
     }
 

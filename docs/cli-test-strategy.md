@@ -8,6 +8,7 @@ This document defines how CLI output should be verified without committing priva
    - Run from `WzComparerR2.Cli.Tests`.
    - Cover help/version, usage errors, config, profile fallback, avatar dry-run, map dry-run, Lua dry-run/eval, network dry-run, update validation, and plugin loading.
    - These tests must run on macOS, Linux, and Windows.
+   - If `WCR2_TEST_DATA_DIR` points to a private MapleStory `Data` folder, the same runner also enables an optional `3141000` split-layout metadata regression check.
 
 2. Local real-client smoke tests
    - Run against a locally installed MapleStory client.
@@ -66,3 +67,16 @@ When real-client fixture access is available, add golden checks in this order:
 - A WZ export path is considered verified only when output metadata is checked, not merely when the command exits zero.
 - Rendering commands with `CanRender = false` are dry-run contracts, not render verification.
 - Windows-only graphics or native dependency checks must be labeled Windows-only in the test name or script.
+
+## Optional Real-Client Regression
+
+To verify split-layout skill metadata merging locally:
+
+```bash
+WCR2_TEST_DATA_DIR="/path/to/Maple/Data" \
+DOTNET_ROLL_FORWARD=Major \
+dotnet WzComparerR2.Cli.Tests/bin/Release/net8.0/wcr2-tests.dll \
+  --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll
+```
+
+The optional test checks that `3141000` uses `Data/Packs/Skill_*.ms` metadata, follows `Skill/_Canvas/...` outlinks, and records frame `Origin`/`Delay` plus branch `action` metadata in `resources.json`.
