@@ -52,8 +52,7 @@ namespace WzComparerR2.AgentHost
             AgentRunResult result = runner.Run(new AgentRunRequest
             {
                 JobPath = args.GetValue("job"),
-                OutputDirectoryOverride = args.GetValue("out"),
-                CliPath = args.GetValue("cli")
+                OutputDirectoryOverride = args.GetValue("out")
             });
 
             if (args.HasFlag("json"))
@@ -90,7 +89,7 @@ namespace WzComparerR2.AgentHost
             Console.WriteLine("wcr2-agent " + AgentVersion);
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  wcr2-agent run --job <job.json> [--out <dir>] [--cli <wcr2>] [--json]");
+            Console.WriteLine("  wcr2-agent run --job <job.json> [--out <dir>] [--json]");
             Console.WriteLine("  wcr2-agent serve --stdio");
             Console.WriteLine("  wcr2-agent version");
             Console.WriteLine();
@@ -99,7 +98,7 @@ namespace WzComparerR2.AgentHost
 
         private static void PrintRunHelp()
         {
-            Console.WriteLine("Usage: wcr2-agent run --job <job.json> [--out <dir>] [--cli <wcr2>] [--json]");
+            Console.WriteLine("Usage: wcr2-agent run --job <job.json> [--out <dir>] [--json]");
             Console.WriteLine();
             Console.WriteLine("Supported steps: noop, image.search, image.export-related, skill.export, skill.export-batch.");
         }

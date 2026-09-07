@@ -68,13 +68,6 @@ namespace WzComparerR2.Headless.Agent
             string dataDir = string.IsNullOrWhiteSpace(job.DataDir)
                 ? null
                 : ResolvePath(jobDirectory, job.DataDir);
-            string cliPath = !string.IsNullOrWhiteSpace(request.CliPath)
-                ? request.CliPath
-                : job.CliPath;
-            if (!string.IsNullOrWhiteSpace(cliPath))
-            {
-                cliPath = ResolvePath(jobDirectory, cliPath);
-            }
 
             var result = new AgentRunResult
             {
@@ -90,7 +83,6 @@ namespace WzComparerR2.Headless.Agent
                 JobDirectory = jobDirectory,
                 DataDir = dataDir,
                 OutputDir = outputDir,
-                CliPath = cliPath,
                 StepResults = new Dictionary<string, AgentStepResult>(StringComparer.OrdinalIgnoreCase)
             };
             IReadOnlyList<AgentJobStep> steps = job.Steps != null
@@ -542,7 +534,6 @@ namespace WzComparerR2.Headless.Agent
             public string JobDirectory { get; set; }
             public string DataDir { get; set; }
             public string OutputDir { get; set; }
-            public string CliPath { get; set; }
             public Dictionary<string, AgentStepResult> StepResults { get; set; }
         }
     }

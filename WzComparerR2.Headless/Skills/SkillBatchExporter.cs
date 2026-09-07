@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal sealed class SkillBatchExportOptions
     {

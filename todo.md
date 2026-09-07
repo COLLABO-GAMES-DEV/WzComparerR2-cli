@@ -971,11 +971,15 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `ParentPath` 기준 group PNG export 및 manifest 생성
   - 2026-09-07 Sunday Maple 그룹 6개 PNG 추출 검증 통과
 - [x] Agent Runtime Phase 4A: `skill.export` / `skill.export-batch` job step 추가
-  - 기존 `wcr2 skill export/export-batch`를 호출하는 CLI bridge 방식
-  - `--cli`, job `cliPath`, step `cliPath`, `WCR2_CLI_PATH`, sibling build output 자동 탐지 지원
-  - 단건 stdout sidecar: `agent-skill-export-result.json`
-  - 배치 stdout sidecar: `agent-skill-batch-result.json`
-- [ ] Agent Runtime Phase 4B: 기존 skill sprite/export logic을 Headless 서비스로 직접 이동
+  - 초기 구현은 기존 `wcr2 skill export/export-batch`를 호출하는 CLI bridge 방식
+- [x] Agent Runtime Phase 4B: 기존 skill sprite/export logic을 Headless 서비스로 직접 이동
+  - `ParsedArgs`, `UsageException`, WZ 로더, domain finder/name resolver, media exporter, skill sprite/batch exporter를 `WzComparerR2.Headless`로 이동
+  - `wcr2-agent` `skill.export` / `skill.export-batch`는 프로세스 생성 없이 in-process exporter 호출
+  - 단건 result sidecar: `agent-skill-export-result.json`
+  - 배치 result sidecar: `agent-skill-batch-result.json`
+  - `3141000` direct agent smoke: 단건/batch 각각 32개 추출, `Origin`/`Delay` metadata 유지 확인
+  - `5241503` direct agent smoke: image 150개, sound 8개, video frame 356개 추출 확인
+- [ ] Agent Runtime Phase 4C: skill related cross-root effect export direct 검증
 - [ ] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `skill/item/gear/map info`, `animate frames` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `map objects/portals/life/reactors` 검증 필요

@@ -27,7 +27,7 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Debug/net8.0/wcr2-ag
 `wcr2-agent`는 사람이 직접 옵션을 조합하는 CLI보다, 에이전트가 JSON job을 실행하고 manifest를 남기는 용도에 맞춘 인터페이스입니다. 현재는 job 파싱, 빈 job, `noop`, `image.search`, `image.export-related`, `skill.export`, `skill.export-batch` step을 지원합니다.
 
 ```bash
-wcr2-agent run --job job.json --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll --json
+wcr2-agent run --job job.json --json
 ```
 
 최소 job 예시:
@@ -83,7 +83,6 @@ wcr2-agent run --job job.json --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll
 {
   "dataDir": "/path/to/Maple/Data",
   "outputDir": ".test/agent-runs/skills",
-  "cliPath": "WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll",
   "steps": [
     {
       "id": "firecracker",
@@ -117,7 +116,7 @@ wcr2-agent run --job job.json --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll
 }
 ```
 
-`skill.export`와 `skill.export-batch`는 Phase 4A 기준으로 기존 검증된 `wcr2 skill export/export-batch` 명령을 내부 CLI 브리지로 호출합니다. agent는 `--cli`, job `cliPath`, step `cliPath`, `WCR2_CLI_PATH`, 또는 같은 output 폴더의 `wcr2`/`wcr2.exe`/`wcr2.dll` 순서로 CLI를 찾습니다. 각 step은 CLI stdout을 `agent-skill-export-result.json` 또는 `agent-skill-batch-result.json`에 저장하고, 기존 `skill-info.json`, `resources.json`, batch `manifest.json`은 그대로 유지합니다. 이후 단계에서 구현을 Headless 서비스로 옮겨도 job 형식은 유지합니다.
+`skill.export`와 `skill.export-batch`는 Headless로 옮긴 기존 스킬 추출 구현을 프로세스 생성 없이 직접 호출합니다. 각 step은 결과 DTO를 `agent-skill-export-result.json` 또는 `agent-skill-batch-result.json`에 저장하고, 기존 `skill-info.json`, `resources.json`, batch `manifest.json`은 그대로 유지합니다.
 
 ## 처음 사용하는 순서
 

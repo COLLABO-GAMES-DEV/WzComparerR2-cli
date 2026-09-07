@@ -114,7 +114,7 @@ namespace WzComparerR2.Cli.Tests
             CommandResult result = runner.Run("search", "/no/such.wz", "--match-path", "[", "--regex", "--verbose");
             AssertExitCode(result, 1);
             AssertContains(result.Stderr, "Invalid --match-path pattern");
-            AssertContains(result.Stderr, "Exception: WzComparerR2.Cli.UsageException");
+            AssertContains(result.Stderr, "Exception: WzComparerR2.Headless.UsageException");
         }
 
         private static void ExtendedDomainHelpListsInfoCommands(CliRunner runner)
@@ -631,7 +631,6 @@ namespace WzComparerR2.Cli.Tests
             CommandResult result = runner.Run("--help");
             AssertExitCode(result, 0);
             AssertContains(result.Stdout, "wcr2-agent run --job <job.json>");
-            AssertContains(result.Stdout, "--cli <wcr2>");
             AssertContains(result.Stdout, "skill.export");
             AssertContains(result.Stdout, "wcr2-agent serve --stdio");
         }

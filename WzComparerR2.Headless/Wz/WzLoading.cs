@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using WzComparerR2.WzLib;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal sealed class WzLoadOptions
     {

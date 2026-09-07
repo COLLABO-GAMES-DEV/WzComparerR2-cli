@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal sealed class SkillNameSearchOptions
     {

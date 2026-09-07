@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using WzComparerR2.WzLib;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal sealed class SearchOptions
     {

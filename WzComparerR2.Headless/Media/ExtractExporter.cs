@@ -9,7 +9,7 @@ using System.Xml;
 using WzComparerR2.Headless.Media;
 using WzComparerR2.WzLib;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal static class ExtractExporter
     {

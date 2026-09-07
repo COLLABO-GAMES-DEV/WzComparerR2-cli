@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal sealed class ParsedArgs
     {

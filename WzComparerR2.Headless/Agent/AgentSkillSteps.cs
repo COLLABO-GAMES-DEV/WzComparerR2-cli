@@ -2,12 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace WzComparerR2.Headless.Agent
 {
     public sealed partial class AgentJobRunner
     {
+        private static readonly JsonSerializerOptions SkillSidecarJsonOptions = new JsonSerializerOptions
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            WriteIndented = true
+        };
+
         private static AgentStepResult RunSkillExportStep(AgentJobStep step, AgentRunContext context)
         {
             string skillId = GetStringAny(step, "skillId", "skill");
@@ -28,7 +35,8 @@ namespace WzComparerR2.Headless.Agent
             outputDir = ResolvePath(context.JobDirectory, outputDir);
 
             var args = new List<string> { "skill", "export" };
-            if (!AddSkillInputArgs(args, step, context))
+            string skillInput;
+            if (!AddSkillInputArgs(args, step, context, out skillInput))
             {
                 return FailedStep(step.Id, step.Type, "missing-data-dir", "skill.export requires job/step dataDir, skillWz, or input.");
             }
@@ -40,7 +48,40 @@ namespace WzComparerR2.Headless.Agent
             args.Add("--json");
 
             string resultJsonPath = Path.Combine(outputDir, "agent-skill-export-result.json");
-            return RunCliJsonStep(step, context, outputDir, args, resultJsonPath, null, "skill-export-failed");
+            try
+            {
+                ParsedArgs parsedArgs = ParsedArgs.Parse(args.Skip(1));
+                SkillSpriteExportOptions options = SkillSpriteExportOptions.FromArgs(parsedArgs, true);
+                SkillSpriteExportResultDto result = SkillSpriteExporter.Export(skillInput, skillId.Trim(), outputDir, parsedArgs, options);
+                WriteJsonSidecar(resultJsonPath, result);
+
+                return new AgentStepResult
+                {
+                    Id = step.Id,
+                    Type = step.Type,
+                    Status = "ok",
+                    OutputDir = result.OutputDirectory,
+                    ManifestPath = resultJsonPath,
+                    ResultPath = resultJsonPath,
+                    Command = args,
+                    ExitCode = 0,
+                    Count = result.ExportedFileCount
+                };
+            }
+            catch (Exception ex) when (IsSkillExportException(ex))
+            {
+                return new AgentStepResult
+                {
+                    Id = step.Id,
+                    Type = step.Type,
+                    Status = "failed",
+                    Error = "skill-export-failed",
+                    Message = TrimForMessage(GetInnermostMessage(ex)),
+                    OutputDir = outputDir,
+                    Command = args,
+                    ExitCode = 1
+                };
+            }
         }
 
         private static AgentStepResult RunSkillExportBatchStep(AgentJobStep step, AgentRunContext context)
@@ -57,7 +98,8 @@ namespace WzComparerR2.Headless.Agent
             outputRoot = ResolvePath(context.JobDirectory, outputRoot);
 
             var args = new List<string> { "skill", "export-batch" };
-            if (!AddSkillInputArgs(args, step, context))
+            string skillInput;
+            if (!AddSkillInputArgs(args, step, context, out skillInput))
             {
                 return FailedStep(step.Id, step.Type, "missing-data-dir", "skill.export-batch requires job/step dataDir, skillWz, or input.");
             }
@@ -84,101 +126,77 @@ namespace WzComparerR2.Headless.Agent
             args.Add("--json");
 
             string resultJsonPath = Path.Combine(outputRoot, "agent-skill-batch-result.json");
-            return RunCliJsonStep(step, context, outputRoot, args, resultJsonPath, manifestPath, "skill-export-batch-failed");
-        }
-
-        private static AgentStepResult RunCliJsonStep(
-            AgentJobStep step,
-            AgentRunContext context,
-            string outputDirectory,
-            IReadOnlyList<string> args,
-            string stdoutJsonPath,
-            string manifestPath,
-            string failureError)
-        {
-            string requestedCliPath = GetStringAny(step, "cliPath", "cli") ?? context.CliPath;
-            string cliPath = AgentCliBridge.ResolveCliPath(requestedCliPath, context.JobDirectory);
-            if (string.IsNullOrWhiteSpace(cliPath))
-            {
-                return FailedStep(step.Id, step.Type, "cli-not-found", "CLI binary not found. Pass --cli, job cliPath, step cliPath, or WCR2_CLI_PATH.");
-            }
-
-            Directory.CreateDirectory(outputDirectory);
-            AgentCliCommandResult cliResult;
             try
             {
-                cliResult = AgentCliBridge.Run(cliPath, args, context.JobDirectory, GetInt(step, "timeoutSeconds", 1800));
-            }
-            catch (Exception ex)
-            {
-                return FailedStep(step.Id, step.Type, failureError, GetInnermostMessage(ex));
-            }
+                ParsedArgs parsedArgs = ParsedArgs.Parse(args.Skip(1));
+                SkillSpriteExportOptions exportOptions = SkillSpriteExportOptions.FromArgs(parsedArgs, true);
+                SkillBatchExportOptions batchOptions = SkillBatchExportOptions.FromArgs(parsedArgs);
+                SkillBatchExportManifestDto result = SkillBatchExporter.Export(skillInput, parsedArgs, exportOptions, batchOptions);
+                WriteJsonSidecar(resultJsonPath, result);
 
-            string stdoutPath = null;
-            if (!string.IsNullOrWhiteSpace(cliResult.Stdout))
-            {
-                stdoutPath = ResolvePath(context.JobDirectory, stdoutJsonPath);
-                Directory.CreateDirectory(Path.GetDirectoryName(stdoutPath) ?? outputDirectory);
-                File.WriteAllText(stdoutPath, cliResult.Stdout);
+                bool success = result.Failed == 0;
+                return new AgentStepResult
+                {
+                    Id = step.Id,
+                    Type = step.Type,
+                    Status = success ? "ok" : "failed",
+                    Error = success ? null : "skill-export-batch-failed",
+                    Message = success ? null : "One or more skill export-batch items failed.",
+                    OutputDir = result.OutputRoot,
+                    ManifestPath = result.ManifestPath,
+                    ResultPath = resultJsonPath,
+                    Command = args,
+                    ExitCode = success ? 0 : 1,
+                    Count = result.ExportedFileCount
+                };
             }
-
-            string stderrPath = null;
-            if (!string.IsNullOrWhiteSpace(cliResult.Stderr))
+            catch (Exception ex) when (IsSkillExportException(ex))
             {
-                stderrPath = Path.Combine(outputDirectory, "agent-cli-stderr.txt");
-                File.WriteAllText(stderrPath, cliResult.Stderr);
+                return new AgentStepResult
+                {
+                    Id = step.Id,
+                    Type = step.Type,
+                    Status = "failed",
+                    Error = "skill-export-batch-failed",
+                    Message = TrimForMessage(GetInnermostMessage(ex)),
+                    OutputDir = outputRoot,
+                    ManifestPath = manifestPath,
+                    Command = args,
+                    ExitCode = 1
+                };
             }
-
-            int? count = TryReadExportedFileCount(cliResult.Stdout);
-            if (!count.HasValue && !string.IsNullOrWhiteSpace(manifestPath) && File.Exists(manifestPath))
-            {
-                count = TryReadExportedFileCount(File.ReadAllText(manifestPath));
-            }
-
-            bool success = cliResult.ExitCode == 0;
-            return new AgentStepResult
-            {
-                Id = step.Id,
-                Type = step.Type,
-                Status = success ? "ok" : "failed",
-                Error = success ? null : failureError,
-                Message = success ? null : TrimForMessage(string.IsNullOrWhiteSpace(cliResult.Stderr) ? cliResult.Stdout : cliResult.Stderr),
-                OutputDir = outputDirectory,
-                ManifestPath = !string.IsNullOrWhiteSpace(manifestPath) ? manifestPath : stdoutPath,
-                CliPath = cliResult.CliPath,
-                Command = cliResult.Command,
-                ExitCode = cliResult.ExitCode,
-                StdoutPath = stdoutPath,
-                StderrPath = stderrPath,
-                Count = count
-            };
         }
 
-        private static bool AddSkillInputArgs(List<string> args, AgentJobStep step, AgentRunContext context)
+        private static bool AddSkillInputArgs(List<string> args, AgentJobStep step, AgentRunContext context, out string skillInput)
         {
             string input = GetStringAny(step, "input", "skillInput");
             if (!string.IsNullOrWhiteSpace(input))
             {
-                args.Add(ResolvePath(context.JobDirectory, input));
+                skillInput = ResolvePath(context.JobDirectory, input);
+                args.Add(skillInput);
                 return true;
             }
 
             string skillWz = GetStringAny(step, "skillWz", "skill-wz");
             if (!string.IsNullOrWhiteSpace(skillWz))
             {
+                skillInput = ResolvePath(context.JobDirectory, skillWz);
                 args.Add("--skill-wz");
-                args.Add(ResolvePath(context.JobDirectory, skillWz));
+                args.Add(skillInput);
                 return true;
             }
 
             string dataDir = GetStringAny(step, "dataDir", "data-dir") ?? context.DataDir;
             if (!string.IsNullOrWhiteSpace(dataDir))
             {
+                dataDir = ResolvePath(context.JobDirectory, dataDir);
+                skillInput = Path.Combine(dataDir, "Skill");
                 args.Add("--data-dir");
-                args.Add(ResolvePath(context.JobDirectory, dataDir));
+                args.Add(dataDir);
                 return true;
             }
 
+            skillInput = null;
             return false;
         }
 
@@ -356,43 +374,6 @@ namespace WzComparerR2.Headless.Agent
             return string.Join(Path.PathSeparator.ToString(), parts.Select(part => ResolvePath(baseDirectory, part.Trim())));
         }
 
-        private static int? TryReadExportedFileCount(string json)
-        {
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return null;
-            }
-
-            try
-            {
-                using (JsonDocument document = JsonDocument.Parse(json))
-                {
-                    return TryReadIntProperty(document.RootElement, "ExportedFileCount")
-                        ?? TryReadIntProperty(document.RootElement, "exportedFileCount")
-                        ?? TryReadIntProperty(document.RootElement, "Count")
-                        ?? TryReadIntProperty(document.RootElement, "count");
-                }
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
-        }
-
-        private static int? TryReadIntProperty(JsonElement element, string propertyName)
-        {
-            JsonElement value;
-            if (element.ValueKind == JsonValueKind.Object
-                && element.TryGetProperty(propertyName, out value)
-                && value.ValueKind == JsonValueKind.Number
-                && value.TryGetInt32(out int parsed))
-            {
-                return parsed;
-            }
-
-            return null;
-        }
-
         private static string TrimForMessage(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -402,6 +383,26 @@ namespace WzComparerR2.Headless.Agent
 
             string trimmed = value.Trim();
             return trimmed.Length <= 2000 ? trimmed : trimmed.Substring(0, 2000);
+        }
+
+        private static void WriteJsonSidecar(string path, object value)
+        {
+            string fullPath = Path.GetFullPath(path);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+            File.WriteAllText(fullPath, JsonSerializer.Serialize(value, SkillSidecarJsonOptions));
+        }
+
+        private static bool IsSkillExportException(Exception ex)
+        {
+            return ex is UsageException
+                || ex is FileNotFoundException
+                || ex is DirectoryNotFoundException
+                || ex is WzLoadException
+                || ex is JsonException;
         }
     }
 }

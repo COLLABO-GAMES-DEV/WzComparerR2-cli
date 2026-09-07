@@ -7,9 +7,14 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
     <NuGetAudit>false</NuGetAudit>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\WzComparerR2.WzLib\WzComparerR2.WzLib.csproj" SetTargetFramework="TargetFramework=net8.0" AdditionalProperties="NuGetAudit=false;RestoreIgnoreFailedSources=true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\WzComparerR2.Common\Calculator.cs" Link="Common\Calculator.cs" />
   </ItemGroup>
 </Project>

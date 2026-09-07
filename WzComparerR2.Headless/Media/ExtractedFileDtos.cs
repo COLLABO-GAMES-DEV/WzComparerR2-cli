@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using WzComparerR2.WzLib;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal sealed class ExtractedFileDto
     {
