@@ -4,6 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Xml;
+using WzComparerR2.Headless.Media;
+using WzComparerR2.Headless.Wz;
 using WzComparerR2.WzLib;
 
 namespace WzComparerR2.Cli
@@ -262,7 +264,7 @@ namespace WzComparerR2.Cli
             string input = args.Positionals.Count > 1 ? args.Positionals[1] : null;
             string nodePath = args.GetValue("path");
             bool json = args.HasFlag("json");
-            var options = ImageSearchOptions.FromArgs(args);
+            var options = CreateImageSearchOptions(args);
 
             if (string.IsNullOrEmpty(input) && string.IsNullOrEmpty(options.DataDirectory))
             {
@@ -278,23 +280,30 @@ namespace WzComparerR2.Cli
             }
 
             ImageSearchResultDto result;
-            if (!string.IsNullOrEmpty(input))
+            try
             {
-                using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+                if (!string.IsNullOrEmpty(input))
                 {
-                    Wz_Node root = ResolveRequiredNode(context.Root, nodePath, true);
-                    result = ImageSimilaritySearcher.Search(input, root, options);
+                    using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+                    {
+                        Wz_Node root = ResolveRequiredNode(context.Root, nodePath, true);
+                        result = ImageSimilaritySearcher.Search(input, root, options);
+                    }
+                }
+                else
+                {
+                    IReadOnlyList<ImageSearchScanRoot> roots = ImageSearchDataSources.FromDataDirectory(options.DataDirectory, options.Scope);
+                    if (roots.Count == 0)
+                    {
+                        throw new UsageException("No canvas roots were found under --data-dir for scope: " + options.Scope);
+                    }
+
+                    result = ImageSimilaritySearcher.SearchInputs(roots, nodePath, options, CreateHeadlessWzLoadOptions(args));
                 }
             }
-            else
+            catch (InvalidDataException ex)
             {
-                IReadOnlyList<ImageSearchScanRoot> roots = ImageSearchDataSources.FromDataDirectory(options.DataDirectory, options.Scope);
-                if (roots.Count == 0)
-                {
-                    throw new UsageException("No canvas roots were found under --data-dir for scope: " + options.Scope);
-                }
-
-                result = ImageSimilaritySearcher.SearchInputs(roots, nodePath, options, WzLoadOptions.FromArgs(args));
+                throw new UsageException(ex.Message);
             }
 
             if (!string.IsNullOrEmpty(options.ManifestPath))
@@ -339,6 +348,66 @@ namespace WzComparerR2.Cli
             });
 
             return ExitSuccess;
+        }
+
+        private static ImageSearchOptions CreateImageSearchOptions(ParsedArgs args)
+        {
+            bool noCache = args.HasFlag("no-cache");
+            string cacheDirectory = args.GetValue("cache-dir");
+            if (string.IsNullOrWhiteSpace(cacheDirectory) && !noCache)
+            {
+                cacheDirectory = ImageSearchCacheStore.GetDefaultCacheDirectory();
+            }
+
+            return new ImageSearchOptions
+            {
+                DataDirectory = args.GetValue("data-dir"),
+                QueryPath = args.GetValue("query") ?? args.GetValue("image"),
+                OutputDirectory = args.GetValue("out") ?? args.GetValue("output"),
+                ManifestPath = args.GetValue("manifest"),
+                Scope = args.GetValue("scope") ?? "all",
+                CacheDirectory = cacheDirectory,
+                NoCache = noCache,
+                RebuildCache = args.HasFlag("rebuild-cache"),
+                TrustCache = args.HasFlag("trust-cache"),
+                NoRefine = args.HasFlag("no-refine"),
+                NoSizePrefilter = args.HasFlag("no-size-prefilter"),
+                MinSizeRatio = ParseImageSearchScore(args.GetValue("min-size-ratio"), 0.25, "--min-size-ratio"),
+                MaxResults = Math.Max(1, args.GetInt("max-results", 20)),
+                RefineLimit = Math.Max(0, args.GetInt("refine-limit", 0)),
+                MinScore = ParseImageSearchScore(args.GetValue("min-score"), 0.0, "--min-score"),
+                MinAlpha = Math.Max(0, Math.Min(255, args.GetInt("min-alpha", 16)))
+            };
+        }
+
+        private static HeadlessWzLoadOptions CreateHeadlessWzLoadOptions(ParsedArgs args)
+        {
+            return new HeadlessWzLoadOptions
+            {
+                UseBaseWz = args.HasFlag("use-base-wz"),
+                FallbackPath = args.GetValue("fallback")
+            };
+        }
+
+        private static double ParseImageSearchScore(string value, double defaultValue, string optionName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return defaultValue;
+            }
+
+            double parsed;
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
+            {
+                throw new UsageException(optionName + " must be a number between 0 and 1.");
+            }
+
+            if (parsed < 0 || parsed > 1)
+            {
+                throw new UsageException(optionName + " must be a number between 0 and 1.");
+            }
+
+            return parsed;
         }
 
         private static bool IsLikelySystemDrawingFailure(Exception ex)

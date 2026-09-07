@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml;
+using WzComparerR2.Headless.Media;
 using WzComparerR2.WzLib;
 
 namespace WzComparerR2.Cli

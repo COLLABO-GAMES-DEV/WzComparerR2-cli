@@ -7,9 +7,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless.Media
 {
-    internal sealed class ImageSearchCacheFileDto
+    public sealed class ImageSearchCacheFileDto
     {
         public int Version { get; set; }
         public string Method { get; set; }
@@ -22,7 +22,7 @@ namespace WzComparerR2.Cli
         public List<ImageSearchIndexItemDto> Items { get; set; }
     }
 
-    internal sealed class ImageSearchInputStampDto
+    public sealed class ImageSearchInputStampDto
     {
         public string Kind { get; set; }
         public int FileCount { get; set; }
@@ -30,7 +30,7 @@ namespace WzComparerR2.Cli
         public long LastWriteUtcTicks { get; set; }
     }
 
-    internal sealed class ImageSearchIndexItemDto
+    public sealed class ImageSearchIndexItemDto
     {
         public string Name { get; set; }
         public string Path { get; set; }
@@ -43,7 +43,7 @@ namespace WzComparerR2.Cli
         public List<ImageSearchFingerprintDto> Fingerprints { get; set; }
     }
 
-    internal sealed class ImageSearchFingerprintDto
+    public sealed class ImageSearchFingerprintDto
     {
         public string Region { get; set; }
         public ulong Hash { get; set; }
@@ -54,7 +54,7 @@ namespace WzComparerR2.Cli
         public double AlphaCoverage { get; set; }
     }
 
-    internal static class ImageSearchCacheStore
+    public static class ImageSearchCacheStore
     {
         public const int CurrentVersion = 2;
         public const string Method = "phash-alpha-crop-region-color-cache-v2";

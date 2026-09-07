@@ -6,9 +6,9 @@ using System.Text;
 using WzComparerR2.WzLib;
 using WzComparerR2.WzLib.Utilities;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless.Media
 {
-    internal static class CrossPlatformPngWriter
+    public static class CrossPlatformPngWriter
     {
         private static readonly byte[] PngSignature = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 };
 

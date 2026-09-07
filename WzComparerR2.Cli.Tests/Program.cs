@@ -52,6 +52,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("agent run noop step succeeds", () => AgentRunNoopStepSucceeds(agentRunner)),
                 TestCase.Create("agent run unknown step emits json failure", () => AgentRunUnknownStepEmitsJsonFailure(agentRunner)),
                 TestCase.Create("agent run invalid json emits json failure", () => AgentRunInvalidJsonEmitsJsonFailure(agentRunner)),
+                TestCase.Create("agent image search validates required data", () => AgentImageSearchValidatesRequiredData(agentRunner)),
             };
 
             int failed = 0;
@@ -643,9 +644,9 @@ namespace WzComparerR2.Cli.Tests
                 using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
                 {
                     JsonElement root = doc.RootElement;
-                    AssertEqual("ok", root.GetProperty("Status").GetString(), "agent status");
-                    AssertEqual(0, root.GetProperty("Steps").GetArrayLength(), "agent step count");
-                    string manifestPath = root.GetProperty("ManifestPath").GetString();
+                    AssertEqual("ok", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual(0, root.GetProperty("steps").GetArrayLength(), "agent step count");
+                    string manifestPath = root.GetProperty("manifestPath").GetString();
                     AssertEqual(true, File.Exists(manifestPath), "agent manifest exists");
                 }
             }
@@ -663,11 +664,11 @@ namespace WzComparerR2.Cli.Tests
                 using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
                 {
                     JsonElement root = doc.RootElement;
-                    AssertEqual("ok", root.GetProperty("Status").GetString(), "agent status");
-                    JsonElement step = root.GetProperty("Steps")[0];
-                    AssertEqual("probe", step.GetProperty("Id").GetString(), "agent step id");
-                    AssertEqual("noop", step.GetProperty("Type").GetString(), "agent step type");
-                    AssertEqual("ok", step.GetProperty("Status").GetString(), "agent step status");
+                    AssertEqual("ok", root.GetProperty("status").GetString(), "agent status");
+                    JsonElement step = root.GetProperty("steps")[0];
+                    AssertEqual("probe", step.GetProperty("id").GetString(), "agent step id");
+                    AssertEqual("noop", step.GetProperty("type").GetString(), "agent step type");
+                    AssertEqual("ok", step.GetProperty("status").GetString(), "agent step status");
                 }
             }
         }
@@ -684,9 +685,9 @@ namespace WzComparerR2.Cli.Tests
                 using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
                 {
                     JsonElement root = doc.RootElement;
-                    AssertEqual("failed", root.GetProperty("Status").GetString(), "agent status");
-                    AssertEqual("unknown-step-type", root.GetProperty("Error").GetString(), "agent error");
-                    AssertEqual("failed", root.GetProperty("Steps")[0].GetProperty("Status").GetString(), "agent step status");
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("unknown-step-type", root.GetProperty("error").GetString(), "agent error");
+                    AssertEqual("failed", root.GetProperty("steps")[0].GetProperty("status").GetString(), "agent step status");
                 }
             }
         }
@@ -703,8 +704,31 @@ namespace WzComparerR2.Cli.Tests
                 using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
                 {
                     JsonElement root = doc.RootElement;
-                    AssertEqual("failed", root.GetProperty("Status").GetString(), "agent status");
-                    AssertEqual("invalid-json", root.GetProperty("Error").GetString(), "agent error");
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("invalid-json", root.GetProperty("error").GetString(), "agent error");
+                }
+            }
+        }
+
+        private static void AgentImageSearchValidatesRequiredData(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string queryPath = Path.Combine(temp.Path, "query.png");
+                File.WriteAllBytes(queryPath, Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII="));
+                string jobPath = Path.Combine(temp.Path, "image-search-job.json");
+                File.WriteAllText(jobPath, "{ \"steps\": [{ \"id\": \"find\", \"type\": \"image.search\", \"query\": " + JsonSerializer.Serialize(queryPath) + " }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("missing-data-dir", root.GetProperty("error").GetString(), "agent error");
+                    JsonElement step = root.GetProperty("steps")[0];
+                    AssertEqual("image.search", step.GetProperty("type").GetString(), "agent image search step type");
+                    AssertEqual("missing-data-dir", step.GetProperty("error").GetString(), "agent image search step error");
                 }
             }
         }

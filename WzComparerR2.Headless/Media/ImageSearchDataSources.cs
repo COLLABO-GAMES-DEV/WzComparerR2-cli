@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless.Media
 {
-    internal sealed class ImageSearchScanRoot
+    public sealed class ImageSearchScanRoot
     {
         public string InputPath { get; set; }
         public string Scope { get; set; }
     }
 
-    internal static class ImageSearchDataSources
+    public static class ImageSearchDataSources
     {
         private static readonly string[] DefaultScopeOrder = new[]
         {

@@ -963,7 +963,10 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `WzComparerR2.AgentHost` exe 추가
   - `wcr2-agent run --job <job.json> [--json]` 추가
   - 빈 job, `noop`, 알 수 없는 step, 잘못된 JSON 계약 테스트 추가
-- [ ] Agent Runtime Phase 2: `image.search` Headless 서비스 분리 및 job step 연결
+- [x] Agent Runtime Phase 2: `image.search` Headless 서비스 분리 및 job step 연결
+  - CLI `wcr2 image search`와 `wcr2-agent` `image.search` step이 같은 Headless 구현을 사용
+  - 2026-09-07 Sunday Maple 배너 query로 CLI/AgentHost 양쪽 검증 통과
+- [ ] Agent Runtime Phase 3: `image.export-related` job step 추가
 - [ ] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `skill/item/gear/map info`, `animate frames` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `map objects/portals/life/reactors` 검증 필요

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using WzComparerR2.Headless.Media;
 
 namespace WzComparerR2.Headless.Agent
 {
@@ -52,5 +53,9 @@ namespace WzComparerR2.Headless.Agent
         public string Status { get; set; }
         public string Error { get; set; }
         public string Message { get; set; }
+        public string OutputDir { get; set; }
+        public string ManifestPath { get; set; }
+        public int? Count { get; set; }
+        public List<ImageSearchMatchDto> Results { get; set; }
     }
 }

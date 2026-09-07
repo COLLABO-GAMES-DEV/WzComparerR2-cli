@@ -212,12 +212,20 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Release/net8.0/wcr2-
 
 ### Phase 2. Image Search 서비스 분리
 
-- [ ] 현재 `WzComparerR2.Cli/Media/ImageSearch*.cs`를 Headless 서비스로 이동
-- [ ] CLI `image search`는 Headless API 호출 wrapper로 축소
-- [ ] `image.search` job step 추가
-- [ ] root별 image index cache 유지
-- [ ] query region matching, candidate pool, top-N refine 유지
-- [ ] `ParentPath`, `QueryRegion`, `Refined`, `SourceInputPath` manifest 유지
+- [x] 현재 `WzComparerR2.Cli/Media/ImageSearch*.cs`를 Headless 서비스로 이동
+- [x] CLI `image search`는 Headless API 호출 wrapper로 축소
+- [x] `image.search` job step 추가
+- [x] root별 image index cache 유지
+- [x] query region matching, candidate pool, top-N refine 유지
+- [x] `ParentPath`, `QueryRegion`, `Refined`, `SourceInputPath` manifest 유지
+
+현재 지원 범위:
+
+- `image.search` step은 `dataDir` + `scope` 또는 `input`을 받아 검색한다.
+- `scope`는 문자열 또는 문자열 배열을 허용한다.
+- `exportTopResults: true`이면 step output 폴더에 상위 PNG와 `image-search-result.json`을 남긴다.
+- 상대 경로는 현재 작업 디렉터리 기준으로 해석한다.
+- CLI `wcr2 image search`와 AgentHost `image.search`는 같은 Headless 구현을 사용한다.
 
 검증:
 
@@ -227,6 +235,11 @@ wcr2 image search --data-dir Data --scope ui --query query.png --json
 ```
 
 두 결과의 상위 후보가 동일해야 한다.
+
+2026-09-07 검증:
+
+- AgentHost job과 CLI wrapper 모두 `1788783245097-0nzfjm.png` query로 `UIWindowEvent.img\sundayMaple2\backgrnd`를 1순위로 찾았다.
+- 점수는 `0.997541`, `--scope ui`, cache hit + refine 기준이다.
 
 ### Phase 3. Related Export
 

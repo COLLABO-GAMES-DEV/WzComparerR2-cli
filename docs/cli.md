@@ -24,7 +24,7 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Debug/net8.0/wcr2-ag
 
 ## Agent Runtime
 
-`wcr2-agent`는 사람이 직접 옵션을 조합하는 CLI보다, 에이전트가 JSON job을 실행하고 manifest를 남기는 용도에 맞춘 인터페이스입니다. 현재 Phase 1에서는 job 파싱, 빈 job, `noop` step, 잘못된 JSON, 알 수 없는 step validation만 지원합니다.
+`wcr2-agent`는 사람이 직접 옵션을 조합하는 CLI보다, 에이전트가 JSON job을 실행하고 manifest를 남기는 용도에 맞춘 인터페이스입니다. 현재는 job 파싱, 빈 job, `noop` step, 잘못된 JSON, 알 수 없는 step validation, `image.search` step을 지원합니다.
 
 ```bash
 wcr2-agent run --job job.json --json
@@ -44,7 +44,30 @@ wcr2-agent run --job job.json --json
 }
 ```
 
-`outputDir`가 있으면 `agent-result.json` manifest를 생성합니다. `image.search`, `skill.export` 같은 실제 추출 step은 `docs/agent-runtime-plan.md`의 Phase 2 이후 작업입니다.
+`outputDir`가 있으면 `agent-result.json` manifest를 생성합니다.
+
+이미지 검색 job 예시:
+
+```json
+{
+  "dataDir": "/path/to/Maple/Data",
+  "outputDir": ".test/agent-runs/image-search",
+  "steps": [
+    {
+      "id": "find-image",
+      "type": "image.search",
+      "query": "/path/to/query.png",
+      "scope": ["ui"],
+      "maxResults": 10,
+      "trustCache": true,
+      "refine": true,
+      "exportTopResults": true
+    }
+  ]
+}
+```
+
+`image.search` step은 CLI `wcr2 image search`와 같은 Headless 서비스를 사용합니다. 상대 경로는 현재 작업 디렉터리 기준으로 해석합니다. `skill.export` 같은 실제 추출 recipe는 `docs/agent-runtime-plan.md`의 다음 단계 작업입니다.
 
 ## 처음 사용하는 순서
 

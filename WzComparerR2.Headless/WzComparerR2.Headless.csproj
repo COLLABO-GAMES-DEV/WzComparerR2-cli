@@ -8,4 +8,8 @@
     <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
     <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WzComparerR2.WzLib\WzComparerR2.WzLib.csproj" SetTargetFramework="TargetFramework=net8.0" AdditionalProperties="NuGetAudit=false;RestoreIgnoreFailedSources=true" />
+  </ItemGroup>
 </Project>

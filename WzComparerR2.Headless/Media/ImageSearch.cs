@@ -6,82 +6,32 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
+using WzComparerR2.Headless.Wz;
 using WzComparerR2.WzLib;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless.Media
 {
-    internal sealed class ImageSearchOptions
+    public sealed class ImageSearchOptions
     {
-        public string DataDirectory { get; private set; }
-        public string QueryPath { get; private set; }
-        public string OutputDirectory { get; private set; }
-        public string ManifestPath { get; private set; }
-        public string Scope { get; private set; }
-        public string CacheDirectory { get; private set; }
-        public bool NoCache { get; private set; }
-        public bool RebuildCache { get; private set; }
-        public bool TrustCache { get; private set; }
-        public bool NoRefine { get; private set; }
-        public bool NoSizePrefilter { get; private set; }
-        public double MinSizeRatio { get; private set; }
-        public int RefineLimit { get; private set; }
-        public int MaxResults { get; private set; }
-        public double MinScore { get; private set; }
-        public int MinAlpha { get; private set; }
-
-        public static ImageSearchOptions FromArgs(ParsedArgs args)
-        {
-            bool noCache = args.HasFlag("no-cache");
-            string cacheDirectory = args.GetValue("cache-dir");
-            if (string.IsNullOrWhiteSpace(cacheDirectory) && !noCache)
-            {
-                cacheDirectory = ImageSearchCacheStore.GetDefaultCacheDirectory();
-            }
-
-            return new ImageSearchOptions
-            {
-                DataDirectory = args.GetValue("data-dir"),
-                QueryPath = args.GetValue("query") ?? args.GetValue("image"),
-                OutputDirectory = args.GetValue("out") ?? args.GetValue("output"),
-                ManifestPath = args.GetValue("manifest"),
-                Scope = args.GetValue("scope") ?? "all",
-                CacheDirectory = cacheDirectory,
-                NoCache = noCache,
-                RebuildCache = args.HasFlag("rebuild-cache"),
-                TrustCache = args.HasFlag("trust-cache"),
-                NoRefine = args.HasFlag("no-refine"),
-                NoSizePrefilter = args.HasFlag("no-size-prefilter"),
-                MinSizeRatio = ParseScore(args.GetValue("min-size-ratio"), 0.25, "--min-size-ratio"),
-                MaxResults = Math.Max(1, args.GetInt("max-results", 20)),
-                RefineLimit = Math.Max(0, args.GetInt("refine-limit", 0)),
-                MinScore = ParseScore(args.GetValue("min-score"), 0.0, "--min-score"),
-                MinAlpha = Math.Max(0, Math.Min(255, args.GetInt("min-alpha", 16)))
-            };
-        }
-
-        private static double ParseScore(string value, double defaultValue, string optionName)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return defaultValue;
-            }
-
-            double parsed;
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
-            {
-                throw new UsageException(optionName + " must be a number between 0 and 1.");
-            }
-
-            if (parsed < 0 || parsed > 1)
-            {
-                throw new UsageException(optionName + " must be a number between 0 and 1.");
-            }
-
-            return parsed;
-        }
+        public string DataDirectory { get; set; }
+        public string QueryPath { get; set; }
+        public string OutputDirectory { get; set; }
+        public string ManifestPath { get; set; }
+        public string Scope { get; set; }
+        public string CacheDirectory { get; set; }
+        public bool NoCache { get; set; }
+        public bool RebuildCache { get; set; }
+        public bool TrustCache { get; set; }
+        public bool NoRefine { get; set; }
+        public bool NoSizePrefilter { get; set; }
+        public double MinSizeRatio { get; set; }
+        public int RefineLimit { get; set; }
+        public int MaxResults { get; set; }
+        public double MinScore { get; set; }
+        public int MinAlpha { get; set; }
     }
 
-    internal sealed class ImageSearchResultDto
+    public sealed class ImageSearchResultDto
     {
         public string InputPath { get; set; }
         public string DataDirectory { get; set; }
@@ -113,7 +63,7 @@ namespace WzComparerR2.Cli
         public List<ImageSearchMatchDto> Results { get; set; }
     }
 
-    internal sealed class ImageSearchRootDto
+    public sealed class ImageSearchRootDto
     {
         public string InputPath { get; set; }
         public string RootPath { get; set; }
@@ -128,7 +78,7 @@ namespace WzComparerR2.Cli
         public string Error { get; set; }
     }
 
-    internal sealed class ImageSearchMatchDto
+    public sealed class ImageSearchMatchDto
     {
         public int Rank { get; set; }
         public string ScoreMethod { get; set; }
@@ -160,7 +110,7 @@ namespace WzComparerR2.Cli
         public string Sha256 { get; set; }
     }
 
-    internal static class ImageSimilaritySearcher
+    public static class ImageSimilaritySearcher
     {
         private const string FullScoreMethod = "phash-alpha-crop-region-pixel-color-v2";
         private const string CachedScoreMethod = "phash-alpha-crop-region-color-cache-v2";
@@ -207,7 +157,7 @@ namespace WzComparerR2.Cli
 
             foreach (Wz_Node node in Traverse(root))
             {
-                Wz_Node imageNode = NodePath.ExtractImageNode(node, true);
+                Wz_Node imageNode = HeadlessNodePath.ExtractImageNode(node, true);
                 var png = imageNode == null ? null : imageNode.Value as Wz_Png;
                 if (png == null)
                 {
@@ -273,7 +223,7 @@ namespace WzComparerR2.Cli
             return result;
         }
 
-        public static ImageSearchResultDto SearchInputs(IReadOnlyList<ImageSearchScanRoot> inputs, string nodePath, ImageSearchOptions options, WzLoadOptions loadOptions)
+        public static ImageSearchResultDto SearchInputs(IReadOnlyList<ImageSearchScanRoot> inputs, string nodePath, ImageSearchOptions options, HeadlessWzLoadOptions loadOptions)
         {
             if (inputs == null)
             {
@@ -339,9 +289,9 @@ namespace WzComparerR2.Cli
 
                 try
                 {
-                    using (var context = WzLoadContext.Load(input.InputPath, loadOptions ?? new WzLoadOptions()))
+                    using (var context = HeadlessWzLoadContext.Load(input.InputPath, loadOptions ?? new HeadlessWzLoadOptions()))
                     {
-                        Wz_Node root = NodePath.Resolve(context.Root, nodePath, true);
+                        Wz_Node root = HeadlessNodePath.Resolve(context.Root, nodePath, true);
                         if (root == null)
                         {
                             rootDto.Status = "path-not-found";
@@ -452,7 +402,7 @@ namespace WzComparerR2.Cli
             string sourceRootPath = root.FullPath;
             foreach (Wz_Node node in Traverse(root))
             {
-                Wz_Node imageNode = NodePath.ExtractImageNode(node, true);
+                Wz_Node imageNode = HeadlessNodePath.ExtractImageNode(node, true);
                 var png = imageNode == null ? null : imageNode.Value as Wz_Png;
                 if (png == null)
                 {
@@ -516,7 +466,7 @@ namespace WzComparerR2.Cli
             var indexItems = new List<ImageSearchIndexItemDto>();
             foreach (Wz_Node node in Traverse(root))
             {
-                Wz_Node imageNode = NodePath.ExtractImageNode(node, true);
+                Wz_Node imageNode = HeadlessNodePath.ExtractImageNode(node, true);
                 var png = imageNode == null ? null : imageNode.Value as Wz_Png;
                 if (png == null)
                 {
@@ -605,7 +555,7 @@ namespace WzComparerR2.Cli
 
             while (stack.Count > 0)
             {
-                Wz_Node node = NodePath.ExtractImageNode(stack.Pop(), true);
+                Wz_Node node = HeadlessNodePath.ExtractImageNode(stack.Pop(), true);
                 if (node == null)
                 {
                     continue;
@@ -796,10 +746,10 @@ namespace WzComparerR2.Cli
             List<ImageSearchCandidate> candidates,
             IReadOnlyList<ImageFingerprint> queryVariants,
             ImageSearchOptions options,
-            WzLoadOptions loadOptions,
+            HeadlessWzLoadOptions loadOptions,
             ImageSearchResultDto result)
         {
-            var loadedContexts = new Dictionary<string, WzLoadContext>(StringComparer.OrdinalIgnoreCase);
+            var loadedContexts = new Dictionary<string, HeadlessWzLoadContext>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 foreach (ImageSearchCandidate candidate in candidates)
@@ -832,7 +782,7 @@ namespace WzComparerR2.Cli
             }
             finally
             {
-                foreach (WzLoadContext context in loadedContexts.Values)
+                foreach (HeadlessWzLoadContext context in loadedContexts.Values)
                 {
                     context.Dispose();
                 }
@@ -853,11 +803,11 @@ namespace WzComparerR2.Cli
             match.Refined = refined;
         }
 
-        private static void ExportMatches(IReadOnlyList<ImageSearchCandidate> candidates, string outputDirectory, WzLoadOptions loadOptions)
+        private static void ExportMatches(IReadOnlyList<ImageSearchCandidate> candidates, string outputDirectory, HeadlessWzLoadOptions loadOptions)
         {
             string fullOutputDirectory = Path.GetFullPath(outputDirectory);
             Directory.CreateDirectory(fullOutputDirectory);
-            var loadedContexts = new Dictionary<string, WzLoadContext>(StringComparer.OrdinalIgnoreCase);
+            var loadedContexts = new Dictionary<string, HeadlessWzLoadContext>(StringComparer.OrdinalIgnoreCase);
 
             try
             {
@@ -895,28 +845,28 @@ namespace WzComparerR2.Cli
             }
             finally
             {
-                foreach (WzLoadContext context in loadedContexts.Values)
+                foreach (HeadlessWzLoadContext context in loadedContexts.Values)
                 {
                     context.Dispose();
                 }
             }
         }
 
-        private static Wz_Node ResolveCandidateNode(ImageSearchCandidate candidate, Dictionary<string, WzLoadContext> loadedContexts, WzLoadOptions loadOptions)
+        private static Wz_Node ResolveCandidateNode(ImageSearchCandidate candidate, Dictionary<string, HeadlessWzLoadContext> loadedContexts, HeadlessWzLoadOptions loadOptions)
         {
             if (string.IsNullOrEmpty(candidate.SourceInputPath) || string.IsNullOrEmpty(candidate.Match.Path))
             {
                 return null;
             }
 
-            WzLoadContext context;
+            HeadlessWzLoadContext context;
             if (!loadedContexts.TryGetValue(candidate.SourceInputPath, out context))
             {
-                context = WzLoadContext.Load(candidate.SourceInputPath, loadOptions ?? new WzLoadOptions());
+                context = HeadlessWzLoadContext.Load(candidate.SourceInputPath, loadOptions ?? new HeadlessWzLoadOptions());
                 loadedContexts.Add(candidate.SourceInputPath, context);
             }
 
-            return NodePath.Resolve(context.Root, candidate.Match.Path, true);
+            return HeadlessNodePath.Resolve(context.Root, candidate.Match.Path, true);
         }
 
         private static string SanitizeFileName(string text)
@@ -1498,7 +1448,7 @@ namespace WzComparerR2.Cli
                 byte[] bytes = File.ReadAllBytes(fullPath);
                 if (bytes.Length < Signature.Length || !Signature.SequenceEqual(bytes.Take(Signature.Length)))
                 {
-                    throw new UsageException("Query image must be a PNG file: " + path);
+                    throw new InvalidDataException("Query image must be a PNG file: " + path);
                 }
 
                 int width = 0;
@@ -1519,7 +1469,7 @@ namespace WzComparerR2.Cli
                         offset += 4;
                         if (length < 0 || offset + length + 4 > bytes.Length)
                         {
-                            throw new UsageException("Invalid PNG chunk length in query image.");
+                            throw new InvalidDataException("Invalid PNG chunk length in query image.");
                         }
 
                         ReadOnlySpan<byte> data = bytes.AsSpan(offset, length);
@@ -1559,15 +1509,15 @@ namespace WzComparerR2.Cli
             {
                 if (width <= 0 || height <= 0)
                 {
-                    throw new UsageException("Query PNG has invalid dimensions.");
+                    throw new InvalidDataException("Query PNG has invalid dimensions.");
                 }
                 if (bitDepth != 8)
                 {
-                    throw new UsageException("Query PNG must use 8-bit channels.");
+                    throw new InvalidDataException("Query PNG must use 8-bit channels.");
                 }
                 if (interlace != 0)
                 {
-                    throw new UsageException("Interlaced query PNG is not supported.");
+                    throw new InvalidDataException("Interlaced query PNG is not supported.");
                 }
 
                 int bytesPerPixel = BytesPerPixel(colorType);
@@ -1580,13 +1530,13 @@ namespace WzComparerR2.Cli
                 {
                     if (source >= raw.Length)
                     {
-                        throw new UsageException("Query PNG pixel data is truncated.");
+                        throw new InvalidDataException("Query PNG pixel data is truncated.");
                     }
 
                     byte filter = raw[source++];
                     if (source + current.Length > raw.Length)
                     {
-                        throw new UsageException("Query PNG scanline is truncated.");
+                        throw new InvalidDataException("Query PNG scanline is truncated.");
                     }
 
                     Buffer.BlockCopy(raw, source, current, 0, current.Length);
@@ -1616,7 +1566,7 @@ namespace WzComparerR2.Cli
                     case 6:
                         return 4;
                     default:
-                        throw new UsageException("Unsupported query PNG color type: " + colorType);
+                        throw new InvalidDataException("Unsupported query PNG color type: " + colorType);
                 }
             }
 
@@ -1657,7 +1607,7 @@ namespace WzComparerR2.Cli
                             value = current[i] + Paeth(left, up, upLeft);
                             break;
                         default:
-                            throw new UsageException("Unsupported query PNG filter type: " + filter);
+                            throw new InvalidDataException("Unsupported query PNG filter type: " + filter);
                     }
 
                     current[i] = (byte)(value & 0xff);
@@ -1702,7 +1652,7 @@ namespace WzComparerR2.Cli
                             int index = row[source++];
                             if (palette == null || index * 3 + 2 >= palette.Length)
                             {
-                                throw new UsageException("Query PNG palette is missing or invalid.");
+                                throw new InvalidDataException("Query PNG palette is missing or invalid.");
                             }
 
                             rgba[destination] = palette[index * 3];
