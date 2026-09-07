@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal static class ItemIconPaths
     {

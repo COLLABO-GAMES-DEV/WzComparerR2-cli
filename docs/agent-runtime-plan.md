@@ -360,10 +360,32 @@ xlsx 배치 예시:
 
 ### Phase 5. Item/Map Recipe
 
-- [ ] `item.icon` job step 추가
-- [ ] `item.export` job step 추가
-- [ ] `map.export` job step 추가
-- [ ] 기존 CLI는 Headless wrapper로 유지
+- [x] `item.icon` job step 추가
+- [x] `item.export` job step 추가
+- [x] `map.export` job step 추가
+- [x] 기존 CLI는 Headless wrapper로 유지
+
+`item.icon`은 현재 CLI의 item icon 추출기를 Headless로 이동한 뒤 agent에서 직접 호출한다. `item.export`는 `item-info.json`, `item-icon-result.json`, `agent-item-export-result.json`을 한 output folder에 저장한다. `map.export`는 렌더링이 아니라 metadata export이며 `map-info.json`, `map-metadata.json`, `agent-map-export-result.json`을 저장한다.
+
+```json
+{
+  "dataDir": "/path/to/Maple/Data",
+  "outputDir": ".test/agent-runs/item-map",
+  "steps": [
+    { "id": "cube-icon", "type": "item.icon", "name": "미라클 큐브", "category": "cash" },
+    { "id": "red-potion", "type": "item.export", "itemId": "2000000" },
+    { "id": "henesys", "type": "map.export", "mapId": "100000000" }
+  ]
+}
+```
+
+주의: agent step의 `id`는 step identifier이므로 item/map id는 `itemId`/`mapId`를 우선 사용한다. step `id`가 숫자로만 되어 있고 selector가 없으면 fallback으로 item/map id처럼 해석한다.
+
+2026-09-07 검증:
+
+- `.test/wcr2-agent-item-map-20260907`: `item.icon`이 `미라클 큐브` `5062000` icon PNG 1개를 추출했다.
+- `item.export`가 `2000000` `빨간 포션`의 `item-info.json`과 icon PNG 1개를 추출했다.
+- `map.export`가 `100000000` `헤네시스`에서 portals 37개, life 35개, objects/tiles 1603개, reactors 0개를 기록했다.
 
 ### Phase 6. Agent Serve
 

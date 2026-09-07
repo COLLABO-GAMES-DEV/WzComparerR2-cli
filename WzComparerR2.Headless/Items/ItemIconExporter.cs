@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using WzComparerR2.WzLib;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal static class ItemIconExporter
     {

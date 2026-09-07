@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace WzComparerR2.Cli
+namespace WzComparerR2.Headless
 {
     internal sealed class ItemIconExportResultDto
     {

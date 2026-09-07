@@ -990,6 +990,12 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - 기본 output pattern: `{jobCode}_{jobName}/{id}_{name}`
   - 자동 header: `직업`, `직업 코드`, `스킬`/`skill`; 필요 시 `jobNameColumn`, `jobCodeColumn`, `skillColumns`, `headerRow`, `firstDataRow` 명시
   - `.test/wcr2-agent-xlsx-skill-export-20260907/rerun4`: `보우마스터/314/폭풍의 시 VI` 1건을 `314_보우마스터/3141000_폭풍의 시 VI`로 추출, 총 5개 파일
+- [x] Agent Runtime Phase 5: item/map recipe step 추가
+  - `item.icon`: item id/name 기반 icon PNG 추출을 agent에서 직접 호출
+  - `item.export`: `item-info.json`, `item-icon-result.json`, `agent-item-export-result.json` 저장
+  - `map.export`: `map-info.json`, `map-metadata.json`, `agent-map-export-result.json` 저장
+  - `itemId`/`mapId`를 selector로 사용; 숫자-only step id는 selector fallback으로 허용
+  - `.test/wcr2-agent-item-map-20260907`: `미라클 큐브` icon 1개, `빨간 포션` item export icon 1개, `헤네시스` portals 37/life 35/objects 1603/reactors 0 확인
 - [x] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증
   - `.test/wcr2-core-command-smoke-20260907/`
   - `info Data/String --json`: `String.wz`, `String_000.wz` 인식

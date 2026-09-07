@@ -167,6 +167,21 @@ namespace WzComparerR2.Headless.Agent
                 return RunSkillExportXlsxStep(step, context);
             }
 
+            if (string.Equals(step.Type, "item.icon", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunItemIconStep(step, context);
+            }
+
+            if (string.Equals(step.Type, "item.export", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunItemExportStep(step, context);
+            }
+
+            if (string.Equals(step.Type, "map.export", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunMapExportStep(step, context);
+            }
+
             return FailedStep(step.Id, step.Type, "unknown-step-type", "Unknown agent step type: " + step.Type);
         }
 

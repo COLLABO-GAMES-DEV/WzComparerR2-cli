@@ -58,6 +58,9 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("agent skill export validates required fields", () => AgentSkillExportValidatesRequiredFields(agentRunner)),
                 TestCase.Create("agent skill batch validates requests", () => AgentSkillBatchValidatesRequests(agentRunner)),
                 TestCase.Create("agent skill xlsx validates workbook", () => AgentSkillXlsxValidatesWorkbook(agentRunner)),
+                TestCase.Create("agent item icon validates selector", () => AgentItemIconValidatesSelector(agentRunner)),
+                TestCase.Create("agent item export validates selector", () => AgentItemExportValidatesSelector(agentRunner)),
+                TestCase.Create("agent map export validates id", () => AgentMapExportValidatesId(agentRunner)),
             };
 
             int failed = 0;
@@ -674,6 +677,8 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "wcr2-agent run --job <job.json>");
             AssertContains(result.Stdout, "skill.export");
             AssertContains(result.Stdout, "skill.export-xlsx");
+            AssertContains(result.Stdout, "item.icon");
+            AssertContains(result.Stdout, "map.export");
             AssertContains(result.Stdout, "wcr2-agent serve --stdio");
         }
 
@@ -862,6 +867,72 @@ namespace WzComparerR2.Cli.Tests
                     JsonElement step = root.GetProperty("steps")[0];
                     AssertEqual("skill.export-xlsx", step.GetProperty("type").GetString(), "agent skill xlsx step type");
                     AssertEqual("missing-xlsx", step.GetProperty("error").GetString(), "agent skill xlsx step error");
+                }
+            }
+        }
+
+        private static void AgentItemIconValidatesSelector(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string outDir = Path.Combine(temp.Path, "out");
+                string jobPath = Path.Combine(temp.Path, "item-icon-job.json");
+                File.WriteAllText(jobPath, "{ \"outputDir\": " + JsonSerializer.Serialize(outDir) + ", \"dataDir\": " + JsonSerializer.Serialize(temp.Path) + ", \"steps\": [{ \"id\": \"icon\", \"type\": \"item.icon\" }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("missing-item-id-or-name", root.GetProperty("error").GetString(), "agent error");
+                    JsonElement step = root.GetProperty("steps")[0];
+                    AssertEqual("item.icon", step.GetProperty("type").GetString(), "agent item icon step type");
+                    AssertEqual("missing-item-id-or-name", step.GetProperty("error").GetString(), "agent item icon step error");
+                }
+            }
+        }
+
+        private static void AgentItemExportValidatesSelector(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string outDir = Path.Combine(temp.Path, "out");
+                string jobPath = Path.Combine(temp.Path, "item-export-job.json");
+                File.WriteAllText(jobPath, "{ \"outputDir\": " + JsonSerializer.Serialize(outDir) + ", \"dataDir\": " + JsonSerializer.Serialize(temp.Path) + ", \"steps\": [{ \"id\": \"item\", \"type\": \"item.export\" }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("missing-item-id-or-name", root.GetProperty("error").GetString(), "agent error");
+                    JsonElement step = root.GetProperty("steps")[0];
+                    AssertEqual("item.export", step.GetProperty("type").GetString(), "agent item export step type");
+                    AssertEqual("missing-item-id-or-name", step.GetProperty("error").GetString(), "agent item export step error");
+                }
+            }
+        }
+
+        private static void AgentMapExportValidatesId(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string outDir = Path.Combine(temp.Path, "out");
+                string jobPath = Path.Combine(temp.Path, "map-export-job.json");
+                File.WriteAllText(jobPath, "{ \"outputDir\": " + JsonSerializer.Serialize(outDir) + ", \"dataDir\": " + JsonSerializer.Serialize(temp.Path) + ", \"steps\": [{ \"id\": \"map\", \"type\": \"map.export\" }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("missing-map-id", root.GetProperty("error").GetString(), "agent error");
+                    JsonElement step = root.GetProperty("steps")[0];
+                    AssertEqual("map.export", step.GetProperty("type").GetString(), "agent map export step type");
+                    AssertEqual("missing-map-id", step.GetProperty("error").GetString(), "agent map export step error");
                 }
             }
         }

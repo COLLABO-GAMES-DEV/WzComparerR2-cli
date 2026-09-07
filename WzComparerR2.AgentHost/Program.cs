@@ -93,14 +93,14 @@ namespace WzComparerR2.AgentHost
             Console.WriteLine("  wcr2-agent serve --stdio");
             Console.WriteLine("  wcr2-agent version");
             Console.WriteLine();
-            Console.WriteLine("Supported steps: noop, image.search, image.export-related, skill.export, skill.export-batch, skill.export-xlsx.");
+            Console.WriteLine("Supported steps: noop, image.search, image.export-related, skill.export, skill.export-batch, skill.export-xlsx, item.icon, item.export, map.export.");
         }
 
         private static void PrintRunHelp()
         {
             Console.WriteLine("Usage: wcr2-agent run --job <job.json> [--out <dir>] [--json]");
             Console.WriteLine();
-            Console.WriteLine("Supported steps: noop, image.search, image.export-related, skill.export, skill.export-batch, skill.export-xlsx.");
+            Console.WriteLine("Supported steps: noop, image.search, image.export-related, skill.export, skill.export-batch, skill.export-xlsx, item.icon, item.export, map.export.");
         }
     }
 
