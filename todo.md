@@ -1003,6 +1003,10 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `id`/`requestId`를 response `id`로 보존
   - response는 한 줄 compact JSON으로 출력
   - `WzComparerR2.Cli.Tests`: `agent serve stdio handles ping run shutdown` 추가
+- [x] Agent 전용 quickstart 문서 추가
+  - `docs/agent-quickstart.md`
+  - 새 에이전트 read order, 수정 경계, 대표 job, 검증 명령, 현재 한계 정리
+  - `AGENTS.md`, `docs/cli.md`, `docs/agent-runtime-plan.md`의 stale agent 설명 보정
 - [ ] Agent Runtime Phase 6B: serve process 안에서 request 간 WZ source registry/session cache 재사용
   - 현재는 protocol/lifecycle만 구현됨
   - 큰 batch는 우선 `skill.export-batch`/`skill.export-xlsx` 내부 cache 사용

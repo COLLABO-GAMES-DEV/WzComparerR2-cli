@@ -24,7 +24,7 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Debug/net8.0/wcr2-ag
 
 ## Agent Runtime
 
-`wcr2-agent`는 사람이 직접 옵션을 조합하는 CLI보다, 에이전트가 JSON job을 실행하고 manifest를 남기는 용도에 맞춘 인터페이스입니다. 현재는 job 파싱, 빈 job, `noop`, `image.search`, `image.export-related`, `skill.export`, `skill.export-batch` step을 지원합니다.
+`wcr2-agent`는 단발 CLI 옵션 조합보다, 에이전트가 JSON job을 실행하고 manifest를 남기는 용도에 맞춘 인터페이스입니다. 처음 작업하는 에이전트는 먼저 [`docs/agent-quickstart.md`](agent-quickstart.md)를 읽고, 세부 명령은 이 문서를 reference로 사용합니다. 현재는 job 파싱, 빈 job, `noop`, `image.search`, `image.export-related`, `skill.export`, `skill.export-batch`, `skill.export-xlsx`, `item.icon`, `item.export`, `map.export`, `serve --stdio`를 지원합니다.
 
 ```bash
 wcr2-agent run --job job.json --json

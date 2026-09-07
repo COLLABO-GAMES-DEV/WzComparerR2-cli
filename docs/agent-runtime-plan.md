@@ -110,7 +110,7 @@ wcr2-agent run --job .test/jobs/image-search.json --json
 
 ### 2. Agent Serve
 
-반복 검색/추출이 많아진 뒤 추가할 장기 실행 인터페이스다.
+반복 검색/추출이 많을 때 쓸 수 있는 장기 실행 인터페이스다. 현재 구현은 request/response protocol과 lifecycle 중심이며, request 간 WZ repository cache 공유는 아직 남은 작업이다.
 
 ```bash
 wcr2-agent serve --stdio
@@ -119,19 +119,14 @@ wcr2-agent serve --stdio
 에이전트는 JSON request를 보내고 JSON response를 받는다.
 
 ```json
-{
-  "id": "req-1",
-  "method": "image.search",
-  "params": {
-    "dataDir": "/path/to/Maple/Data",
-    "query": "/path/to/query.png",
-    "scope": ["ui"],
-    "maxResults": 10
-  }
-}
+{ "id": "p1", "method": "ping" }
+{ "id": "r1", "method": "run", "jobPath": ".test/job.json", "outputDir": ".test/job/out" }
+{ "id": "s1", "method": "shutdown" }
 ```
 
-`serve`는 WZ context, source registry, index cache를 프로세스 안에서 재사용할 수 있어 대량 작업에 유리하다. 단, lifecycle과 디버깅 복잡도가 늘어나므로 1차 구현 대상은 아니다.
+`run`은 inline `job` object도 받을 수 있다. 응답은 한 줄 compact JSON이고, request의 `id`/`requestId`는 response `id`로 보존된다.
+
+향후 `serve`는 WZ context, source registry, index cache를 프로세스 안에서 재사용하도록 확장할 수 있다. 지금은 큰 batch 작업의 경우 `skill.export-batch`/`skill.export-xlsx` 내부 cache를 우선 사용한다.
 
 ## 내부 계층
 
