@@ -27,6 +27,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("skill help lists repository inputs", () => SkillHelpListsRepositoryInputs(runner)),
                 TestCase.Create("skill sprite validates required inputs", () => SkillSpriteValidatesRequiredInputs(runner)),
                 TestCase.Create("optional real data skill sprite merges pack metadata", () => OptionalRealDataSkillSpriteMergesPackMetadata(runner)),
+                TestCase.Create("optional real data map detail prefers populated shard", () => OptionalRealDataMapDetailPrefersPopulatedShard(runner)),
                 TestCase.Create("media help lists dedicated commands", () => MediaHelpListsDedicatedCommands(runner)),
                 TestCase.Create("media commands validate required inputs", () => MediaCommandsValidateRequiredInputs(runner)),
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
@@ -273,6 +274,45 @@ namespace WzComparerR2.Cli.Tests
                     AssertEqual(214, firstFrame.GetProperty("Origin").GetProperty("Y").GetInt32(), "keydown frame 0 origin y");
                     AssertEqual(60, firstFrame.GetProperty("Delay").GetInt32(), "keydown frame 0 delay");
                     AssertContains(firstFrame.GetProperty("MetadataPath").GetString(), "3141000\\keydown\\0");
+                }
+            }
+        }
+
+        private static void OptionalRealDataMapDetailPrefersPopulatedShard(CliRunner runner)
+        {
+            string dataDir = Environment.GetEnvironmentVariable("WCR2_TEST_DATA_DIR");
+            if (string.IsNullOrWhiteSpace(dataDir) || !Directory.Exists(dataDir))
+            {
+                return;
+            }
+
+            string map1Dir = Path.Combine(dataDir, "Map", "Map", "Map1");
+            if (!Directory.Exists(map1Dir))
+            {
+                return;
+            }
+
+            CommandResult portals = runner.Run("map", "portals", map1Dir, "--id", "100000000", "--json");
+            AssertExitCode(portals, 0);
+            using (JsonDocument doc = JsonDocument.Parse(portals.Stdout))
+            {
+                JsonElement root = doc.RootElement;
+                int portalCount = root.GetProperty("Portals").GetArrayLength();
+                int selectedCount = root.GetProperty("SelectedItems").GetArrayLength();
+                if (portalCount <= 0 || selectedCount <= 0)
+                {
+                    throw new Exception("Expected map portals to resolve populated shard data." + Environment.NewLine + portals.Stdout);
+                }
+            }
+
+            CommandResult info = runner.Run("map", "info", "--data-dir", dataDir, "--id", "100000000", "--json");
+            AssertExitCode(info, 0);
+            using (JsonDocument doc = JsonDocument.Parse(info.Stdout))
+            {
+                int childrenCount = doc.RootElement.GetProperty("ChildrenCount").GetInt32();
+                if (childrenCount <= 1)
+                {
+                    throw new Exception("Expected map info to prefer populated shard data." + Environment.NewLine + info.Stdout);
                 }
             }
         }

@@ -15,26 +15,29 @@ namespace WzComparerR2.Headless
                 return FindSkillDataNode(root, candidates);
             }
 
+            Wz_Node preferred = null;
+            Wz_Node fallback = null;
             foreach (Wz_Node node in Traverse(root, true))
             {
                 if (MatchesAny(node.Text, candidates))
                 {
+                    if (fallback == null)
+                    {
+                        fallback = node;
+                    }
+
                     if (IsPreferredDomainPath(node, kind))
                     {
-                        return node;
+                        preferred = PickBetterDomainNode(kind, node, preferred);
+                        if (HasDomainPayload(kind, preferred))
+                        {
+                            return preferred;
+                        }
                     }
                 }
             }
 
-            foreach (Wz_Node node in Traverse(root, true))
-            {
-                if (MatchesAny(node.Text, candidates))
-                {
-                    return node;
-                }
-            }
-
-            return null;
+            return preferred ?? fallback;
         }
 
         private static Wz_Node FindSkillDataNode(Wz_Node root, List<string> candidates)
@@ -207,6 +210,104 @@ namespace WzComparerR2.Headless
             return candidates.Any(candidate => string.Equals(text, candidate, StringComparison.OrdinalIgnoreCase));
         }
 
+        private static Wz_Node PickBetterDomainNode(string kind, Wz_Node candidate, Wz_Node current)
+        {
+            if (current == null)
+            {
+                return candidate;
+            }
+
+            return ScoreDomainNode(kind, candidate) > ScoreDomainNode(kind, current)
+                ? candidate
+                : current;
+        }
+
+        private static int ScoreDomainNode(string kind, Wz_Node node)
+        {
+            if (node == null)
+            {
+                return 0;
+            }
+
+            int score = Math.Min(CountChildren(node), 1000);
+            if (string.Equals(kind, "map", StringComparison.OrdinalIgnoreCase))
+            {
+                if (HasChild(node, "info"))
+                {
+                    score += 1000;
+                }
+                if (HasChild(node, "portal"))
+                {
+                    score += 1000;
+                }
+                if (HasChild(node, "life"))
+                {
+                    score += 500;
+                }
+                if (HasNumericMapLayerWithSection(node))
+                {
+                    score += 500;
+                }
+            }
+            return score;
+        }
+
+        private static bool HasDomainPayload(string kind, Wz_Node node)
+        {
+            if (node == null)
+            {
+                return false;
+            }
+
+            if (string.Equals(kind, "map", StringComparison.OrdinalIgnoreCase))
+            {
+                return HasChild(node, "portal")
+                    || HasChild(node, "life")
+                    || HasChild(node, "reactor")
+                    || HasNumericMapLayerWithSection(node);
+            }
+
+            return CountChildren(node) > 0;
+        }
+
+        private static bool HasNumericMapLayerWithSection(Wz_Node node)
+        {
+            foreach (Wz_Node child in node.Nodes)
+            {
+                int layer;
+                if (int.TryParse(child.Text, out layer)
+                    && (HasChild(child, "obj") || HasChild(child, "tile")))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool HasChild(Wz_Node node, string name)
+        {
+            return node != null && node.Nodes[name] != null;
+        }
+
+        private static int CountChildren(Wz_Node node)
+        {
+            if (node == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (Wz_Node ignored in node.Nodes)
+            {
+                count++;
+                if (count >= 1000)
+                {
+                    return count;
+                }
+            }
+            return count;
+        }
+
         private static bool IsPreferredDomainPath(Wz_Node node, string kind)
         {
             string path = NormalizePath(node.FullPath);
@@ -226,7 +327,14 @@ namespace WzComparerR2.Headless
             }
             if (string.Equals(kind, "map", StringComparison.OrdinalIgnoreCase))
             {
-                return path.IndexOf("/map", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (path.IndexOf("/_canvas/", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.StartsWith("_canvas/", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                return path.IndexOf("/map", StringComparison.OrdinalIgnoreCase) >= 0
+                    || path.EndsWith(".img", StringComparison.OrdinalIgnoreCase);
             }
             if (string.Equals(kind, "mob", StringComparison.OrdinalIgnoreCase))
             {

@@ -984,9 +984,29 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `3141000` `branch=icon`, `relatedWz=Data/Effect/_Canvas/_Canvas_001.wz`, `relatedKey=nodepoint`, `maxRelatedInputs=1`, `maxRelatedMatches=1`
   - 결과: sprite 1개, sound 4개, related PNG 3개, video 0개, 총 8개 추출
   - `agent-result.json`에 `cliPath` 없이 in-process `command`만 남는 것 확인
-- [ ] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증 필요
-- [ ] 실제 WZ/MS 샘플 기반 `skill/item/gear/map info`, `animate frames` 검증 필요
-- [ ] 실제 WZ/MS 샘플 기반 `map objects/portals/life/reactors` 검증 필요
+- [x] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증
+  - `.test/wcr2-core-command-smoke-20260907/`
+  - `info Data/String --json`: `String.wz`, `String_000.wz` 인식
+  - `tree Data/String --depth 1 --limit 30 --json`: root image 26개 확인
+  - `list Data/String --json`: root child 26개 확인
+  - `search Data/String --name CashItemSearch --json`: `CashItemSearch.img` 1건 확인
+  - `dump Data/String --path CashItemSearch.img --format json`: child 32개 확인
+  - `extract Data/String --path CashItemSearch.img --recursive`: 파일 43개 추출
+  - `compare Data/Effect/_Canvas/_Canvas_001.wz` self-compare: differences 0건 확인
+- [x] 실제 WZ/MS 샘플 기반 `skill/item/gear/map info`, `animate frames` 검증
+  - `.test/wcr2-domain-animate-smoke-20260907/`
+  - `skill info --data-dir Data --id 3141000`: `폭풍의 시 VI`, children 14
+  - `item info --data-dir Data --id 2000000`: `빨간 포션`
+  - `gear info --data-dir Data --id 1002140`: `위젯 무적 모자`
+  - `map info --data-dir Data --id 100000000`: `헤네시스`, children 20
+  - `animate frames Data/Mob/_Canvas --path 0100100.img/stand`: frame 1개 PNG 추출
+- [x] 실제 WZ/MS 샘플 기반 `map objects/portals/life/reactors` 검증
+  - `.test/wcr2-map-detail-smoke-20260907/`
+  - `map portals Data/Map/Map/Map1 --id 100000000`: portals 37개
+  - `map life Data/Map/Map/Map1 --id 100000000`: life 35개
+  - `map objects Data/Map/Map/Map1 --id 100000000`: objects/tiles 1603개
+  - `map reactors Data/Map/Map/Map1 --id 100000000`: 헤네시스 원본 reactor 0개 확인
+  - split map directory에서 `_Canvas/<id>.img` placeholder가 실제 map metadata보다 먼저 잡히던 문제를 `DomainInfoFinder`에서 non-canvas populated map node 선호로 수정
 - [ ] 외부 lua 실행기와 CLI용 Lua API 기반 실제 script 실행 검증 필요
 - [ ] Network 실제 서버 protocol handshake 검증 필요
 - [ ] 실제 patch 파일 기반 `patch inspect` 검증 필요

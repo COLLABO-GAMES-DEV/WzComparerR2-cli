@@ -436,6 +436,8 @@ export manifest의 각 파일 항목에는 `Bytes`와 `Sha256`이 포함됩니�
 `--names-file`도 지원합니다. 텍스트 파일은 한 줄에 `name`, `jobCode<TAB>name`, `jobCode<TAB>name<TAB>relative/output`, 또는 `jobName<TAB>jobCode<TAB>name<TAB>relative/output`을 받습니다. JSON 파일은 문자열 이름 배열 또는 `{ "name": "파이어크래커", "jobCode": "524", "relativeOutput": "524_캡틴/5241503_파이어크래커" }` 객체 배열을 받습니다. 이름 기반 항목은 내부적으로 `resolve-name`과 같은 규칙을 사용하고, 단일 ID로 확정되지 않으면 해당 항목을 failed로 기록합니다.
 `--branch auto`, `--branch visual`, `--branch all`은 자동 감지된 visual branch를 추출합니다. `--branch effect,hit/0`처럼 쉼표로 여러 branch를 직접 지정할 수도 있고, `--branch auto,hit/0`처럼 자동 감지와 명시 branch를 합칠 수도 있습니다.
 출력 JSON에는 branch별 `Status`, `OutlinkPath`, `ResolvedPath`, `TriedCanvasInputs`, 사운드 `Status`, `TriedSoundInputs`, 추출된 파일의 `Bytes`, `Sha256`, media metadata, frame metadata가 포함됩니다. 단, 특정 variant가 실제 canvas PNG만 갖고 있고 `origin`/`delay`/`z` child가 없는 경우에는 해당 값이 null로 남습니다.
+
+split map layout에서는 `Data/Map/Map/Map1` 같은 shard 디렉터리 안에 `_Canvas/<mapId>.img`와 실제 `<mapId>.img`가 함께 존재할 수 있습니다. `map info`, `map portals`, `map life`, `map objects`, `map reactors`는 `_Canvas` preview가 아니라 `portal`, `life`, `reactor`, layer `obj/tile` metadata가 있는 실제 map node를 우선합니다.
 최신 클라이언트의 특정 Canvas shard가 현재 WzLib에서 읽히지 않으면 명령은 엔진을 우회해 복호화하지 않고 `outlink-not-resolved`와 로딩 진단을 남깁니다. 이 경우 명시적으로 읽히는 Canvas 파일을 `--canvas-wz`로 넘기거나 WzLib 패키지 포맷 지원을 별도 단계로 확장해야 합니다.
 
 스킬 ID만 알고 있을 때의 기본 경로 규칙은 다음과 같습니다.
