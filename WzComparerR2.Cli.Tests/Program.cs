@@ -289,6 +289,11 @@ namespace WzComparerR2.Cli.Tests
             CommandResult image = runner.Run("image", "--help");
             AssertExitCode(image, 0);
             AssertContains(image.Stdout, "wcr2 image list <file-or-dir>");
+            AssertContains(image.Stdout, "wcr2 image search [<file-or-dir>]");
+            AssertContains(image.Stdout, "--data-dir <Data>");
+            AssertContains(image.Stdout, "--cache-dir <dir>");
+            AssertContains(image.Stdout, "--trust-cache");
+            AssertContains(image.Stdout, "--no-refine");
             AssertContains(image.Stdout, "System.Drawing PNG path");
 
             CommandResult video = runner.Run("video", "--help");
@@ -307,6 +312,10 @@ namespace WzComparerR2.Cli.Tests
             CommandResult export = runner.Run("image", "export", "/no/such.wz", "--path", "x");
             AssertExitCode(export, 1);
             AssertContains(export.Stderr, "image export requires --out <output-dir>.");
+
+            CommandResult search = runner.Run("image", "search", "/no/such.wz");
+            AssertExitCode(search, 1);
+            AssertContains(search.Stderr, "image search requires --query <png>.");
         }
 
         private static void UnknownCommandReturnsUsageError(CliRunner runner)

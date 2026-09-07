@@ -54,6 +54,7 @@ wcr2 sound list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
 wcr2 sound export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 sound export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 image list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
+wcr2 image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--scope ui,item,skill,...] [--path <wz-path>] [--out <output-dir>] [--max-results <n>] [--min-score <0..1>] [--cache-dir <dir>] [--trust-cache] [--no-refine] [--json]
 wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 video list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
@@ -143,6 +144,7 @@ wcr2 extract Base.wz --path String --out out/string.xml --format xml
 wcr2 sound list Data/Sound --max-results 20 --json
 wcr2 sound export Data/Sound --path AchievementEff.img/GradeUp --out out/sound --manifest out/sound/manifest.json --json
 wcr2 image list Data/Mob_Canvas --path 0100100.img --max-results 20 --json
+wcr2 image search --data-dir Data --scope ui --query query.png --out out/image-search --manifest out/image-search/manifest.json --json
 wcr2 image export Data/Mob_Canvas --path 0100100.img/stand/0 --out out/image --manifest out/image/manifest.json --json
 wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json
 wcr2 skill full Data/Skill --id 11001025 --string-wz Data/String --format json --out out/skill-11001025.json
@@ -293,6 +295,9 @@ For item icons, prefer `item icon --data-dir Data --name "<item name>" --out <di
 `image export`는 Windows에서 기존 `Wz_Png.ExtractPng()`/`System.Drawing` PNG 저장 경로를 재사용합니다.
 macOS/Linux에서는 CLI의 cross-platform PNG writer가 `ARGB4444`, `ARGB8888`, `ARGB1555`, `RGB565`, `DXT3`, `DXT5`, `A8`, `RGBA1010102`, `BC7` 같은 일반 WZ texture format을 직접 저장합니다.
 아직 지원하지 않는 texture format은 명확한 진단을 반환하며, 이 경우 `image list` 메타데이터 조회는 계속 사용할 수 있습니다.
+`image search`는 로컬 PNG를 query로 받아 WZ PNG 노드와 유사도를 비교합니다. 명시 input 없이 `--data-dir <Data>`를 주면 `UI`, `Item`, `Skill`, `Effect`, `Character`, `Mob`, `Npc`, `Map`, `Etc`, `Quest`, `Reactor`, `Morph` 아래의 `_Canvas` root를 자동으로 찾습니다. 범위를 줄이려면 `--scope ui,item,skill`처럼 comma-separated scope를 지정합니다.
+검색은 투명 영역 crop, pHash 기반 perceptual hash, 색 평균, query/candidate 부분 영역(`left-half`, `right-half`, `top-half`, `bottom-half`, `center`) 비교를 함께 사용합니다. 큰 query에서는 작은 후보를 먼저 제외하는 size prefilter가 기본으로 켜져 있으며, 기준은 `--min-size-ratio 0.25`입니다. query가 강하게 확대/축소된 이미지라면 `--no-size-prefilter`로 끌 수 있습니다.
+`--out`을 지정하면 상위 후보 PNG를 함께 추출하고, `--manifest`를 지정하면 검색 결과 JSON을 저장합니다. `--data-dir` 검색은 OS 사용자 cache에 root별 fingerprint index를 gzip JSON으로 저장합니다. 기본 위치는 macOS `~/Library/Caches/wcr2/image-search`, Windows `%LOCALAPPDATA%\wcr2\image-search`, Linux `${XDG_CACHE_HOME:-~/.cache}/wcr2/image-search`입니다. cache key에는 input path와 alpha 설정만 포함되므로 같은 root의 다른 query에도 재사용됩니다. 다시 만들려면 `--rebuild-cache`, 완전히 끄려면 `--no-cache`를 사용합니다. cache hit 후에는 기본적으로 상위 후보 pool을 WZ에서 다시 열어 pixel-level score로 refine합니다. 속도만 우선할 때는 `--trust-cache --no-refine`을 사용할 수 있습니다.
 `video list`는 `Wz_Video`/MCV 노드의 `FourCC`, width/height, frame count, alpha map flag를 조회합니다.
 `video export`는 기본적으로 원본 `.mcv`를 저장합니다. `--format frames`는 alpha map을 적용한 PNG 프레임을 만들고, `--format gif`는 확인용 GIF를 만듭니다. `frames`, `gif`, `both`는 ffmpeg가 필요하며, 실행 파일이 PATH에 없으면 `--ffmpeg <path>`를 지정합니다.
 export manifest의 각 파일 항목에는 `Bytes`와 `Sha256`이 포함됩니다.

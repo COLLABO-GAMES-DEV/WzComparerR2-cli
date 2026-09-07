@@ -87,6 +87,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 sound export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 sound export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 image list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]");
+            Console.WriteLine("  wcr2 image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--scope ui,item,skill,...] [--path <wz-path>] [--out <output-dir>] [--max-results <n>] [--min-score <0..1>] [--cache-dir <dir>] [--trust-cache] [--no-refine] [--json]");
             Console.WriteLine("  wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 video list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]");
@@ -152,6 +153,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 sound list Data/Sound --max-results 20");
             Console.WriteLine("  wcr2 sound export Data/Sound --path AchievementEff.img/GradeUp --out out/sound");
             Console.WriteLine("  wcr2 image list Data/Mob_Canvas --path 0100100.img --max-results 20");
+            Console.WriteLine("  wcr2 image search --data-dir Data --query query.png --scope ui --out out/image-search --json");
             Console.WriteLine("  wcr2 image export Data/Mob_Canvas --path 0100100.img/stand/0 --out out/image");
             Console.WriteLine("  wcr2 video export Data/Packs/Skill_00006.ms --path Skill/524.img/skill/5241503/screen2/video --format gif --out out/firecracker-video");
             Console.WriteLine("  wcr2 skill info Skill.wz --id 1001004 --string-wz String.wz --json");
@@ -389,6 +391,12 @@ namespace WzComparerR2.Cli
                 Console.WriteLine("  wcr2 video export <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|png|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]");
                 Console.WriteLine("  wcr2 video export-all <file-or-dir> --path <wz-path> --out <output-dir> [--format mcv|frames|png|gif|both] [--ffmpeg <path>] [--manifest <json>] [--json]");
             }
+            else if (string.Equals(kind, "image", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  wcr2 image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--scope ui,item,skill,...] [--path <wz-path>] [--out <output-dir>] [--max-results <n>] [--min-score <0..1>] [--cache-dir <dir>] [--trust-cache] [--no-refine] [--json]");
+                Console.WriteLine("  wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
+                Console.WriteLine("  wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
+            }
             else
             {
                 Console.WriteLine("  wcr2 " + kind + " export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
@@ -397,9 +405,23 @@ namespace WzComparerR2.Cli
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --path <wz-path>       WZ node path to inspect or export.");
+            if (string.Equals(kind, "image", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("  --query <png>          Query PNG for perceptual image search.");
+                Console.WriteLine("  --data-dir <Data>      Auto-search canvas roots under a Maple Data directory when no explicit input is provided.");
+                Console.WriteLine("  --scope <list>         Comma-separated data domains for --data-dir search; default all.");
+                Console.WriteLine("  --cache-dir <dir>      Fingerprint cache directory; default OS user cache.");
+                Console.WriteLine("  --no-cache             Disable image-search fingerprint cache.");
+                Console.WriteLine("  --rebuild-cache        Ignore existing cache and rebuild fingerprints.");
+                Console.WriteLine("  --trust-cache          Skip source timestamp validation for faster cache reads.");
+                Console.WriteLine("  --no-refine            Return cache/index scores without reopening top candidates for pixel scoring.");
+                Console.WriteLine("  --refine-limit <n>     Number of cache/index candidates to refine; default max(50, max-results*8), capped at 250.");
+                Console.WriteLine("  --min-score <0..1>     Keep matches at or above this score; default 0.");
+                Console.WriteLine("  --min-alpha <0-255>    Alpha threshold used for transparent crop; default 16.");
+            }
             Console.WriteLine("  --out <output-dir>     Directory for exported files.");
             Console.WriteLine("  --manifest <json>      Write export manifest JSON.");
-            Console.WriteLine("  --max-results <n>      Limit list results; default 100.");
+            Console.WriteLine("  --max-results <n>      Limit list/search results; list default 100, image search default 20.");
             if (string.Equals(kind, "video", StringComparison.OrdinalIgnoreCase))
             {
                 Console.WriteLine("  --format <format>      Video export format: mcv, frames/png, gif, or both; default mcv.");
@@ -415,6 +437,7 @@ namespace WzComparerR2.Cli
                 Console.WriteLine("Note:");
                 Console.WriteLine("  image export uses WzComparerR2's existing System.Drawing PNG path on Windows.");
                 Console.WriteLine("  On macOS/Linux, image export uses the CLI cross-platform PNG writer for common WZ texture formats.");
+                Console.WriteLine("  image search can auto-scan Data/*/_Canvas roots with --data-dir and stores compact fingerprints in the user cache.");
             }
         }
 

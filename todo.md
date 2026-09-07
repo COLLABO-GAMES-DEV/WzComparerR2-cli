@@ -215,6 +215,15 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `image export` 전용 명령을 추가한다.
   - Windows에서는 기존 `Wz_Png.ExtractPng()` 기반 PNG 저장 경로를 재사용한다.
   - macOS/Linux에서는 CLI cross-platform PNG writer로 common texture format을 직접 저장하고, 미지원 포맷은 명확한 진단을 반환한다.
+- [x] `image search` 유사 이미지 검색 명령을 추가한다.
+  - query PNG를 alpha crop한 뒤 pHash/색상/부분 영역 비교로 WZ PNG 후보를 찾는다.
+  - `--out` 지정 시 상위 후보 PNG와 manifest를 같이 남길 수 있게 한다.
+  - `--data-dir <Data>`만으로 `UI/Item/Skill/Effect/Character/...`의 `_Canvas` root를 자동 스캔할 수 있게 한다.
+  - `--scope ui,item,skill`로 agent가 검색 범위를 줄일 수 있게 한다.
+  - OS 사용자 cache에 root별 fingerprint index를 gzip JSON으로 저장하고, `--cache-dir`, `--no-cache`, `--rebuild-cache`, `--trust-cache`를 지원한다.
+  - 큰 query는 기본 size prefilter로 작은 아이콘 후보를 제외한다. cache key는 query 크기와 독립되어 같은 root의 다른 query에도 재사용된다.
+  - cache/index 점수로 넓은 후보 pool을 잡은 뒤, 기본적으로 top 후보를 WZ에서 다시 열어 pixel-level score로 refine한다. 빠른 agent probe에는 `--trust-cache --no-refine`을 쓸 수 있다.
+  - 2026-09-07 검증: `1788776940228-jmgl86.png`는 `--data-dir ... --scope ui`로 `UIWindowEvent5.img\2606UltimaStory\enterUI\back`를 1순위로 찾았다. 단, query는 여러 레이어가 합성된 화면이라 단일 PNG는 배경 계층만 일치한다. root index 생성은 약 2분 23초, cache hit+refine은 약 3.6초, `--trust-cache --no-refine`은 약 1.5초였다.
 - [x] macOS PNG 직접 저장 가능성을 별도 조사한다.
   - 코어 로직 변경 최소화를 우선하고, CLI 전용 PNG writer로 `ARGB4444`, `ARGB8888`, `ARGB1555`, `RGB565`, `DXT3`, `DXT5`, `A8`, `RGBA1010102`, `BC7`를 우선 지원한다.
 - [x] split `Data` layout 경로 차이를 문서화한다.

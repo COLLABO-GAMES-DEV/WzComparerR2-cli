@@ -24,7 +24,7 @@ namespace WzComparerR2.Cli
             }
         }
 
-        private static DecodedPngPixels DecodeToBgra32(Wz_Png png, int page)
+        internal static DecodedPngPixels DecodeToBgra32(Wz_Png png, int page)
         {
             ValidatePage(png, page);
 
@@ -252,7 +252,7 @@ namespace WzComparerR2.Cli
             output.Write(crcBytes);
         }
 
-        private sealed class DecodedPngPixels
+        internal sealed class DecodedPngPixels
         {
             public DecodedPngPixels(int width, int height, byte[] bgra)
             {

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Xml;
@@ -146,6 +148,10 @@ namespace WzComparerR2.Cli
             {
                 return RunMediaExport(args, kind, true);
             }
+            if (string.Equals(action, "search", StringComparison.OrdinalIgnoreCase) && string.Equals(kind, "image", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunImageSearch(args);
+            }
 
             throw new UsageException("Unknown " + kind + " command: " + action);
         }
@@ -246,6 +252,91 @@ namespace WzComparerR2.Cli
                     }
                 });
             }
+
+            return ExitSuccess;
+        }
+
+        private static int RunImageSearch(ParsedArgs args)
+        {
+            string usage = "image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--path <wz-path>] [--out <output-dir>]";
+            string input = args.Positionals.Count > 1 ? args.Positionals[1] : null;
+            string nodePath = args.GetValue("path");
+            bool json = args.HasFlag("json");
+            var options = ImageSearchOptions.FromArgs(args);
+
+            if (string.IsNullOrEmpty(input) && string.IsNullOrEmpty(options.DataDirectory))
+            {
+                throw new UsageException(usage);
+            }
+            if (string.IsNullOrEmpty(options.QueryPath))
+            {
+                throw new UsageException("image search requires --query <png>.");
+            }
+            if (!File.Exists(options.QueryPath))
+            {
+                throw new FileNotFoundException("Query image not found: " + options.QueryPath);
+            }
+
+            ImageSearchResultDto result;
+            if (!string.IsNullOrEmpty(input))
+            {
+                using (var context = WzLoadContext.Load(input, WzLoadOptions.FromArgs(args)))
+                {
+                    Wz_Node root = ResolveRequiredNode(context.Root, nodePath, true);
+                    result = ImageSimilaritySearcher.Search(input, root, options);
+                }
+            }
+            else
+            {
+                IReadOnlyList<ImageSearchScanRoot> roots = ImageSearchDataSources.FromDataDirectory(options.DataDirectory, options.Scope);
+                if (roots.Count == 0)
+                {
+                    throw new UsageException("No canvas roots were found under --data-dir for scope: " + options.Scope);
+                }
+
+                result = ImageSimilaritySearcher.SearchInputs(roots, nodePath, options, WzLoadOptions.FromArgs(args));
+            }
+
+            if (!string.IsNullOrEmpty(options.ManifestPath))
+            {
+                result.ManifestPath = ImageSimilaritySearcher.WriteManifest(result, options.ManifestPath);
+            }
+
+            WriteOutput(result, json, writer =>
+            {
+                writer.WriteLine("Image search scanned " + result.ScannedImageCount + " image(s), returned " + result.Count + " result(s).");
+                if (result.IndexedImageCount > 0 || result.RefinedImageCount > 0 || result.PrefilteredImageCount > 0)
+                {
+                    writer.WriteLine("Indexed: " + result.IndexedImageCount
+                        + ", prefiltered: " + result.PrefilteredImageCount
+                        + ", refined: " + result.RefinedImageCount + ".");
+                }
+                if (result.Roots != null && result.Roots.Count > 1)
+                {
+                    writer.WriteLine("Roots: " + result.Roots.Count + ", cache hits: " + result.CacheHitCount + ", cache misses: " + result.CacheMissCount + ", failed: " + result.FailedRootCount);
+                }
+                if (!string.IsNullOrEmpty(result.CacheDirectory))
+                {
+                    writer.WriteLine("Cache: " + result.CacheDirectory);
+                }
+                if (!string.IsNullOrEmpty(result.OutputDirectory))
+                {
+                    writer.WriteLine("Output: " + result.OutputDirectory);
+                }
+                if (!string.IsNullOrEmpty(result.ManifestPath))
+                {
+                    writer.WriteLine("Manifest: " + result.ManifestPath);
+                }
+                foreach (ImageSearchMatchDto match in result.Results)
+                {
+                    writer.WriteLine(match.Rank.ToString(CultureInfo.InvariantCulture)
+                        + ". score=" + match.Score.ToString("0.000", CultureInfo.InvariantCulture)
+                        + " region=" + match.MatchedRegion
+                        + " scope=" + match.SourceScope
+                        + " " + match.Path
+                        + FormatOptionalValue(match.OutputPath));
+                }
+            });
 
             return ExitSuccess;
         }
