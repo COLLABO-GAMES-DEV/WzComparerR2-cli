@@ -389,11 +389,23 @@ xlsx 배치 예시:
 
 ### Phase 6. Agent Serve
 
-- [ ] `wcr2-agent serve --stdio` 추가
-- [ ] line-delimited JSON request/response 프로토콜 정의
+- [x] `wcr2-agent serve --stdio` 추가
+- [x] line-delimited JSON request/response 프로토콜 정의
 - [ ] session-level source registry/cache 재사용
-- [ ] graceful shutdown 지원
-- [ ] request id 기반 응답 보장
+- [x] graceful shutdown 지원
+- [x] request id 기반 응답 보장
+
+`serve --stdio`는 stdin/stdout에서 newline-delimited JSON을 사용한다. 지원 method는 `ping`, `run`, `shutdown`이며, request의 `id` 또는 `requestId`는 response `id`로 그대로 반환한다. `run`은 기존 `AgentJobRunner`를 호출하고 `jobPath` 또는 inline `job` object를 받을 수 있다. 응답은 한 줄 compact JSON으로 출력한다.
+
+예시:
+
+```json
+{ "id": "p1", "method": "ping" }
+{ "id": "r1", "method": "run", "jobPath": "job.json", "outputDir": ".test/agent-runs/job1" }
+{ "id": "s1", "method": "shutdown" }
+```
+
+현재 `serve`는 프로세스 유지와 request/response protocol을 제공하지만, WZ repository/source registry를 request 사이에서 재사용하는 장기 session cache는 아직 구현하지 않았다. 큰 batch는 우선 `skill.export-batch`/`skill.export-xlsx` 내부 cache를 사용한다.
 
 ## Upstream 통합 전략
 

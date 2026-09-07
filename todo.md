@@ -996,6 +996,16 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `map.export`: `map-info.json`, `map-metadata.json`, `agent-map-export-result.json` 저장
   - `itemId`/`mapId`를 selector로 사용; 숫자-only step id는 selector fallback으로 허용
   - `.test/wcr2-agent-item-map-20260907`: `미라클 큐브` icon 1개, `빨간 포션` item export icon 1개, `헤네시스` portals 37/life 35/objects 1603/reactors 0 확인
+- [x] Agent Runtime Phase 6A: `serve --stdio` 기본 protocol/lifecycle 추가
+  - newline-delimited JSON request/response
+  - `ping`, `run`, `shutdown` method 지원
+  - `run`은 `jobPath` 또는 inline `job` object 지원
+  - `id`/`requestId`를 response `id`로 보존
+  - response는 한 줄 compact JSON으로 출력
+  - `WzComparerR2.Cli.Tests`: `agent serve stdio handles ping run shutdown` 추가
+- [ ] Agent Runtime Phase 6B: serve process 안에서 request 간 WZ source registry/session cache 재사용
+  - 현재는 protocol/lifecycle만 구현됨
+  - 큰 batch는 우선 `skill.export-batch`/`skill.export-xlsx` 내부 cache 사용
 - [x] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증
   - `.test/wcr2-core-command-smoke-20260907/`
   - `info Data/String --json`: `String.wz`, `String_000.wz` 인식

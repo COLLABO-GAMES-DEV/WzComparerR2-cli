@@ -10,6 +10,7 @@ namespace WzComparerR2.AgentHost
         private const int ExitSuccess = 0;
         private const int ExitUsage = 1;
         private const string AgentVersion = "0.1.0";
+        private static readonly JsonSerializerOptions ServeJsonOptions = CreateServeJsonOptions();
 
         private static int Main(string[] args)
         {
@@ -26,8 +27,7 @@ namespace WzComparerR2.AgentHost
                 case "run":
                     return RunJob(parsed);
                 case "serve":
-                    Console.Error.WriteLine("wcr2-agent serve is not implemented yet.");
-                    return ExitUsage;
+                    return RunServe(parsed);
                 case "version":
                 case "--version":
                     Console.WriteLine("wcr2-agent " + AgentVersion);
@@ -77,6 +77,123 @@ namespace WzComparerR2.AgentHost
             return result.IsSuccess ? ExitSuccess : ExitUsage;
         }
 
+        private static int RunServe(SimpleArgs args)
+        {
+            if (args.HasFlag("help"))
+            {
+                PrintServeHelp();
+                return ExitSuccess;
+            }
+            if (!args.HasFlag("stdio"))
+            {
+                Console.Error.WriteLine("wcr2-agent serve currently requires --stdio.");
+                return ExitUsage;
+            }
+
+            var runner = new AgentJobRunner();
+            string line;
+            while ((line = Console.In.ReadLine()) != null)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                AgentServeResponse response = HandleServeRequest(runner, line);
+                Console.WriteLine(JsonSerializer.Serialize(response, ServeJsonOptions));
+                Console.Out.Flush();
+                if (string.Equals(response.Message, "shutdown", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+            }
+
+            return ExitSuccess;
+        }
+
+        private static AgentServeResponse HandleServeRequest(AgentJobRunner runner, string line)
+        {
+            AgentServeRequest request;
+            try
+            {
+                request = JsonSerializer.Deserialize<AgentServeRequest>(line, AgentJobRunner.JsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                return new AgentServeResponse
+                {
+                    Status = "failed",
+                    Error = "invalid-json",
+                    Message = ex.Message
+                };
+            }
+
+            if (request == null)
+            {
+                return new AgentServeResponse
+                {
+                    Status = "failed",
+                    Error = "invalid-request",
+                    Message = "Request must be a JSON object."
+                };
+            }
+
+            string requestId = FirstNonEmpty(request.RequestId, request.Id);
+            string method = FirstNonEmpty(request.Method, request.Command);
+            if (string.IsNullOrWhiteSpace(method) && (request.Job != null || !string.IsNullOrWhiteSpace(request.JobPath)))
+            {
+                method = "run";
+            }
+
+            if (string.Equals(method, "ping", StringComparison.OrdinalIgnoreCase))
+            {
+                return new AgentServeResponse
+                {
+                    Id = requestId,
+                    Status = "ok",
+                    Message = "pong"
+                };
+            }
+
+            if (string.Equals(method, "shutdown", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(method, "exit", StringComparison.OrdinalIgnoreCase))
+            {
+                return new AgentServeResponse
+                {
+                    Id = requestId,
+                    Status = "ok",
+                    Message = "shutdown"
+                };
+            }
+
+            if (string.Equals(method, "run", StringComparison.OrdinalIgnoreCase))
+            {
+                AgentRunResult result = runner.Run(new AgentRunRequest
+                {
+                    JobPath = request.JobPath,
+                    OutputDirectoryOverride = FirstNonEmpty(request.OutputDir, request.OutputDirectory, request.Out),
+                    BaseDirectory = request.BaseDirectory,
+                    Job = request.Job
+                });
+                return new AgentServeResponse
+                {
+                    Id = requestId,
+                    Status = result.IsSuccess ? "ok" : "failed",
+                    Error = result.Error,
+                    Message = result.Message,
+                    Result = result
+                };
+            }
+
+            return new AgentServeResponse
+            {
+                Id = requestId,
+                Status = "failed",
+                Error = "unknown-method",
+                Message = "Unknown serve method: " + method
+            };
+        }
+
         private static bool IsHelp(string value)
         {
             return string.Equals(value, "-h", StringComparison.OrdinalIgnoreCase)
@@ -102,6 +219,56 @@ namespace WzComparerR2.AgentHost
             Console.WriteLine();
             Console.WriteLine("Supported steps: noop, image.search, image.export-related, skill.export, skill.export-batch, skill.export-xlsx, item.icon, item.export, map.export.");
         }
+
+        private static void PrintServeHelp()
+        {
+            Console.WriteLine("Usage: wcr2-agent serve --stdio");
+            Console.WriteLine();
+            Console.WriteLine("Protocol: newline-delimited JSON request/response over stdin/stdout.");
+            Console.WriteLine("Methods: ping, run, shutdown.");
+        }
+
+        private static string FirstNonEmpty(params string[] values)
+        {
+            foreach (string value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
+            }
+            return null;
+        }
+
+        private static JsonSerializerOptions CreateServeJsonOptions()
+        {
+            var options = new JsonSerializerOptions(AgentJobRunner.JsonOptions);
+            options.WriteIndented = false;
+            return options;
+        }
+    }
+
+    internal sealed class AgentServeRequest
+    {
+        public string Id { get; set; }
+        public string RequestId { get; set; }
+        public string Method { get; set; }
+        public string Command { get; set; }
+        public string JobPath { get; set; }
+        public string OutputDir { get; set; }
+        public string OutputDirectory { get; set; }
+        public string Out { get; set; }
+        public string BaseDirectory { get; set; }
+        public AgentJob Job { get; set; }
+    }
+
+    internal sealed class AgentServeResponse
+    {
+        public string Id { get; set; }
+        public string Status { get; set; }
+        public string Error { get; set; }
+        public string Message { get; set; }
+        public AgentRunResult Result { get; set; }
     }
 
     internal sealed class SimpleArgs

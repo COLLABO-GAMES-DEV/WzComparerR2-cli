@@ -10,6 +10,8 @@ namespace WzComparerR2.Headless.Agent
     {
         public string JobPath { get; set; }
         public string OutputDirectoryOverride { get; set; }
+        public string BaseDirectory { get; set; }
+        public AgentJob Job { get; set; }
     }
 
     public sealed class AgentJob

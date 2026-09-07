@@ -122,6 +122,14 @@ wcr2-agent run --job job.json --json
 
 `item.icon` step은 `itemId`/`id` 또는 `name`으로 아이템 icon PNG를 추출합니다. `item.export` step은 `item-info.json`과 icon 결과를 한 폴더에 같이 저장합니다. `map.export` step은 실제 렌더 PNG가 아니라 map metadata export이며 `map-info.json`과 `map-metadata.json`에 portals/life/objects/reactors 정보를 저장합니다. agent step의 `id`는 step identifier이므로 item/map id는 `itemId`/`mapId`를 우선 사용합니다.
 
+`wcr2-agent serve --stdio`는 newline-delimited JSON request/response 프로토콜입니다. 한 줄에 하나의 JSON request를 보내면 한 줄 compact JSON response가 stdout으로 돌아옵니다. 지원 method는 `ping`, `run`, `shutdown`입니다. `run`은 `jobPath` 또는 inline `job` object를 받으며, `id`/`requestId`는 response `id`로 그대로 반환됩니다. 현재 serve process는 protocol/lifecycle만 제공하고, request 사이의 WZ repository cache는 아직 공유하지 않습니다.
+
+```json
+{ "id": "p1", "method": "ping" }
+{ "id": "r1", "method": "run", "jobPath": "job.json", "outputDir": ".test/agent-runs/job1" }
+{ "id": "s1", "method": "shutdown" }
+```
+
 ## 처음 사용하는 순서
 
 MapleStory 설치 폴더의 `Data` 경로를 먼저 확인합니다. Windows 기본 예시는 `C:\Nexon\Maple\Data`, macOS/CrossOver 예시는 `~/Library/Application Support/MapleStory/Bottles/maplestory/drive_c/Nexon/Maple/Data`입니다.

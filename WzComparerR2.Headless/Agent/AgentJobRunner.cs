@@ -29,25 +29,34 @@ namespace WzComparerR2.Headless.Agent
                 return Failure(null, null, "missing-request", "Agent run request is required.");
             }
 
-            if (string.IsNullOrWhiteSpace(request.JobPath))
+            if (string.IsNullOrWhiteSpace(request.JobPath) && request.Job == null)
             {
-                return Failure(null, null, "missing-job", "agent run requires --job <job.json>.");
+                return Failure(null, null, "missing-job", "agent run requires --job <job.json> or an inline job object.");
             }
 
-            string fullJobPath = Path.GetFullPath(request.JobPath);
-            if (!File.Exists(fullJobPath))
+            string fullJobPath = string.IsNullOrWhiteSpace(request.JobPath)
+                ? null
+                : Path.GetFullPath(request.JobPath);
+            if (!string.IsNullOrWhiteSpace(fullJobPath) && !File.Exists(fullJobPath))
             {
                 return Failure(fullJobPath, null, "job-not-found", "Job file not found: " + fullJobPath);
             }
 
             AgentJob job;
-            try
+            if (request.Job != null)
             {
-                job = JsonSerializer.Deserialize<AgentJob>(File.ReadAllText(fullJobPath), JsonOptions);
+                job = request.Job;
             }
-            catch (JsonException ex)
+            else
             {
-                return Failure(fullJobPath, null, "invalid-json", ex.Message);
+                try
+                {
+                    job = JsonSerializer.Deserialize<AgentJob>(File.ReadAllText(fullJobPath), JsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    return Failure(fullJobPath, null, "invalid-json", ex.Message);
+                }
             }
 
             if (job == null)
@@ -55,7 +64,9 @@ namespace WzComparerR2.Headless.Agent
                 return Failure(fullJobPath, null, "invalid-job", "Job file did not contain a valid object.");
             }
 
-            string jobDirectory = Directory.GetCurrentDirectory();
+            string jobDirectory = string.IsNullOrWhiteSpace(request.BaseDirectory)
+                ? Directory.GetCurrentDirectory()
+                : Path.GetFullPath(request.BaseDirectory);
             string outputDir = !string.IsNullOrWhiteSpace(request.OutputDirectoryOverride)
                 ? request.OutputDirectoryOverride
                 : job.OutputDir;

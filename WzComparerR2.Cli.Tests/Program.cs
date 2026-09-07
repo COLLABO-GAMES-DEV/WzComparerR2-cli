@@ -53,6 +53,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("agent run noop step succeeds", () => AgentRunNoopStepSucceeds(agentRunner)),
                 TestCase.Create("agent run unknown step emits json failure", () => AgentRunUnknownStepEmitsJsonFailure(agentRunner)),
                 TestCase.Create("agent run invalid json emits json failure", () => AgentRunInvalidJsonEmitsJsonFailure(agentRunner)),
+                TestCase.Create("agent serve stdio handles ping run shutdown", () => AgentServeStdioHandlesPingRunShutdown(agentRunner)),
                 TestCase.Create("agent image search validates required data", () => AgentImageSearchValidatesRequiredData(agentRunner)),
                 TestCase.Create("agent image related export validates from step", () => AgentImageRelatedExportValidatesFromStep(agentRunner)),
                 TestCase.Create("agent skill export validates required fields", () => AgentSkillExportValidatesRequiredFields(agentRunner)),
@@ -761,6 +762,42 @@ namespace WzComparerR2.Cli.Tests
             }
         }
 
+        private static void AgentServeStdioHandlesPingRunShutdown(CliRunner runner)
+        {
+            string input = string.Join(Environment.NewLine, new[]
+            {
+                "{ \"id\": \"p1\", \"method\": \"ping\" }",
+                "{ \"id\": \"r1\", \"method\": \"run\", \"job\": { \"steps\": [{ \"id\": \"probe\", \"type\": \"noop\" }] } }",
+                "{ \"id\": \"s1\", \"method\": \"shutdown\" }"
+            }) + Environment.NewLine;
+
+            CommandResult result = runner.RunWithInput(input, "serve", "--stdio");
+            AssertExitCode(result, 0);
+            string[] lines = result.Stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            AssertEqual(3, lines.Length, "serve response count");
+
+            using (JsonDocument ping = JsonDocument.Parse(lines[0]))
+            {
+                AssertEqual("p1", ping.RootElement.GetProperty("id").GetString(), "ping response id");
+                AssertEqual("ok", ping.RootElement.GetProperty("status").GetString(), "ping status");
+                AssertEqual("pong", ping.RootElement.GetProperty("message").GetString(), "ping message");
+            }
+            using (JsonDocument run = JsonDocument.Parse(lines[1]))
+            {
+                AssertEqual("r1", run.RootElement.GetProperty("id").GetString(), "run response id");
+                AssertEqual("ok", run.RootElement.GetProperty("status").GetString(), "run status");
+                JsonElement runResult = run.RootElement.GetProperty("result");
+                AssertEqual("ok", runResult.GetProperty("status").GetString(), "inline run status");
+                AssertEqual("noop", runResult.GetProperty("steps")[0].GetProperty("type").GetString(), "inline run step type");
+            }
+            using (JsonDocument shutdown = JsonDocument.Parse(lines[2]))
+            {
+                AssertEqual("s1", shutdown.RootElement.GetProperty("id").GetString(), "shutdown response id");
+                AssertEqual("ok", shutdown.RootElement.GetProperty("status").GetString(), "shutdown status");
+                AssertEqual("shutdown", shutdown.RootElement.GetProperty("message").GetString(), "shutdown message");
+            }
+        }
+
         private static void AgentImageSearchValidatesRequiredData(CliRunner runner)
         {
             using (var temp = TempDirectory.Create())
@@ -1125,7 +1162,18 @@ public sealed class HelloProvider : ICliCommandProvider
             return ProgramRun(this.CliPath, args);
         }
 
-        private static CommandResult ProgramRun(string fileName, IReadOnlyList<string> args)
+        public CommandResult RunWithInput(string stdin, params string[] args)
+        {
+            string extension = Path.GetExtension(this.CliPath);
+            if (string.Equals(extension, ".dll", StringComparison.OrdinalIgnoreCase))
+            {
+                return ProgramRun("dotnet", new[] { this.CliPath }.Concat(args).ToList(), stdin);
+            }
+
+            return ProgramRun(this.CliPath, args, stdin);
+        }
+
+        private static CommandResult ProgramRun(string fileName, IReadOnlyList<string> args, string stdin = null)
         {
             var startInfo = new ProcessStartInfo
             {
@@ -1133,6 +1181,7 @@ public sealed class HelloProvider : ICliCommandProvider
                 WorkingDirectory = Directory.GetCurrentDirectory(),
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                RedirectStandardInput = stdin != null,
                 UseShellExecute = false
             };
             foreach (string arg in args)
@@ -1144,6 +1193,11 @@ public sealed class HelloProvider : ICliCommandProvider
 
             using (var process = Process.Start(startInfo))
             {
+                if (stdin != null)
+                {
+                    process.StandardInput.Write(stdin);
+                    process.StandardInput.Close();
+                }
                 string stdout = process.StandardOutput.ReadToEnd();
                 string stderr = process.StandardError.ReadToEnd();
                 process.WaitForExit();
