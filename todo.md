@@ -970,7 +970,12 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `fromStep`으로 `image.search` 결과를 참조
   - `ParentPath` 기준 group PNG export 및 manifest 생성
   - 2026-09-07 Sunday Maple 그룹 6개 PNG 추출 검증 통과
-- [ ] Agent Runtime Phase 4: `skill.export` / `skill.export-batch` job step 추가
+- [x] Agent Runtime Phase 4A: `skill.export` / `skill.export-batch` job step 추가
+  - 기존 `wcr2 skill export/export-batch`를 호출하는 CLI bridge 방식
+  - `--cli`, job `cliPath`, step `cliPath`, `WCR2_CLI_PATH`, sibling build output 자동 탐지 지원
+  - 단건 stdout sidecar: `agent-skill-export-result.json`
+  - 배치 stdout sidecar: `agent-skill-batch-result.json`
+- [ ] Agent Runtime Phase 4B: 기존 skill sprite/export logic을 Headless 서비스로 직접 이동
 - [ ] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `skill/item/gear/map info`, `animate frames` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `map objects/portals/life/reactors` 검증 필요

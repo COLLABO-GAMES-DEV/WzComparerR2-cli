@@ -54,6 +54,8 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("agent run invalid json emits json failure", () => AgentRunInvalidJsonEmitsJsonFailure(agentRunner)),
                 TestCase.Create("agent image search validates required data", () => AgentImageSearchValidatesRequiredData(agentRunner)),
                 TestCase.Create("agent image related export validates from step", () => AgentImageRelatedExportValidatesFromStep(agentRunner)),
+                TestCase.Create("agent skill export validates required fields", () => AgentSkillExportValidatesRequiredFields(agentRunner)),
+                TestCase.Create("agent skill batch validates requests", () => AgentSkillBatchValidatesRequests(agentRunner)),
             };
 
             int failed = 0;
@@ -629,6 +631,8 @@ namespace WzComparerR2.Cli.Tests
             CommandResult result = runner.Run("--help");
             AssertExitCode(result, 0);
             AssertContains(result.Stdout, "wcr2-agent run --job <job.json>");
+            AssertContains(result.Stdout, "--cli <wcr2>");
+            AssertContains(result.Stdout, "skill.export");
             AssertContains(result.Stdout, "wcr2-agent serve --stdio");
         }
 
@@ -751,6 +755,50 @@ namespace WzComparerR2.Cli.Tests
                     JsonElement step = root.GetProperty("steps")[0];
                     AssertEqual("image.export-related", step.GetProperty("type").GetString(), "agent related export step type");
                     AssertEqual("missing-from-step", step.GetProperty("error").GetString(), "agent related export step error");
+                }
+            }
+        }
+
+        private static void AgentSkillExportValidatesRequiredFields(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string outDir = Path.Combine(temp.Path, "out");
+                string jobPath = Path.Combine(temp.Path, "skill-export-job.json");
+                File.WriteAllText(jobPath, "{ \"outputDir\": " + JsonSerializer.Serialize(outDir) + ", \"dataDir\": " + JsonSerializer.Serialize(temp.Path) + ", \"steps\": [{ \"id\": \"skill\", \"type\": \"skill.export\" }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("missing-skill-id", root.GetProperty("error").GetString(), "agent error");
+                    JsonElement step = root.GetProperty("steps")[0];
+                    AssertEqual("skill.export", step.GetProperty("type").GetString(), "agent skill export step type");
+                    AssertEqual("missing-skill-id", step.GetProperty("error").GetString(), "agent skill export step error");
+                }
+            }
+        }
+
+        private static void AgentSkillBatchValidatesRequests(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string outDir = Path.Combine(temp.Path, "out");
+                string jobPath = Path.Combine(temp.Path, "skill-batch-job.json");
+                File.WriteAllText(jobPath, "{ \"outputDir\": " + JsonSerializer.Serialize(outDir) + ", \"dataDir\": " + JsonSerializer.Serialize(temp.Path) + ", \"steps\": [{ \"id\": \"batch\", \"type\": \"skill.export-batch\" }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("missing-batch-requests", root.GetProperty("error").GetString(), "agent error");
+                    JsonElement step = root.GetProperty("steps")[0];
+                    AssertEqual("skill.export-batch", step.GetProperty("type").GetString(), "agent skill batch step type");
+                    AssertEqual("missing-batch-requests", step.GetProperty("error").GetString(), "agent skill batch step error");
                 }
             }
         }

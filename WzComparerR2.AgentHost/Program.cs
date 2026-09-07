@@ -52,7 +52,8 @@ namespace WzComparerR2.AgentHost
             AgentRunResult result = runner.Run(new AgentRunRequest
             {
                 JobPath = args.GetValue("job"),
-                OutputDirectoryOverride = args.GetValue("out")
+                OutputDirectoryOverride = args.GetValue("out"),
+                CliPath = args.GetValue("cli")
             });
 
             if (args.HasFlag("json"))
@@ -89,16 +90,18 @@ namespace WzComparerR2.AgentHost
             Console.WriteLine("wcr2-agent " + AgentVersion);
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  wcr2-agent run --job <job.json> [--out <dir>] [--json]");
+            Console.WriteLine("  wcr2-agent run --job <job.json> [--out <dir>] [--cli <wcr2>] [--json]");
             Console.WriteLine("  wcr2-agent serve --stdio");
             Console.WriteLine("  wcr2-agent version");
+            Console.WriteLine();
+            Console.WriteLine("Supported steps: noop, image.search, image.export-related, skill.export, skill.export-batch.");
         }
 
         private static void PrintRunHelp()
         {
-            Console.WriteLine("Usage: wcr2-agent run --job <job.json> [--out <dir>] [--json]");
+            Console.WriteLine("Usage: wcr2-agent run --job <job.json> [--out <dir>] [--cli <wcr2>] [--json]");
             Console.WriteLine();
-            Console.WriteLine("Phase 1 supports empty jobs and noop steps. Unknown step types fail with JSON diagnostics.");
+            Console.WriteLine("Supported steps: noop, image.search, image.export-related, skill.export, skill.export-batch.");
         }
     }
 

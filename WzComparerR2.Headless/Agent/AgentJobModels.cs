@@ -10,12 +10,14 @@ namespace WzComparerR2.Headless.Agent
     {
         public string JobPath { get; set; }
         public string OutputDirectoryOverride { get; set; }
+        public string CliPath { get; set; }
     }
 
     public sealed class AgentJob
     {
         public string DataDir { get; set; }
         public string OutputDir { get; set; }
+        public string CliPath { get; set; }
         public List<AgentJobStep> Steps { get; set; }
     }
 
@@ -55,6 +57,11 @@ namespace WzComparerR2.Headless.Agent
         public string Message { get; set; }
         public string OutputDir { get; set; }
         public string ManifestPath { get; set; }
+        public string CliPath { get; set; }
+        public List<string> Command { get; set; }
+        public int? ExitCode { get; set; }
+        public string StdoutPath { get; set; }
+        public string StderrPath { get; set; }
         public int? Count { get; set; }
         public List<ImageSearchMatchDto> Results { get; set; }
         public List<RelatedImageExportFileDto> Files { get; set; }

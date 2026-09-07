@@ -10,7 +10,7 @@ using WzComparerR2.WzLib;
 
 namespace WzComparerR2.Headless.Agent
 {
-    public sealed class AgentJobRunner
+    public sealed partial class AgentJobRunner
     {
         public static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
@@ -68,6 +68,13 @@ namespace WzComparerR2.Headless.Agent
             string dataDir = string.IsNullOrWhiteSpace(job.DataDir)
                 ? null
                 : ResolvePath(jobDirectory, job.DataDir);
+            string cliPath = !string.IsNullOrWhiteSpace(request.CliPath)
+                ? request.CliPath
+                : job.CliPath;
+            if (!string.IsNullOrWhiteSpace(cliPath))
+            {
+                cliPath = ResolvePath(jobDirectory, cliPath);
+            }
 
             var result = new AgentRunResult
             {
@@ -83,6 +90,7 @@ namespace WzComparerR2.Headless.Agent
                 JobDirectory = jobDirectory,
                 DataDir = dataDir,
                 OutputDir = outputDir,
+                CliPath = cliPath,
                 StepResults = new Dictionary<string, AgentStepResult>(StringComparer.OrdinalIgnoreCase)
             };
             IReadOnlyList<AgentJobStep> steps = job.Steps != null
@@ -150,6 +158,16 @@ namespace WzComparerR2.Headless.Agent
             if (string.Equals(step.Type, "image.export-related", StringComparison.OrdinalIgnoreCase))
             {
                 return RunImageExportRelatedStep(step, context);
+            }
+
+            if (string.Equals(step.Type, "skill.export", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunSkillExportStep(step, context);
+            }
+
+            if (string.Equals(step.Type, "skill.export-batch", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunSkillExportBatchStep(step, context);
             }
 
             return FailedStep(step.Id, step.Type, "unknown-step-type", "Unknown agent step type: " + step.Type);
@@ -524,6 +542,7 @@ namespace WzComparerR2.Headless.Agent
             public string JobDirectory { get; set; }
             public string DataDir { get; set; }
             public string OutputDir { get; set; }
+            public string CliPath { get; set; }
             public Dictionary<string, AgentStepResult> StepResults { get; set; }
         }
     }

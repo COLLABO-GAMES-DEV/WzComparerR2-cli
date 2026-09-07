@@ -272,12 +272,53 @@ wcr2 image search --data-dir Data --scope ui --query query.png --json
 
 ### Phase 4. Skill Export Recipe
 
-- [ ] `skill.export` job step 추가
-- [ ] `skill.export-batch` job step 추가
+- [x] `skill.export` job step 추가
+- [x] `skill.export-batch` job step 추가
+- [x] Phase 4A: 기존 `wcr2 skill export/export-batch`를 호출하는 CLI bridge 연결
 - [ ] 기존 skill sprite/export logic을 Headless 서비스로 점진 이동
 - [ ] origin/delay/lt/rb/z/source metadata manifest 유지
 - [ ] related effect/screen/video/sound export 유지
 - [ ] xlsx 기반 batch recipe는 별도 step으로 분리
+
+현재 `skill.export`와 `skill.export-batch`는 job 계약을 먼저 고정하기 위한 bridge 단계다. agent는 `--cli`, job `cliPath`, step `cliPath`, `WCR2_CLI_PATH`, 같은 output 폴더의 `wcr2`/`wcr2.exe`/`wcr2.dll`, 또는 repo sibling build output에서 CLI를 찾는다. 이 구조는 기존 CLI 추출 결과와 문서화된 `skill-info.json`/`resources.json`/batch `manifest.json` 형식을 그대로 유지하면서, 다음 단계에서 구현체만 Headless 서비스로 교체할 수 있게 한다.
+
+단건 예시:
+
+```json
+{
+  "dataDir": "/path/to/Maple/Data",
+  "outputDir": ".test/agent-runs/skills",
+  "steps": [
+    {
+      "id": "firecracker",
+      "type": "skill.export",
+      "skillId": "5241503",
+      "videoFormat": "png"
+    }
+  ]
+}
+```
+
+배치 예시:
+
+```json
+{
+  "dataDir": "/path/to/Maple/Data",
+  "outputDir": ".test/agent-runs/skill-batch",
+  "steps": [
+    {
+      "id": "batch",
+      "type": "skill.export-batch",
+      "idsFile": "skill-requests.json",
+      "outRoot": ".test/agent-runs/skill-batch/exports",
+      "manifest": ".test/agent-runs/skill-batch/manifest.json",
+      "continueOnError": true,
+      "skipExisting": true,
+      "videoFormat": "png"
+    }
+  ]
+}
+```
 
 ### Phase 5. Item/Map Recipe
 
