@@ -979,7 +979,11 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - 배치 result sidecar: `agent-skill-batch-result.json`
   - `3141000` direct agent smoke: 단건/batch 각각 32개 추출, `Origin`/`Delay` metadata 유지 확인
   - `5241503` direct agent smoke: image 150개, sound 8개, video frame 356개 추출 확인
-- [ ] Agent Runtime Phase 4C: skill related cross-root effect export direct 검증
+- [x] Agent Runtime Phase 4C: skill related cross-root effect export direct 검증
+  - `.test/wcr2-agent-skill-related-20260907/job.json`에서 `skill.export` direct step으로 explicit `relatedWz`/`relatedKey`를 검증
+  - `3141000` `branch=icon`, `relatedWz=Data/Effect/_Canvas/_Canvas_001.wz`, `relatedKey=nodepoint`, `maxRelatedInputs=1`, `maxRelatedMatches=1`
+  - 결과: sprite 1개, sound 4개, related PNG 3개, video 0개, 총 8개 추출
+  - `agent-result.json`에 `cliPath` 없이 in-process `command`만 남는 것 확인
 - [ ] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `skill/item/gear/map info`, `animate frames` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `map objects/portals/life/reactors` 검증 필요

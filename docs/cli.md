@@ -116,7 +116,7 @@ wcr2-agent run --job job.json --json
 }
 ```
 
-`skill.export`와 `skill.export-batch`는 Headless로 옮긴 기존 스킬 추출 구현을 프로세스 생성 없이 직접 호출합니다. 각 step은 결과 DTO를 `agent-skill-export-result.json` 또는 `agent-skill-batch-result.json`에 저장하고, 기존 `skill-info.json`, `resources.json`, batch `manifest.json`은 그대로 유지합니다.
+`skill.export`와 `skill.export-batch`는 Headless로 옮긴 기존 스킬 추출 구현을 프로세스 생성 없이 직접 호출합니다. 각 step은 결과 DTO를 `agent-skill-export-result.json` 또는 `agent-skill-batch-result.json`에 저장하고, 기존 `skill-info.json`, `resources.json`, batch `manifest.json`은 그대로 유지합니다. `relatedWz`, `effectWz`, `characterWz`, `relatedKey`, `maxRelatedInputs`, `maxRelatedMatches`도 CLI 옵션과 같은 의미로 사용할 수 있으며, related 추출 결과는 `RelatedAssets`/`RelatedFileCount`와 `related/` 폴더에 남습니다.
 
 ## 처음 사용하는 순서
 

@@ -278,7 +278,7 @@ wcr2 image search --data-dir Data --scope ui --query query.png --json
 - [x] Phase 4B: 기존 skill sprite/export logic을 Headless 서비스로 직접 이동
 - [x] origin/delay/lt/rb/z/source metadata manifest 유지
 - [x] screen/video/sound export 유지
-- [ ] related cross-root effect export 유지 검증
+- [x] related cross-root effect export 유지 검증
 - [ ] xlsx 기반 batch recipe는 별도 step으로 분리
 
 현재 `skill.export`와 `skill.export-batch`는 Headless로 옮긴 기존 스킬 추출 구현을 프로세스 생성 없이 직접 호출한다. agent job은 CLI 호환 옵션 이름을 유지하되 실행은 `SkillSpriteExporter`/`SkillBatchExporter` in-process 호출로 처리한다. 기존 CLI 추출 결과와 문서화된 `skill-info.json`/`resources.json`/batch `manifest.json` 형식은 그대로 유지한다.
@@ -288,6 +288,8 @@ wcr2 image search --data-dir Data --scope ui --query query.png --json
 - `3141000 폭풍의 시 VI` direct agent 단건/batch export가 각각 32개 파일을 추출했다.
 - `resources.json`의 `prepare`, `keydown`, `keydownend` frame metadata에 `Origin`과 `Delay`가 유지됐다.
 - `5241503 파이어크래커` direct agent export가 image 150개, sound 8개, video frame 356개를 추출했다.
+- `3141000 폭풍의 시 VI` direct agent related 검증에서 `Data/Effect/_Canvas/_Canvas_001.wz`와 `relatedKey=nodepoint`를 명시해 related PNG 3개를 추출했다.
+- 같은 결과의 `agent-result.json`에는 `cliPath`가 없고 `command: ["skill","export",...]`만 남아, CLI bridge 없이 in-process 경로가 사용된 것을 확인했다.
 
 단건 예시:
 
