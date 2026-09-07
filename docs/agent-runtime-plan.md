@@ -186,19 +186,28 @@ wcr2-agent serve --stdio
 
 ### Phase 1. 프로젝트 뼈대
 
-- [ ] `WzComparerR2.Headless` class library 추가
-- [ ] `WzComparerR2.AgentHost` exe 추가
-- [ ] solution에 두 프로젝트 등록
-- [ ] 기존 `WzComparerR2.Cli`는 그대로 동작하게 유지
-- [ ] 최소 `agent run --job` 명령 추가
-- [ ] 빈 job / 알 수 없는 step / 잘못된 JSON validation 추가
+- [x] `WzComparerR2.Headless` class library 추가
+- [x] `WzComparerR2.AgentHost` exe 추가
+- [x] solution에 두 프로젝트 등록
+- [x] 기존 `WzComparerR2.Cli`는 그대로 동작하게 유지
+- [x] 최소 `agent run --job` 명령 추가
+- [x] 빈 job / 알 수 없는 step / 잘못된 JSON validation 추가
+
+현재 지원 범위:
+
+- `wcr2-agent run --job <job.json> [--out <dir>] [--json]`
+- 빈 job은 성공 처리한다.
+- `noop` step은 성공 처리한다.
+- 알 수 없는 step type, 누락된 step id/type, 중복 step id, 잘못된 JSON은 실패 JSON으로 보고한다.
+- `outputDir` 또는 `--out`이 있으면 `agent-result.json` manifest를 남긴다.
 
 검증:
 
 ```bash
 dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Release --no-restore
+dotnet build WzComparerR2.AgentHost/WzComparerR2.AgentHost.csproj -c Release --no-restore
 dotnet build WzComparerR2.Cli.Tests/WzComparerR2.Cli.Tests.csproj -c Release --no-restore
-DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Release/net8.0/wcr2-tests.dll --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll
+DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Release/net8.0/wcr2-tests.dll --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll --agent WzComparerR2.AgentHost/bin/Release/net8.0/wcr2-agent.dll
 ```
 
 ### Phase 2. Image Search 서비스 분리
@@ -297,8 +306,9 @@ git remote -v
 git fetch upstream
 git rebase upstream/<원본브랜치>
 dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Release --no-restore
+dotnet build WzComparerR2.AgentHost/WzComparerR2.AgentHost.csproj -c Release --no-restore
 dotnet build WzComparerR2.Cli.Tests/WzComparerR2.Cli.Tests.csproj -c Release --no-restore
-DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Release/net8.0/wcr2-tests.dll --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll
+DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Release/net8.0/wcr2-tests.dll --cli WzComparerR2.Cli/bin/Release/net8.0/wcr2.dll --agent WzComparerR2.AgentHost/bin/Release/net8.0/wcr2-agent.dll
 ```
 
 주의:

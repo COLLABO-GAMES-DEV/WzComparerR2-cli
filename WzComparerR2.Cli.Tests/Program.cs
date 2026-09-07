@@ -14,6 +14,7 @@ namespace WzComparerR2.Cli.Tests
         {
             var options = TestOptions.Parse(args);
             var runner = new CliRunner(options.CliPath);
+            var agentRunner = new CliRunner(options.AgentPath);
             var tests = new List<TestCase>
             {
                 TestCase.Create("help lists core commands", () => HelpListsCoreCommands(runner)),
@@ -46,6 +47,11 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("update invalid asset returns usage error", () => UpdateInvalidAssetReturnsUsageError(runner)),
                 TestCase.Create("plugin list reports corrupt assembly without failing", () => PluginListReportsCorruptAssembly(runner)),
                 TestCase.Create("plugin command provider can be discovered and run", () => PluginProviderCanBeDiscoveredAndRun(runner)),
+                TestCase.Create("agent help lists run command", () => AgentHelpListsRunCommand(agentRunner)),
+                TestCase.Create("agent run empty job emits manifest", () => AgentRunEmptyJobEmitsManifest(agentRunner)),
+                TestCase.Create("agent run noop step succeeds", () => AgentRunNoopStepSucceeds(agentRunner)),
+                TestCase.Create("agent run unknown step emits json failure", () => AgentRunUnknownStepEmitsJsonFailure(agentRunner)),
+                TestCase.Create("agent run invalid json emits json failure", () => AgentRunInvalidJsonEmitsJsonFailure(agentRunner)),
             };
 
             int failed = 0;
@@ -616,6 +622,93 @@ namespace WzComparerR2.Cli.Tests
             }
         }
 
+        private static void AgentHelpListsRunCommand(CliRunner runner)
+        {
+            CommandResult result = runner.Run("--help");
+            AssertExitCode(result, 0);
+            AssertContains(result.Stdout, "wcr2-agent run --job <job.json>");
+            AssertContains(result.Stdout, "wcr2-agent serve --stdio");
+        }
+
+        private static void AgentRunEmptyJobEmitsManifest(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string outDir = Path.Combine(temp.Path, "out");
+                string jobPath = Path.Combine(temp.Path, "empty-job.json");
+                File.WriteAllText(jobPath, "{ \"outputDir\": " + JsonSerializer.Serialize(outDir) + ", \"steps\": [] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 0);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("ok", root.GetProperty("Status").GetString(), "agent status");
+                    AssertEqual(0, root.GetProperty("Steps").GetArrayLength(), "agent step count");
+                    string manifestPath = root.GetProperty("ManifestPath").GetString();
+                    AssertEqual(true, File.Exists(manifestPath), "agent manifest exists");
+                }
+            }
+        }
+
+        private static void AgentRunNoopStepSucceeds(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string jobPath = Path.Combine(temp.Path, "noop-job.json");
+                File.WriteAllText(jobPath, "{ \"steps\": [{ \"id\": \"probe\", \"type\": \"noop\" }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 0);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("ok", root.GetProperty("Status").GetString(), "agent status");
+                    JsonElement step = root.GetProperty("Steps")[0];
+                    AssertEqual("probe", step.GetProperty("Id").GetString(), "agent step id");
+                    AssertEqual("noop", step.GetProperty("Type").GetString(), "agent step type");
+                    AssertEqual("ok", step.GetProperty("Status").GetString(), "agent step status");
+                }
+            }
+        }
+
+        private static void AgentRunUnknownStepEmitsJsonFailure(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string jobPath = Path.Combine(temp.Path, "unknown-step-job.json");
+                File.WriteAllText(jobPath, "{ \"steps\": [{ \"id\": \"probe\", \"type\": \"agent.unknown\" }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("Status").GetString(), "agent status");
+                    AssertEqual("unknown-step-type", root.GetProperty("Error").GetString(), "agent error");
+                    AssertEqual("failed", root.GetProperty("Steps")[0].GetProperty("Status").GetString(), "agent step status");
+                }
+            }
+        }
+
+        private static void AgentRunInvalidJsonEmitsJsonFailure(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string jobPath = Path.Combine(temp.Path, "invalid-job.json");
+                File.WriteAllText(jobPath, "{ invalid-json");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("Status").GetString(), "agent status");
+                    AssertEqual("invalid-json", root.GetProperty("Error").GetString(), "agent error");
+                }
+            }
+        }
+
         private static string CreateHelloPluginProject(string cliPath)
         {
             return @"<Project Sdk=""Microsoft.NET.Sdk"">
@@ -714,15 +807,21 @@ public sealed class HelloProvider : ICliCommandProvider
     internal sealed class TestOptions
     {
         public string CliPath { get; private set; }
+        public string AgentPath { get; private set; }
 
         public static TestOptions Parse(IReadOnlyList<string> args)
         {
             string cliPath = Environment.GetEnvironmentVariable("WCR2_TEST_CLI");
+            string agentPath = Environment.GetEnvironmentVariable("WCR2_TEST_AGENT");
             for (int i = 0; i < args.Count; i++)
             {
                 if (string.Equals(args[i], "--cli", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Count)
                 {
                     cliPath = args[++i];
+                }
+                else if (string.Equals(args[i], "--agent", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Count)
+                {
+                    agentPath = args[++i];
                 }
             }
 
@@ -732,12 +831,49 @@ public sealed class HelloProvider : ICliCommandProvider
             }
 
             cliPath = Path.GetFullPath(cliPath);
+            if (string.IsNullOrEmpty(agentPath))
+            {
+                agentPath = InferAgentPath(cliPath);
+            }
+
+            agentPath = Path.GetFullPath(agentPath);
             if (!File.Exists(cliPath))
             {
                 throw new FileNotFoundException("CLI binary not found. Build WzComparerR2.Cli first or pass --cli <path>.", cliPath);
             }
+            if (!File.Exists(agentPath))
+            {
+                throw new FileNotFoundException("Agent binary not found. Build WzComparerR2.AgentHost first or pass --agent <path>.", agentPath);
+            }
 
-            return new TestOptions { CliPath = cliPath };
+            return new TestOptions { CliPath = cliPath, AgentPath = agentPath };
+        }
+
+        private static string InferAgentPath(string cliPath)
+        {
+            string cliDirectory = Path.GetDirectoryName(cliPath);
+            DirectoryInfo targetFrameworkDirectory = new DirectoryInfo(cliDirectory);
+            DirectoryInfo configurationDirectory = targetFrameworkDirectory.Parent;
+            DirectoryInfo binDirectory = configurationDirectory != null ? configurationDirectory.Parent : null;
+            DirectoryInfo cliProjectDirectory = binDirectory != null ? binDirectory.Parent : null;
+            DirectoryInfo repoDirectory = cliProjectDirectory != null ? cliProjectDirectory.Parent : null;
+
+            if (configurationDirectory != null && repoDirectory != null)
+            {
+                string sibling = Path.Combine(repoDirectory.FullName, "WzComparerR2.AgentHost", "bin", configurationDirectory.Name, targetFrameworkDirectory.Name, "wcr2-agent.dll");
+                if (File.Exists(sibling))
+                {
+                    return sibling;
+                }
+            }
+
+            string release = Path.Combine(Directory.GetCurrentDirectory(), "WzComparerR2.AgentHost", "bin", "Release", "net8.0", "wcr2-agent.dll");
+            if (File.Exists(release))
+            {
+                return release;
+            }
+
+            return Path.Combine(Directory.GetCurrentDirectory(), "WzComparerR2.AgentHost", "bin", "Debug", "net8.0", "wcr2-agent.dll");
         }
     }
 

@@ -957,6 +957,13 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] `git diff --check` 공백 오류 없음
 - [x] 현재 저장소 안에서 `.wz`, `.img`, `.ms`, `.patch` 샘플 파일을 찾지 못함
 - [x] 현재 macOS 환경 PATH에서 `lua`, `lua5.4`, `lua5.3`, `luajit` 실행기를 찾지 못함
+- [x] Agent Runtime 계획 문서 작성: `docs/agent-runtime-plan.md`
+- [x] Agent Runtime Phase 1 뼈대 구현
+  - `WzComparerR2.Headless` class library 추가
+  - `WzComparerR2.AgentHost` exe 추가
+  - `wcr2-agent run --job <job.json> [--json]` 추가
+  - 빈 job, `noop`, 알 수 없는 step, 잘못된 JSON 계약 테스트 추가
+- [ ] Agent Runtime Phase 2: `image.search` Headless 서비스 분리 및 job step 연결
 - [ ] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `skill/item/gear/map info`, `animate frames` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `map objects/portals/life/reactors` 검증 필요

@@ -3,18 +3,48 @@
 `WzComparerR2.Cli`는 `WzComparerR2.WzLib`를 재사용하는 콘솔 도구입니다.
 실행 파일 이름은 `wcr2`입니다.
 
+에이전트 전용 자동화는 `WzComparerR2.AgentHost`가 담당합니다.
+실행 파일 이름은 `wcr2-agent`입니다.
+
 ## Build
 
 ```bash
 dotnet restore WzComparerR2.Cli/WzComparerR2.Cli.csproj --ignore-failed-sources
 dotnet build WzComparerR2.Cli/WzComparerR2.Cli.csproj -c Debug --no-restore
+dotnet restore WzComparerR2.AgentHost/WzComparerR2.AgentHost.csproj --ignore-failed-sources
+dotnet build WzComparerR2.AgentHost/WzComparerR2.AgentHost.csproj -c Debug --no-restore
 ```
 
 현재 CLI는 `net8.0`을 대상으로 합니다. 로컬에 .NET 8 런타임이 없고 더 높은 런타임만 있을 때는 다음처럼 실행할 수 있습니다.
 
 ```bash
 DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli/bin/Debug/net8.0/wcr2.dll --help
+DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Debug/net8.0/wcr2-agent.dll --help
 ```
+
+## Agent Runtime
+
+`wcr2-agent`는 사람이 직접 옵션을 조합하는 CLI보다, 에이전트가 JSON job을 실행하고 manifest를 남기는 용도에 맞춘 인터페이스입니다. 현재 Phase 1에서는 job 파싱, 빈 job, `noop` step, 잘못된 JSON, 알 수 없는 step validation만 지원합니다.
+
+```bash
+wcr2-agent run --job job.json --json
+```
+
+최소 job 예시:
+
+```json
+{
+  "outputDir": ".test/agent-runs/noop",
+  "steps": [
+    {
+      "id": "probe",
+      "type": "noop"
+    }
+  ]
+}
+```
+
+`outputDir`가 있으면 `agent-result.json` manifest를 생성합니다. `image.search`, `skill.export` 같은 실제 추출 step은 `docs/agent-runtime-plan.md`의 Phase 2 이후 작업입니다.
 
 ## 처음 사용하는 순서
 
@@ -108,6 +138,8 @@ wcr2 plugin run <command> [args...] [--plugin-dir <dir>]
 wcr2 patch inspect <patch-file> [--json]
 wcr2 patch dry-run <patch-file> --target <dir> [--json]
 wcr2 patch apply <patch-file> --target <dir> --out <dir> [--log <file>] [--json]
+wcr2-agent run --job <job.json> [--out <dir>] [--json]
+wcr2-agent serve --stdio
 ```
 
 공통 옵션:
