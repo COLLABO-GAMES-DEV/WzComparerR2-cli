@@ -966,7 +966,11 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] Agent Runtime Phase 2: `image.search` Headless 서비스 분리 및 job step 연결
   - CLI `wcr2 image search`와 `wcr2-agent` `image.search` step이 같은 Headless 구현을 사용
   - 2026-09-07 Sunday Maple 배너 query로 CLI/AgentHost 양쪽 검증 통과
-- [ ] Agent Runtime Phase 3: `image.export-related` job step 추가
+- [x] Agent Runtime Phase 3: `image.export-related` job step 추가
+  - `fromStep`으로 `image.search` 결과를 참조
+  - `ParentPath` 기준 group PNG export 및 manifest 생성
+  - 2026-09-07 Sunday Maple 그룹 6개 PNG 추출 검증 통과
+- [ ] Agent Runtime Phase 4: `skill.export` / `skill.export-batch` job step 추가
 - [ ] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `skill/item/gear/map info`, `animate frames` 검증 필요
 - [ ] 실제 WZ/MS 샘플 기반 `map objects/portals/life/reactors` 검증 필요

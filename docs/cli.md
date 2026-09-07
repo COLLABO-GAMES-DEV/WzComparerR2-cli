@@ -62,12 +62,20 @@ wcr2-agent run --job job.json --json
       "trustCache": true,
       "refine": true,
       "exportTopResults": true
+    },
+    {
+      "id": "export-related",
+      "type": "image.export-related",
+      "fromStep": "find-image",
+      "parentDepth": 1,
+      "sourceLimit": 1,
+      "maxFiles": 100
     }
   ]
 }
 ```
 
-`image.search` step은 CLI `wcr2 image search`와 같은 Headless 서비스를 사용합니다. 상대 경로는 현재 작업 디렉터리 기준으로 해석합니다. `skill.export` 같은 실제 추출 recipe는 `docs/agent-runtime-plan.md`의 다음 단계 작업입니다.
+`image.search` step은 CLI `wcr2 image search`와 같은 Headless 서비스를 사용합니다. `image.export-related` step은 이전 검색 결과의 `ParentPath` 기준으로 같은 그룹의 PNG를 재귀 추출합니다. 상대 경로는 현재 작업 디렉터리 기준으로 해석합니다. `skill.export` 같은 실제 추출 recipe는 `docs/agent-runtime-plan.md`의 다음 단계 작업입니다.
 
 ## 처음 사용하는 순서
 

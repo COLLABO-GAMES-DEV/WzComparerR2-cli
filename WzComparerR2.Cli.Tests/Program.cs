@@ -53,6 +53,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("agent run unknown step emits json failure", () => AgentRunUnknownStepEmitsJsonFailure(agentRunner)),
                 TestCase.Create("agent run invalid json emits json failure", () => AgentRunInvalidJsonEmitsJsonFailure(agentRunner)),
                 TestCase.Create("agent image search validates required data", () => AgentImageSearchValidatesRequiredData(agentRunner)),
+                TestCase.Create("agent image related export validates from step", () => AgentImageRelatedExportValidatesFromStep(agentRunner)),
             };
 
             int failed = 0;
@@ -729,6 +730,27 @@ namespace WzComparerR2.Cli.Tests
                     JsonElement step = root.GetProperty("steps")[0];
                     AssertEqual("image.search", step.GetProperty("type").GetString(), "agent image search step type");
                     AssertEqual("missing-data-dir", step.GetProperty("error").GetString(), "agent image search step error");
+                }
+            }
+        }
+
+        private static void AgentImageRelatedExportValidatesFromStep(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string jobPath = Path.Combine(temp.Path, "related-export-job.json");
+                File.WriteAllText(jobPath, "{ \"steps\": [{ \"id\": \"related\", \"type\": \"image.export-related\" }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("missing-from-step", root.GetProperty("error").GetString(), "agent error");
+                    JsonElement step = root.GetProperty("steps")[0];
+                    AssertEqual("image.export-related", step.GetProperty("type").GetString(), "agent related export step type");
+                    AssertEqual("missing-from-step", step.GetProperty("error").GetString(), "agent related export step error");
                 }
             }
         }

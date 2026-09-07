@@ -57,5 +57,6 @@ namespace WzComparerR2.Headless.Agent
         public string ManifestPath { get; set; }
         public int? Count { get; set; }
         public List<ImageSearchMatchDto> Results { get; set; }
+        public List<RelatedImageExportFileDto> Files { get; set; }
     }
 }

@@ -82,7 +82,8 @@ namespace WzComparerR2.Headless.Agent
             {
                 JobDirectory = jobDirectory,
                 DataDir = dataDir,
-                OutputDir = outputDir
+                OutputDir = outputDir,
+                StepResults = new Dictionary<string, AgentStepResult>(StringComparer.OrdinalIgnoreCase)
             };
             IReadOnlyList<AgentJobStep> steps = job.Steps != null
                 ? job.Steps
@@ -92,6 +93,10 @@ namespace WzComparerR2.Headless.Agent
             {
                 AgentStepResult stepResult = RunStep(steps[i], i, seenIds, context);
                 result.Steps.Add(stepResult);
+                if (!string.IsNullOrWhiteSpace(stepResult.Id))
+                {
+                    context.StepResults[stepResult.Id] = stepResult;
+                }
                 if (!string.Equals(stepResult.Status, "ok", StringComparison.OrdinalIgnoreCase))
                 {
                     result.Status = "failed";
@@ -142,7 +147,72 @@ namespace WzComparerR2.Headless.Agent
                 return RunImageSearchStep(step, context);
             }
 
+            if (string.Equals(step.Type, "image.export-related", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunImageExportRelatedStep(step, context);
+            }
+
             return FailedStep(step.Id, step.Type, "unknown-step-type", "Unknown agent step type: " + step.Type);
+        }
+
+        private static AgentStepResult RunImageExportRelatedStep(AgentJobStep step, AgentRunContext context)
+        {
+            string fromStep = GetString(step, "fromStep");
+            if (string.IsNullOrWhiteSpace(fromStep))
+            {
+                return FailedStep(step.Id, step.Type, "missing-from-step", "image.export-related requires fromStep.");
+            }
+
+            AgentStepResult sourceStep;
+            if (!context.StepResults.TryGetValue(fromStep, out sourceStep))
+            {
+                return FailedStep(step.Id, step.Type, "from-step-not-found", "fromStep result not found: " + fromStep);
+            }
+            if (sourceStep.Results == null || sourceStep.Results.Count == 0)
+            {
+                return FailedStep(step.Id, step.Type, "from-step-empty", "fromStep has no image search results: " + fromStep);
+            }
+
+            string outputDir = GetString(step, "outputDir") ?? GetString(step, "out");
+            if (string.IsNullOrWhiteSpace(outputDir) && !string.IsNullOrWhiteSpace(context.OutputDir))
+            {
+                outputDir = Path.Combine(context.OutputDir, SanitizeFileName(step.Id));
+            }
+            if (string.IsNullOrWhiteSpace(outputDir))
+            {
+                return FailedStep(step.Id, step.Type, "missing-output-dir", "image.export-related requires outputDir, out, or job outputDir.");
+            }
+            outputDir = ResolvePath(context.JobDirectory, outputDir);
+
+            string manifestPath = GetString(step, "manifest") ?? GetString(step, "manifestPath");
+            if (string.IsNullOrWhiteSpace(manifestPath))
+            {
+                manifestPath = Path.Combine(outputDir, "related-images-result.json");
+            }
+            manifestPath = ResolvePath(context.JobDirectory, manifestPath);
+
+            int take = Math.Max(1, GetInt(step, "sourceLimit", 1));
+            var options = new RelatedImageExportOptions
+            {
+                OutputDirectory = outputDir,
+                ManifestPath = manifestPath,
+                ParentDepth = Math.Max(1, GetInt(step, "parentDepth", 1)),
+                MaxFiles = Math.Max(1, GetInt(step, "maxFiles", 100)),
+                LoadOptions = CreateWzLoadOptions(step)
+            };
+
+            RelatedImageExportResultDto result = RelatedImageExporter.Export(sourceStep.Results.Take(take).ToList(), options);
+            return new AgentStepResult
+            {
+                Id = step.Id,
+                Type = step.Type,
+                Status = "ok",
+                OutputDir = result.OutputDirectory,
+                ManifestPath = result.ManifestPath,
+                Count = result.Count,
+                Files = result.Files,
+                Message = result.Truncated ? "truncated" : null
+            };
         }
 
         private static AgentStepResult RunImageSearchStep(AgentJobStep step, AgentRunContext context)
@@ -454,6 +524,7 @@ namespace WzComparerR2.Headless.Agent
             public string JobDirectory { get; set; }
             public string DataDir { get; set; }
             public string OutputDir { get; set; }
+            public Dictionary<string, AgentStepResult> StepResults { get; set; }
         }
     }
 }

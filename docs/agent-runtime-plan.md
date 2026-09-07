@@ -243,10 +243,16 @@ wcr2 image search --data-dir Data --scope ui --query query.png --json
 
 ### Phase 3. Related Export
 
-- [ ] `image.export-related` job step 추가
-- [ ] `fromStep` 결과의 `ParentPath` 기준 sibling image export
-- [ ] parent depth 옵션 지원
-- [ ] 합성 UI 화면 대응을 위해 관련 group manifest 생성
+- [x] `image.export-related` job step 추가
+- [x] `fromStep` 결과의 `ParentPath` 기준 sibling image export
+- [x] parent depth 옵션 지원
+- [x] 합성 UI 화면 대응을 위해 관련 group manifest 생성
+
+현재 지원 범위:
+
+- `fromStep`으로 이전 `image.search` step을 참조한다.
+- `parentDepth`, `sourceLimit`, `maxFiles`를 지원한다.
+- step output 폴더에 그룹 PNG와 `related-images-result.json`을 남긴다.
 
 예시:
 
@@ -258,6 +264,11 @@ wcr2 image search --data-dir Data --scope ui --query query.png --json
   "maxFiles": 100
 }
 ```
+
+2026-09-07 검증:
+
+- `UIWindowEvent.img\sundayMaple2\backgrnd` 검색 결과에서 `parentDepth: 1`로 `UIWindowEvent.img\sundayMaple2` 그룹을 추출했다.
+- close 버튼 상태, `backgrnd`, `icon` 총 6개 PNG가 export됐다.
 
 ### Phase 4. Skill Export Recipe
 
