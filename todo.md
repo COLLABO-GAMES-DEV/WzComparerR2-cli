@@ -984,6 +984,12 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `3141000` `branch=icon`, `relatedWz=Data/Effect/_Canvas/_Canvas_001.wz`, `relatedKey=nodepoint`, `maxRelatedInputs=1`, `maxRelatedMatches=1`
   - 결과: sprite 1개, sound 4개, related PNG 3개, video 0개, 총 8개 추출
   - `agent-result.json`에 `cliPath` 없이 in-process `command`만 남는 것 확인
+- [x] Agent Runtime Phase 4D: xlsx 기반 skill batch recipe step 추가
+  - `skill.export-xlsx` agent step 추가
+  - `.xlsx` workbook을 `_agent/<stepId>-names.tsv`로 변환한 뒤 기존 `skill.export-batch` Headless 경로 재사용
+  - 기본 output pattern: `{jobCode}_{jobName}/{id}_{name}`
+  - 자동 header: `직업`, `직업 코드`, `스킬`/`skill`; 필요 시 `jobNameColumn`, `jobCodeColumn`, `skillColumns`, `headerRow`, `firstDataRow` 명시
+  - `.test/wcr2-agent-xlsx-skill-export-20260907/rerun4`: `보우마스터/314/폭풍의 시 VI` 1건을 `314_보우마스터/3141000_폭풍의 시 VI`로 추출, 총 5개 파일
 - [x] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증
   - `.test/wcr2-core-command-smoke-20260907/`
   - `info Data/String --json`: `String.wz`, `String_000.wz` 인식
@@ -1008,10 +1014,17 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `map reactors Data/Map/Map/Map1 --id 100000000`: 헤네시스 원본 reactor 0개 확인
   - split map directory에서 `_Canvas/<id>.img` placeholder가 실제 map metadata보다 먼저 잡히던 문제를 `DomainInfoFinder`에서 non-canvas populated map node 선호로 수정
 - [ ] 외부 lua 실행기와 CLI용 Lua API 기반 실제 script 실행 검증 필요
+  - 현재 macOS PATH에서 `lua`, `lua5.4`, `lua5.3`, `luajit` 미발견
+  - 현재 구현은 외부 Lua 실행기 bridge + `--dry-run` 계약까지 검증됨
 - [ ] Network 실제 서버 protocol handshake 검증 필요
+  - 현재 CLI 구현은 `server-info --connect` TCP probe와 `chat`/`send` dry-run 계약까지 검증됨
+  - 실제 Maple protocol handshake/login/chat 대상 서버 또는 fixture 필요
 - [ ] 실제 patch 파일 기반 `patch inspect` 검증 필요
+  - 현재 저장소에서 실제 `.patch`/patch sample fixture 미발견
 - [ ] 실제 patch 파일과 target 폴더 기반 `patch dry-run` 검증 필요
+  - 실제 patch fixture와 target MapleStory 폴더 조합 필요
 - [ ] 실제 patch 파일과 target 폴더 기반 `patch apply` 검증 필요
+  - 실제 patch fixture와 복사본 output 검증 필요
 
 ## 주요 리스크
 

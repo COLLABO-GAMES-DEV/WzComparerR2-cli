@@ -162,6 +162,11 @@ namespace WzComparerR2.Headless.Agent
                 return RunSkillExportBatchStep(step, context);
             }
 
+            if (string.Equals(step.Type, "skill.export-xlsx", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunSkillExportXlsxStep(step, context);
+            }
+
             return FailedStep(step.Id, step.Type, "unknown-step-type", "Unknown agent step type: " + step.Type);
         }
 

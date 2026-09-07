@@ -99,7 +99,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 skill resolve-name [<skill-wz-file-or-dir>] --name <text> [--job-code <code>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 skill sprite [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--branch icon,effect,hit] [--json]");
             Console.WriteLine("  wcr2 skill export [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--related-key <name>] [--video-format mcv|frames|png|gif|both] [--branch auto|icon,effect,hit] [--json]");
-            Console.WriteLine("  wcr2 skill export-batch [<skill-wz-file-or-dir>] --ids <id,id>|--ids-file <path>|--names-file <path> --out-root <dir> [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--skip-existing] [--continue-on-error] [--manifest <json>] [--json]");
+            Console.WriteLine("  wcr2 skill export-batch [<skill-wz-file-or-dir>] --ids <id,id>|--ids-file <path>|--names-file <path> --out-root <dir> [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--output-pattern <pattern>] [--skip-existing] [--continue-on-error] [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 item info [<wz-file-or-dir>] --id <id> [--item-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 item icon [<item-or-data-dir>] --name <exact-name>|--id <id> --out <dir> [--data-dir <dir>] [--string-wz <file-or-dir>] [--canvas-wz <file-or-dir>] [--category cash|consume|install|etc|pet] [--json]");
             Console.WriteLine("  wcr2 gear info [<wz-file-or-dir>] --id <id> [--character-wz <file-or-dir>] [--string-wz <file-or-dir>] [--data-dir <dir>] [--json]");
@@ -209,7 +209,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 skill resolve-name [<skill-wz-file-or-dir>] --name <text> [--job-code <code>] [--data-dir <dir>] [--json]");
             Console.WriteLine("  wcr2 skill sprite [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--branch icon,effect,hit] [--json]");
             Console.WriteLine("  wcr2 skill export [<skill-wz-file-or-dir>] --id <id> --out <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--video-format mcv|frames|png|gif|both] [--branch auto|icon,effect,hit] [--json]");
-            Console.WriteLine("  wcr2 skill export-batch [<skill-wz-file-or-dir>] --ids <id,id>|--ids-file <path>|--names-file <path> --out-root <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--video-format mcv|frames|png|gif|both] [--branch auto|icon,effect,hit] [--skip-existing] [--continue-on-error] [--manifest <json>] [--json]");
+            Console.WriteLine("  wcr2 skill export-batch [<skill-wz-file-or-dir>] --ids <id,id>|--ids-file <path>|--names-file <path> --out-root <dir> [--skill-wz <file-or-dir>] [--data-dir <dir>] [--canvas-wz <file-or-dir>] [--sound-wz <file-or-dir>] [--output-pattern <pattern>] [--video-format mcv|frames|png|gif|both] [--branch auto|icon,effect,hit] [--skip-existing] [--continue-on-error] [--manifest <json>] [--json]");
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --allow-string-only  Emit string metadata when the skill id exists only in String.wz.");
@@ -234,8 +234,9 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  --ids <list>         Export multiple skill ids in one process. Use with skill export-batch.");
             Console.WriteLine("  --ids-file <path>    Text lines are id or id<TAB>relative/output; JSON arrays may contain strings or { id, relativeOutput } objects.");
             Console.WriteLine("  --names <list>       Export multiple skill names in one process after name resolution.");
-            Console.WriteLine("  --names-file <path>  Text lines are name, jobCode<TAB>name, or jobName<TAB>jobCode<TAB>name<TAB>relative/output.");
+            Console.WriteLine("  --names-file <path>  Text lines are name, jobCode<TAB>name, jobCode<TAB>name<TAB>relative/output, jobName<TAB>jobCode<TAB>name, or jobName<TAB>jobCode<TAB>name<TAB>relative/output.");
             Console.WriteLine("  --out-root <dir>     Batch output root. Entries without a relative output write under <out-root>/<id>.");
+            Console.WriteLine("  --output-pattern <p> Batch relative output pattern when an entry has no explicit relative output. Tokens: {id}, {name}, {jobCode}, {jobName}.");
             Console.WriteLine("  --skip-existing      Skip batch entries whose output already has export-result.json.");
             Console.WriteLine("  --continue-on-error  Keep processing later batch entries after a failed skill.");
             Console.WriteLine("  --manifest <json>    Write the batch summary JSON to a file.");

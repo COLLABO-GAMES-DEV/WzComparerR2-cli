@@ -57,6 +57,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("agent image related export validates from step", () => AgentImageRelatedExportValidatesFromStep(agentRunner)),
                 TestCase.Create("agent skill export validates required fields", () => AgentSkillExportValidatesRequiredFields(agentRunner)),
                 TestCase.Create("agent skill batch validates requests", () => AgentSkillBatchValidatesRequests(agentRunner)),
+                TestCase.Create("agent skill xlsx validates workbook", () => AgentSkillXlsxValidatesWorkbook(agentRunner)),
             };
 
             int failed = 0;
@@ -672,6 +673,7 @@ namespace WzComparerR2.Cli.Tests
             AssertExitCode(result, 0);
             AssertContains(result.Stdout, "wcr2-agent run --job <job.json>");
             AssertContains(result.Stdout, "skill.export");
+            AssertContains(result.Stdout, "skill.export-xlsx");
             AssertContains(result.Stdout, "wcr2-agent serve --stdio");
         }
 
@@ -838,6 +840,28 @@ namespace WzComparerR2.Cli.Tests
                     JsonElement step = root.GetProperty("steps")[0];
                     AssertEqual("skill.export-batch", step.GetProperty("type").GetString(), "agent skill batch step type");
                     AssertEqual("missing-batch-requests", step.GetProperty("error").GetString(), "agent skill batch step error");
+                }
+            }
+        }
+
+        private static void AgentSkillXlsxValidatesWorkbook(CliRunner runner)
+        {
+            using (var temp = TempDirectory.Create())
+            {
+                string outDir = Path.Combine(temp.Path, "out");
+                string jobPath = Path.Combine(temp.Path, "skill-xlsx-job.json");
+                File.WriteAllText(jobPath, "{ \"outputDir\": " + JsonSerializer.Serialize(outDir) + ", \"dataDir\": " + JsonSerializer.Serialize(temp.Path) + ", \"steps\": [{ \"id\": \"xlsx\", \"type\": \"skill.export-xlsx\" }] }");
+
+                CommandResult result = runner.Run("run", "--job", jobPath, "--json");
+                AssertExitCode(result, 1);
+                using (JsonDocument doc = JsonDocument.Parse(result.Stdout))
+                {
+                    JsonElement root = doc.RootElement;
+                    AssertEqual("failed", root.GetProperty("status").GetString(), "agent status");
+                    AssertEqual("missing-xlsx", root.GetProperty("error").GetString(), "agent error");
+                    JsonElement step = root.GetProperty("steps")[0];
+                    AssertEqual("skill.export-xlsx", step.GetProperty("type").GetString(), "agent skill xlsx step type");
+                    AssertEqual("missing-xlsx", step.GetProperty("error").GetString(), "agent skill xlsx step error");
                 }
             }
         }

@@ -279,7 +279,7 @@ wcr2 image search --data-dir Data --scope ui --query query.png --json
 - [x] origin/delay/lt/rb/z/source metadata manifest 유지
 - [x] screen/video/sound export 유지
 - [x] related cross-root effect export 유지 검증
-- [ ] xlsx 기반 batch recipe는 별도 step으로 분리
+- [x] xlsx 기반 batch recipe는 별도 step으로 분리
 
 현재 `skill.export`와 `skill.export-batch`는 Headless로 옮긴 기존 스킬 추출 구현을 프로세스 생성 없이 직접 호출한다. agent job은 CLI 호환 옵션 이름을 유지하되 실행은 `SkillSpriteExporter`/`SkillBatchExporter` in-process 호출로 처리한다. 기존 CLI 추출 결과와 문서화된 `skill-info.json`/`resources.json`/batch `manifest.json` 형식은 그대로 유지한다.
 
@@ -328,6 +328,35 @@ wcr2 image search --data-dir Data --scope ui --query query.png --json
   ]
 }
 ```
+
+xlsx 배치 예시:
+
+```json
+{
+  "dataDir": "/path/to/Maple/Data",
+  "outputDir": ".test/agent-runs/xlsx-skills",
+  "steps": [
+    {
+      "id": "xlsx-skills",
+      "type": "skill.export-xlsx",
+      "xlsx": "skills.xlsx",
+      "sheet": "skills",
+      "outRoot": ".test/agent-runs/xlsx-skills/exports",
+      "branch": "auto",
+      "videoFormat": "png",
+      "continueOnError": true
+    }
+  ]
+}
+```
+
+`skill.export-xlsx`는 `.xlsx`를 읽어 중간 `names.tsv` recipe로 변환한 뒤 기존 `skill.export-batch` Headless 경로를 호출한다. 기본 출력 pattern은 `{jobCode}_{jobName}/{id}_{name}`이다. 자동 header 감지는 `직업`, `직업 코드`, `스킬`/`skill` 계열 header를 사용하며, 표 구조가 다르면 `jobNameColumn`, `jobCodeColumn`, `skillColumns`, `headerRow`, `firstDataRow`를 명시한다.
+
+2026-09-07 검증:
+
+- 최소 xlsx fixture `skills` sheet에서 `보우마스터`, `314`, `폭풍의 시 VI`를 읽어 request 1개를 생성했다.
+- direct agent `skill.export-xlsx`가 `314_보우마스터/3141000_폭풍의 시 VI` 폴더에 icon PNG와 sound 4개를 추출했다.
+- 검증 산출물은 `.test/wcr2-agent-xlsx-skill-export-20260907/rerun4`이다.
 
 ### Phase 5. Item/Map Recipe
 

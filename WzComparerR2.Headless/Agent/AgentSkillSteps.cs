@@ -120,6 +120,7 @@ namespace WzComparerR2.Headless.Agent
             args.Add("--manifest");
             args.Add(manifestPath);
 
+            AddOption(args, step, "--output-pattern", "outputPattern", "output-pattern");
             AddSkillCommonArgs(args, step, context);
             AddBoolFlag(args, step, "--continue-on-error", "continueOnError", "continue-on-error");
             AddBoolFlag(args, step, "--skip-existing", "skipExisting", "skip-existing");
@@ -158,6 +159,121 @@ namespace WzComparerR2.Headless.Agent
                     Type = step.Type,
                     Status = "failed",
                     Error = "skill-export-batch-failed",
+                    Message = TrimForMessage(GetInnermostMessage(ex)),
+                    OutputDir = outputRoot,
+                    ManifestPath = manifestPath,
+                    Command = args,
+                    ExitCode = 1
+                };
+            }
+        }
+
+        private static AgentStepResult RunSkillExportXlsxStep(AgentJobStep step, AgentRunContext context)
+        {
+            string workbookPath = GetStringAny(step, "xlsx", "xlsxFile", "xlsx-file", "workbook", "file");
+            if (string.IsNullOrWhiteSpace(workbookPath))
+            {
+                return FailedStep(step.Id, step.Type, "missing-xlsx", "skill.export-xlsx requires xlsx, xlsxFile, or workbook.");
+            }
+            workbookPath = ResolvePath(context.JobDirectory, workbookPath);
+
+            string outputRoot = GetStringAny(step, "outRoot", "outputRoot", "outputDir", "out", "output");
+            if (string.IsNullOrWhiteSpace(outputRoot) && !string.IsNullOrWhiteSpace(context.OutputDir))
+            {
+                outputRoot = Path.Combine(context.OutputDir, SanitizeFileName(step.Id));
+            }
+            if (string.IsNullOrWhiteSpace(outputRoot))
+            {
+                return FailedStep(step.Id, step.Type, "missing-output-root", "skill.export-xlsx requires outRoot, outputDir, out, or job outputDir.");
+            }
+            outputRoot = ResolvePath(context.JobDirectory, outputRoot);
+
+            var args = new List<string> { "skill", "export-batch" };
+            string skillInput;
+            if (!AddSkillInputArgs(args, step, context, out skillInput))
+            {
+                return FailedStep(step.Id, step.Type, "missing-data-dir", "skill.export-xlsx requires job/step dataDir, skillWz, or input.");
+            }
+            args.Add("--out-root");
+            args.Add(outputRoot);
+
+            string agentDirectory = Path.Combine(outputRoot, "_agent");
+            string namesFilePath = Path.Combine(agentDirectory, SanitizeFileName(step.Id) + "-names.tsv");
+            string recipePath = Path.Combine(agentDirectory, SanitizeFileName(step.Id) + "-xlsx-recipe.json");
+            string manifestPath = GetStringAny(step, "manifest", "manifestPath");
+            if (string.IsNullOrWhiteSpace(manifestPath))
+            {
+                manifestPath = Path.Combine(outputRoot, "manifest.json");
+            }
+            manifestPath = ResolvePath(context.JobDirectory, manifestPath);
+
+            args.Add("--names-file");
+            args.Add(namesFilePath);
+            args.Add("--manifest");
+            args.Add(manifestPath);
+
+            string outputPattern = GetStringAny(step, "outputPattern", "output-pattern");
+            if (string.IsNullOrWhiteSpace(outputPattern))
+            {
+                outputPattern = "{jobCode}_{jobName}/{id}_{name}";
+            }
+            args.Add("--output-pattern");
+            args.Add(outputPattern);
+
+            AddSkillCommonArgs(args, step, context);
+            AddBoolFlag(args, step, "--continue-on-error", "continueOnError", "continue-on-error");
+            AddBoolFlag(args, step, "--skip-existing", "skipExisting", "skip-existing");
+            args.Add("--json");
+
+            string resultJsonPath = Path.Combine(outputRoot, "agent-skill-batch-result.json");
+            try
+            {
+                var recipeOptions = new XlsxSkillRecipeOptions
+                {
+                    SheetName = GetStringAny(step, "sheet", "sheetName", "sheet-name"),
+                    JobNameColumn = GetStringAny(step, "jobNameColumn", "job-name-column", "jobNameCol", "job-name-col"),
+                    JobCodeColumn = GetStringAny(step, "jobCodeColumn", "job-code-column", "jobCodeCol", "job-code-col"),
+                    SkillColumns = SplitOptionList(GetStringOrArrayAny(step, "skillColumns", "skill-columns", "skillColumn", "skill-column")),
+                    HeaderRow = GetIntAny(step, 0, "headerRow", "header-row"),
+                    FirstDataRow = GetIntAny(step, 0, "firstDataRow", "first-data-row"),
+                    MaxRows = GetIntAny(step, 0, "maxRows", "max-rows")
+                };
+                XlsxSkillRecipeResultDto recipe = XlsxSkillRecipeReader.Read(workbookPath, recipeOptions);
+                XlsxSkillRecipeReader.WriteNamesFile(recipe, namesFilePath);
+                WriteJsonSidecar(recipePath, recipe);
+
+                ParsedArgs parsedArgs = ParsedArgs.Parse(args.Skip(1));
+                SkillSpriteExportOptions exportOptions = SkillSpriteExportOptions.FromArgs(parsedArgs, true);
+                SkillBatchExportOptions batchOptions = SkillBatchExportOptions.FromArgs(parsedArgs);
+                SkillBatchExportManifestDto result = SkillBatchExporter.Export(skillInput, parsedArgs, exportOptions, batchOptions);
+                result.Diagnostics.Add("XLSX recipe: " + recipePath);
+                result.Diagnostics.Add("XLSX names file: " + namesFilePath);
+                WriteJsonSidecar(resultJsonPath, result);
+
+                bool success = result.Failed == 0;
+                return new AgentStepResult
+                {
+                    Id = step.Id,
+                    Type = step.Type,
+                    Status = success ? "ok" : "failed",
+                    Error = success ? null : "skill-export-xlsx-failed",
+                    Message = success ? null : "One or more skill export-xlsx items failed.",
+                    OutputDir = result.OutputRoot,
+                    ManifestPath = result.ManifestPath,
+                    ResultPath = resultJsonPath,
+                    Command = args,
+                    ExitCode = success ? 0 : 1,
+                    Count = result.ExportedFileCount
+                };
+            }
+            catch (Exception ex) when (IsSkillExportException(ex) || ex is InvalidDataException)
+            {
+                return new AgentStepResult
+                {
+                    Id = step.Id,
+                    Type = step.Type,
+                    Status = "failed",
+                    Error = "skill-export-xlsx-failed",
                     Message = TrimForMessage(GetInnermostMessage(ex)),
                     OutputDir = outputRoot,
                     ManifestPath = manifestPath,
@@ -374,6 +490,38 @@ namespace WzComparerR2.Headless.Agent
             return string.Join(Path.PathSeparator.ToString(), parts.Select(part => ResolvePath(baseDirectory, part.Trim())));
         }
 
+        private static int GetIntAny(AgentJobStep step, int defaultValue, params string[] keys)
+        {
+            foreach (string key in keys)
+            {
+                int value = GetInt(step, key, int.MinValue);
+                if (value != int.MinValue)
+                {
+                    return value;
+                }
+            }
+            return defaultValue;
+        }
+
+        private static List<string> SplitOptionList(string value)
+        {
+            var result = new List<string>();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return result;
+            }
+
+            foreach (string part in value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string trimmed = part.Trim();
+                if (trimmed.Length > 0)
+                {
+                    result.Add(trimmed);
+                }
+            }
+            return result;
+        }
+
         private static string TrimForMessage(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -402,6 +550,7 @@ namespace WzComparerR2.Headless.Agent
                 || ex is FileNotFoundException
                 || ex is DirectoryNotFoundException
                 || ex is WzLoadException
+                || ex is InvalidDataException
                 || ex is JsonException;
         }
     }

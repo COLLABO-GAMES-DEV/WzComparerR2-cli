@@ -13,6 +13,7 @@ namespace WzComparerR2.Headless
         public List<SkillBatchExportRequestDto> Requests { get; private set; }
         public string OutputRoot { get; private set; }
         public string ManifestPath { get; private set; }
+        public string OutputPattern { get; private set; }
         public bool ContinueOnError { get; private set; }
         public bool SkipExisting { get; private set; }
 
@@ -40,6 +41,7 @@ namespace WzComparerR2.Headless
                 Requests = requests,
                 OutputRoot = Path.GetFullPath(outputRoot),
                 ManifestPath = args.GetValue("manifest"),
+                OutputPattern = args.GetValue("output-pattern"),
                 ContinueOnError = args.HasFlag("continue-on-error"),
                 SkipExisting = args.HasFlag("skip-existing")
             };
@@ -82,7 +84,7 @@ namespace WzComparerR2.Headless
             foreach (string rawLine in File.ReadLines(fullPath))
             {
                 lineNumber++;
-                string line = rawLine.Trim();
+                string line = rawLine.Trim(' ', '\r', '\n');
                 if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
                 {
                     continue;
@@ -186,13 +188,13 @@ namespace WzComparerR2.Headless
             foreach (string rawLine in File.ReadLines(fullPath))
             {
                 lineNumber++;
-                string line = rawLine.Trim();
+                string line = rawLine.Trim(' ', '\r', '\n');
                 if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                requests.Add(ParseNameLine(line.Split('\t'), lineNumber));
+                requests.Add(ParseNameLine(line.Split(new[] { '\t' }, StringSplitOptions.None), lineNumber));
             }
         }
 
@@ -219,14 +221,26 @@ namespace WzComparerR2.Headless
             }
             if (parts.Length == 3)
             {
-                string jobCode = parts[0].Trim();
-                string name = parts[1].Trim();
-                string relativeOutput = parts[2].Trim();
-                if (name.Length == 0)
+                if (LooksLikeJobNameCodeNameLine(parts))
+                {
+                    string threePartJobName = parts[0].Trim();
+                    string threePartJobCodeWithName = parts[1].Trim();
+                    string threePartSkillName = parts[2].Trim();
+                    if (threePartSkillName.Length == 0)
+                    {
+                        throw new UsageException("skill export-batch names file has an empty name at line " + lineNumber + ".");
+                    }
+                    return new SkillBatchExportRequestDto { JobName = threePartJobName, JobCode = threePartJobCodeWithName, Name = threePartSkillName };
+                }
+
+                string threePartJobCode = parts[0].Trim();
+                string threePartName = parts[1].Trim();
+                string threePartRelativeOutput = parts[2].Trim();
+                if (threePartName.Length == 0)
                 {
                     throw new UsageException("skill export-batch names file has an empty name at line " + lineNumber + ".");
                 }
-                return new SkillBatchExportRequestDto { JobCode = jobCode, Name = name, RelativeOutput = relativeOutput };
+                return new SkillBatchExportRequestDto { JobCode = threePartJobCode, Name = threePartName, RelativeOutput = threePartRelativeOutput };
             }
 
             string jobName = parts[0].Trim();
@@ -244,6 +258,31 @@ namespace WzComparerR2.Headless
                 Name = fourPartName,
                 RelativeOutput = fourPartRelativeOutput
             };
+        }
+
+        private static bool LooksLikeJobNameCodeNameLine(string[] parts)
+        {
+            if (parts == null || parts.Length != 3)
+            {
+                return false;
+            }
+
+            return !LooksLikeCompactJobCode(parts[0])
+                && LooksLikeCompactJobCode(parts[1])
+                && !string.IsNullOrWhiteSpace(parts[2]);
+        }
+
+        private static bool LooksLikeCompactJobCode(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string trimmed = value.Trim();
+            return trimmed.Length <= 8
+                && trimmed.Any(char.IsDigit)
+                && trimmed.All(char.IsLetterOrDigit);
         }
 
         private static void AddJsonNameFileRequests(List<SkillBatchExportRequestDto> requests, string path, string json)
@@ -387,7 +426,7 @@ namespace WzComparerR2.Headless
             try
             {
                 string skillId = ResolveRequestSkillId(nameResolver, request, item);
-                string outputDirectory = ResolveOutputDirectory(batchOptions.OutputRoot, request, skillId);
+                string outputDirectory = ResolveOutputDirectory(batchOptions, request, item, skillId);
                 item.Id = skillId;
                 item.RelativeOutput = GetRelativeOutput(batchOptions.OutputRoot, outputDirectory);
                 item.OutputDirectory = outputDirectory;
@@ -474,12 +513,60 @@ namespace WzComparerR2.Headless
             return path;
         }
 
-        private static string ResolveOutputDirectory(string outputRoot, SkillBatchExportRequestDto request, string skillId)
+        private static string ResolveOutputDirectory(
+            SkillBatchExportOptions batchOptions,
+            SkillBatchExportRequestDto request,
+            SkillBatchExportItemDto item,
+            string skillId)
         {
-            string relative = string.IsNullOrWhiteSpace(request.RelativeOutput)
-                ? SanitizeSegment(skillId)
-                : NormalizeRelativeOutput(request.RelativeOutput);
-            return Path.GetFullPath(Path.Combine(outputRoot, relative.Replace('/', Path.DirectorySeparatorChar)));
+            string relative;
+            if (!string.IsNullOrWhiteSpace(request.RelativeOutput))
+            {
+                relative = NormalizeRelativeOutput(request.RelativeOutput);
+            }
+            else if (!string.IsNullOrWhiteSpace(batchOptions.OutputPattern))
+            {
+                relative = NormalizeRelativeOutput(ApplyOutputPattern(batchOptions.OutputPattern, request, item, skillId));
+            }
+            else
+            {
+                relative = SanitizeSegment(skillId);
+            }
+
+            return Path.GetFullPath(Path.Combine(batchOptions.OutputRoot, relative.Replace('/', Path.DirectorySeparatorChar)));
+        }
+
+        private static string ApplyOutputPattern(
+            string pattern,
+            SkillBatchExportRequestDto request,
+            SkillBatchExportItemDto item,
+            string skillId)
+        {
+            string name = FirstNonEmpty(item.ResolvedName, request.Name, skillId);
+            string jobCode = FirstNonEmpty(item.ResolvedJobCode, request.JobCode, "unknown");
+            string jobName = FirstNonEmpty(request.JobName, jobCode);
+            string result = pattern ?? string.Empty;
+            result = result.Replace("{id}", SanitizeSegment(skillId));
+            result = result.Replace("{skillId}", SanitizeSegment(skillId));
+            result = result.Replace("{name}", SanitizeSegment(name));
+            result = result.Replace("{skillName}", SanitizeSegment(name));
+            result = result.Replace("{jobCode}", SanitizeSegment(jobCode));
+            result = result.Replace("{job}", SanitizeSegment(jobCode));
+            result = result.Replace("{jobName}", SanitizeSegment(jobName));
+            result = result.Replace("{requestedName}", SanitizeSegment(request.Name ?? string.Empty));
+            return result;
+        }
+
+        private static string FirstNonEmpty(params string[] values)
+        {
+            foreach (string value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
+            }
+            return string.Empty;
         }
 
         private static string NormalizeRelativeOutput(string value)
