@@ -219,6 +219,8 @@ MCV/Wz_Video 내부 프레임도 검색 대상에 넣어야 하면 `"includeVide
 
 검색이 느리면 `--scope` 또는 job `scope`를 좁힌다. 확대/축소된 reference 이미지라면 `noSizePrefilter`를 고려한다. 배경이 붙은 인터넷 reference 이미지라면 `"trimBackground": true`를 사용하고, 경계가 과하게 잘리거나 덜 잘리면 `"backgroundTolerance": 16..48` 범위에서 조정한다. 빠른 1차 후보 탐색만 필요하면 job에 `"probe": true`를 넣는다. `probe`는 cache를 신뢰하고 pixel refine를 생략하므로 최종 확정에는 `"refine": true`인 기본 검색을 다시 실행한다.
 
+cache hit 검색은 cache v3 파일을 그대로 쓰고, 실행 중 메모리에서 width/height/aspect/alpha bucket index를 만든다. manifest의 `BucketPrefilteredImageCount`, `ScoringBucketCount`, `CoarsePrefilteredImageCount`를 보면 size/shape bucket pruning이 얼마나 적용됐는지 확인할 수 있다.
+
 반복 검색은 `wcr2-agent serve --stdio` 또는 MCP 서버에서 실행하는 편이 더 빠르다. agent 프로세스가 디스크 image search cache에서 읽은 root index를 메모리에 유지하므로, 같은 scope/root의 두 번째 검색부터 JSON gzip cache를 다시 역직렬화하는 비용을 줄인다. 현재 상태는 `cache.stats`/`wcr2.cache_stats`의 `imageSearchIndexCount`, `imageSearchIndexHits`, `imageSearchIndexMisses`, `imageSearchIndexes`에서 확인한다.
 
 ## 8. 아이템과 맵

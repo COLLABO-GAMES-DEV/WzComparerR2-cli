@@ -73,6 +73,8 @@ namespace WzComparerR2.Headless.Media
         public int SkippedVideoFrameCount { get; set; }
         public int SkippedImageCount { get; set; }
         public int PrefilteredImageCount { get; set; }
+        public int BucketPrefilteredImageCount { get; set; }
+        public int ScoringBucketCount { get; set; }
         public int CoarsePrefilteredImageCount { get; set; }
         public int Count { get { return this.Results == null ? 0 : this.Results.Count; } }
         public string OutputDirectory { get; set; }
@@ -94,6 +96,8 @@ namespace WzComparerR2.Headless.Media
         public int ScannedImageCount { get; set; }
         public int SkippedImageCount { get; set; }
         public int PrefilteredImageCount { get; set; }
+        public int BucketPrefilteredImageCount { get; set; }
+        public int ScoringBucketCount { get; set; }
         public int CoarsePrefilteredImageCount { get; set; }
         public string Error { get; set; }
     }
@@ -1021,43 +1025,65 @@ namespace WzComparerR2.Headless.Media
                 return;
             }
 
-            foreach (ImageSearchIndexItemDto item in cache.Items)
+            var indexStats = new ImageSearchCacheRuntimeIndexStats();
+            ImageSearchCacheRuntimeIndex runtimeIndex = ImageSearchCacheRuntimeIndex.GetOrCreate(cache);
+            foreach (ImageSearchCacheRuntimeBucket bucket in runtimeIndex.EnumerateScoringBuckets(queryImage.Width, queryImage.Height, options, indexStats))
             {
-                if (ShouldPrefilterBySize(queryImage.Width, queryImage.Height, item.Width, item.Height, options))
+                double bucketScoreFloor = GetCandidateScoreFloor(candidates, candidatePoolLimit, options.MinScore);
+                if (ShouldPrefilterByBucketShape(queryVariants, bucket, bucketScoreFloor))
                 {
-                    result.PrefilteredImageCount++;
-                    rootDto.PrefilteredImageCount++;
+                    indexStats.ShapeBucketPrefilteredImageCount += bucket.ItemCount;
                     continue;
                 }
 
-                double scoreFloor = GetCandidateScoreFloor(candidates, candidatePoolLimit, options.MinScore);
-                ImageSearchScore score = ScoreCached(queryVariants, item.Fingerprints, scoreFloor);
-                result.ScannedImageCount++;
-                if (IsVideoFrameItem(item))
+                foreach (ImageSearchIndexItemDto item in bucket.Items)
                 {
-                    result.ScannedVideoFrameCount++;
-                }
-                rootDto.ScannedImageCount++;
-                if (score.CoarseFiltered)
-                {
-                    result.CoarsePrefilteredImageCount++;
-                    rootDto.CoarsePrefilteredImageCount++;
-                    continue;
-                }
-                if (score.Score < options.MinScore)
-                {
-                    continue;
-                }
+                    if (ShouldPrefilterBySize(queryImage.Width, queryImage.Height, item.Width, item.Height, options))
+                    {
+                        result.PrefilteredImageCount++;
+                        rootDto.PrefilteredImageCount++;
+                        continue;
+                    }
 
-                AddTopCandidate(candidates, new ImageSearchCandidate
-                {
-                    SourceInputPath = cache.InputPath,
-                    SourceRootPath = cache.RootPath,
-                    SourceScope = cache.Scope,
-                    Page = item.Page ?? 0,
-                    Match = CreateMatchFromIndexItem(item, score, cache)
-                }, candidatePoolLimit);
+                    double scoreFloor = GetCandidateScoreFloor(candidates, candidatePoolLimit, options.MinScore);
+                    ImageSearchScore score = ScoreCached(queryVariants, item.Fingerprints, scoreFloor);
+                    result.ScannedImageCount++;
+                    if (IsVideoFrameItem(item))
+                    {
+                        result.ScannedVideoFrameCount++;
+                    }
+                    rootDto.ScannedImageCount++;
+                    if (score.CoarseFiltered)
+                    {
+                        result.CoarsePrefilteredImageCount++;
+                        rootDto.CoarsePrefilteredImageCount++;
+                        continue;
+                    }
+                    if (score.Score < options.MinScore)
+                    {
+                        continue;
+                    }
+
+                    AddTopCandidate(candidates, new ImageSearchCandidate
+                    {
+                        SourceInputPath = cache.InputPath,
+                        SourceRootPath = cache.RootPath,
+                        SourceScope = cache.Scope,
+                        Page = item.Page ?? 0,
+                        Match = CreateMatchFromIndexItem(item, score, cache)
+                    }, candidatePoolLimit);
+                }
             }
+
+            int bucketPrefiltered = indexStats.SizeBucketPrefilteredImageCount + indexStats.ShapeBucketPrefilteredImageCount;
+            result.PrefilteredImageCount += indexStats.SizeBucketPrefilteredImageCount;
+            rootDto.PrefilteredImageCount += indexStats.SizeBucketPrefilteredImageCount;
+            result.CoarsePrefilteredImageCount += indexStats.ShapeBucketPrefilteredImageCount;
+            rootDto.CoarsePrefilteredImageCount += indexStats.ShapeBucketPrefilteredImageCount;
+            result.BucketPrefilteredImageCount += bucketPrefiltered;
+            rootDto.BucketPrefilteredImageCount += bucketPrefiltered;
+            result.ScoringBucketCount += indexStats.ScoringBucketCount;
+            rootDto.ScoringBucketCount += indexStats.ScoringBucketCount;
         }
 
         private static IEnumerable<Wz_Node> Traverse(Wz_Node root)
@@ -1852,6 +1878,86 @@ namespace WzComparerR2.Headless.Media
             double aspectSimilarity = 1.0 - Math.Abs(leftAspectRatio - rightAspectRatio) / Math.Max(leftAspectRatio, rightAspectRatio);
             double coverageSimilarity = 1.0 - Math.Abs(leftAlphaCoverage - rightAlphaCoverage);
             return Clamp01(aspectSimilarity * 0.75 + coverageSimilarity * 0.25);
+        }
+
+        private static bool ShouldPrefilterByBucketShape(
+            IReadOnlyList<ImageFingerprint> queryVariants,
+            ImageSearchCacheRuntimeBucket bucket,
+            double scoreFloor)
+        {
+            if (queryVariants == null
+                || queryVariants.Count == 0
+                || bucket == null
+                || scoreFloor <= 0.92)
+            {
+                return false;
+            }
+
+            double bestShapeUpperBound = 0;
+            foreach (ImageFingerprint query in queryVariants)
+            {
+                double aspectSimilarity = RangeAspectSimilarity(query.AspectRatio, bucket.MinAspectRatio, bucket.MaxAspectRatio);
+                double coverageSimilarity = RangeUnitSimilarity(query.AlphaCoverage, bucket.MinAlphaCoverage, bucket.MaxAlphaCoverage);
+                double shapeUpperBound = Clamp01(aspectSimilarity * 0.75 + coverageSimilarity * 0.25);
+                if (shapeUpperBound > bestShapeUpperBound)
+                {
+                    bestShapeUpperBound = shapeUpperBound;
+                    if (bestShapeUpperBound >= 1.0)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            double scoreUpperBound = 0.92 + bestShapeUpperBound * 0.08;
+            return scoreUpperBound < scoreFloor;
+        }
+
+        private static double RangeAspectSimilarity(double value, double min, double max)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+            {
+                return 0;
+            }
+            if (double.IsNaN(min) || double.IsNaN(max) || double.IsInfinity(max) || max <= 0)
+            {
+                return 1;
+            }
+            if (value >= min && value <= max)
+            {
+                return 1;
+            }
+
+            double nearest = value < min ? min : max;
+            if (nearest <= 0)
+            {
+                return 0;
+            }
+
+            return Clamp01(1.0 - Math.Abs(value - nearest) / Math.Max(value, nearest));
+        }
+
+        private static double RangeUnitSimilarity(double value, double min, double max)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                return 0;
+            }
+            if (double.IsNaN(min) || double.IsNaN(max))
+            {
+                return 1;
+            }
+
+            value = Clamp01(value);
+            min = Clamp01(min);
+            max = Clamp01(max);
+            if (value >= min && value <= max)
+            {
+                return 1;
+            }
+
+            double nearest = value < min ? min : max;
+            return Clamp01(1.0 - Math.Abs(value - nearest));
         }
 
         private static double StructuralSimilarity(double perceptualScore, double dHashScore, double edgeHashScore)

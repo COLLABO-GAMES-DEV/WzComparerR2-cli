@@ -314,10 +314,12 @@ namespace WzComparerR2.Cli
             WriteOutput(result, json, writer =>
             {
                 writer.WriteLine("Image search scanned " + result.ScannedImageCount + " image(s), returned " + result.Count + " result(s).");
-                if (result.IndexedImageCount > 0 || result.RefinedImageCount > 0 || result.PrefilteredImageCount > 0 || result.CoarsePrefilteredImageCount > 0)
+                if (result.IndexedImageCount > 0 || result.RefinedImageCount > 0 || result.PrefilteredImageCount > 0 || result.BucketPrefilteredImageCount > 0 || result.CoarsePrefilteredImageCount > 0)
                 {
                     writer.WriteLine("Indexed: " + result.IndexedImageCount
                         + ", prefiltered: " + result.PrefilteredImageCount
+                        + ", bucket prefiltered: " + result.BucketPrefilteredImageCount
+                        + ", scoring buckets: " + result.ScoringBucketCount
                         + ", coarse prefiltered: " + result.CoarsePrefilteredImageCount
                         + ", refined: " + result.RefinedImageCount + ".");
                 }
