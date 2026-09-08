@@ -10,8 +10,10 @@ using WzComparerR2.WzLib;
 
 namespace WzComparerR2.Headless.Agent
 {
-    public sealed partial class AgentJobRunner
+    public sealed partial class AgentJobRunner : IDisposable
     {
+        private readonly AgentSessionCache sessionCache = new AgentSessionCache();
+
         public static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -94,6 +96,7 @@ namespace WzComparerR2.Headless.Agent
                 JobDirectory = jobDirectory,
                 DataDir = dataDir,
                 OutputDir = outputDir,
+                SessionCache = sessionCache,
                 StepResults = new Dictionary<string, AgentStepResult>(StringComparer.OrdinalIgnoreCase)
             };
             IReadOnlyList<AgentJobStep> steps = job.Steps != null
@@ -117,8 +120,25 @@ namespace WzComparerR2.Headless.Agent
                 }
             }
 
+            result.CacheStats = sessionCache.GetStats();
             WriteManifest(result);
             return result;
+        }
+
+        public AgentSessionCacheStatsDto GetCacheStats()
+        {
+            return sessionCache.GetStats();
+        }
+
+        public AgentSessionCacheStatsDto ClearCache()
+        {
+            sessionCache.Clear();
+            return sessionCache.GetStats();
+        }
+
+        public void Dispose()
+        {
+            sessionCache.Dispose();
         }
 
         private static AgentStepResult RunStep(AgentJobStep step, int index, HashSet<string> seenIds, AgentRunContext context)
@@ -565,6 +585,7 @@ namespace WzComparerR2.Headless.Agent
             public string JobDirectory { get; set; }
             public string DataDir { get; set; }
             public string OutputDir { get; set; }
+            public AgentSessionCache SessionCache { get; set; }
             public Dictionary<string, AgentStepResult> StepResults { get; set; }
         }
     }

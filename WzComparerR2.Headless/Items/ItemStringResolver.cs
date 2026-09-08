@@ -15,7 +15,20 @@ namespace WzComparerR2.Headless
                 throw new UsageException("item icon --name requires --string-wz <file-or-dir>, --data-dir <dir>, or an input path that can infer a sibling String folder.");
             }
 
-            var exactMatches = FindMatches(stringInput, args, match =>
+            using (var context = WzLoadContext.Load(stringInput, WzLoadOptions.FromArgs(args)))
+            {
+                return ResolveByName(context, name);
+            }
+        }
+
+        internal static ItemStringMatch ResolveByName(WzLoadContext context, string name)
+        {
+            if (context == null)
+            {
+                throw new ArgumentNullException(nameof(context));
+            }
+
+            var exactMatches = FindMatches(context, match =>
                 string.Equals(match.Name, name, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(ItemIconPaths.CanonicalizeItemName(match.Name), ItemIconPaths.CanonicalizeItemName(name), StringComparison.OrdinalIgnoreCase));
             if (exactMatches.Count == 1)
@@ -27,7 +40,7 @@ namespace WzComparerR2.Headless
                 throw new UsageException("item icon --name matched multiple item ids: " + string.Join(", ", exactMatches.Select(item => item.Id + " " + item.Path)));
             }
 
-            var containsMatches = FindMatches(stringInput, args, match =>
+            var containsMatches = FindMatches(context, match =>
                 match.Name != null && match.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0);
             string hint = containsMatches.Count == 0
                 ? string.Empty
@@ -37,54 +50,64 @@ namespace WzComparerR2.Headless
 
         public static ItemStringMatch TryResolveById(string stringInput, string id, ParsedArgs args)
         {
-            var matches = FindMatches(stringInput, args, match =>
+            using (var context = WzLoadContext.Load(stringInput, WzLoadOptions.FromArgs(args)))
+            {
+                return TryResolveById(context, id);
+            }
+        }
+
+        internal static ItemStringMatch TryResolveById(WzLoadContext context, string id)
+        {
+            if (context == null)
+            {
+                throw new ArgumentNullException(nameof(context));
+            }
+
+            var matches = FindMatches(context, match =>
                 string.Equals(match.Id, id, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(match.Id, ItemIconPaths.PadItemId(id), StringComparison.OrdinalIgnoreCase));
             return matches.FirstOrDefault();
         }
 
-        private static List<ItemStringMatch> FindMatches(string stringInput, ParsedArgs args, Func<ItemStringMatch, bool> predicate)
+        private static List<ItemStringMatch> FindMatches(WzLoadContext context, Func<ItemStringMatch, bool> predicate)
         {
-            using (var context = WzLoadContext.Load(stringInput, WzLoadOptions.FromArgs(args)))
+            var matches = new List<ItemStringMatch>();
+            foreach (Wz_Node node in Traverse(context.Root))
             {
-                var matches = new List<ItemStringMatch>();
-                foreach (Wz_Node node in Traverse(context.Root))
+                if (!string.Equals(node.Text, "name", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!string.Equals(node.Text, "name", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    string value = NodeDto.FormatValue(node.Value);
-                    if (string.IsNullOrEmpty(value))
-                    {
-                        continue;
-                    }
-
-                    var itemNode = node.ParentNode;
-                    var imageNode = itemNode == null ? null : itemNode.ParentNode;
-                    if (imageNode == null || string.IsNullOrEmpty(imageNode.Text) || !imageNode.Text.EndsWith(".img", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    var match = new ItemStringMatch
-                    {
-                        Id = itemNode.Text,
-                        Name = value,
-                        Category = ItemIconPaths.NormalizeCategory(Path.GetFileNameWithoutExtension(imageNode.Text)),
-                        Path = itemNode.FullPath,
-                        InputPath = context.InputPath
-                    };
-
-                    if (predicate(match))
-                    {
-                        matches.Add(match);
-                    }
+                    continue;
                 }
 
-                return matches;
+                string value = NodeDto.FormatValue(node.Value);
+                if (string.IsNullOrEmpty(value))
+                {
+                    continue;
+                }
+
+                var itemNode = node.ParentNode;
+                var imageNode = itemNode == null ? null : itemNode.ParentNode;
+                if (imageNode == null || string.IsNullOrEmpty(imageNode.Text) || !imageNode.Text.EndsWith(".img", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var match = new ItemStringMatch
+                {
+                    Id = itemNode.Text,
+                    Name = value,
+                    Category = ItemIconPaths.NormalizeCategory(Path.GetFileNameWithoutExtension(imageNode.Text)),
+                    Path = itemNode.FullPath,
+                    InputPath = context.InputPath
+                };
+
+                if (predicate(match))
+                {
+                    matches.Add(match);
+                }
             }
+
+            return matches;
         }
 
         private static IEnumerable<Wz_Node> Traverse(Wz_Node root)

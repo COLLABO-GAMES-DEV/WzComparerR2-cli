@@ -28,6 +28,8 @@ namespace WzComparerR2.AgentHost
                     return RunJob(parsed);
                 case "serve":
                     return RunServe(parsed);
+                case "mcp":
+                    return RunMcp(parsed);
                 case "version":
                 case "--version":
                     Console.WriteLine("wcr2-agent " + AgentVersion);
@@ -48,12 +50,15 @@ namespace WzComparerR2.AgentHost
                 return ExitSuccess;
             }
 
-            var runner = new AgentJobRunner();
-            AgentRunResult result = runner.Run(new AgentRunRequest
+            AgentRunResult result;
+            using (var runner = new AgentJobRunner())
             {
-                JobPath = args.GetValue("job"),
-                OutputDirectoryOverride = args.GetValue("out")
-            });
+                result = runner.Run(new AgentRunRequest
+                {
+                    JobPath = args.GetValue("job"),
+                    OutputDirectoryOverride = args.GetValue("out")
+                });
+            }
 
             if (args.HasFlag("json"))
             {
@@ -90,25 +95,43 @@ namespace WzComparerR2.AgentHost
                 return ExitUsage;
             }
 
-            var runner = new AgentJobRunner();
-            string line;
-            while ((line = Console.In.ReadLine()) != null)
+            using (var runner = new AgentJobRunner())
             {
-                if (string.IsNullOrWhiteSpace(line))
+                string line;
+                while ((line = Console.In.ReadLine()) != null)
                 {
-                    continue;
-                }
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
 
-                AgentServeResponse response = HandleServeRequest(runner, line);
-                Console.WriteLine(JsonSerializer.Serialize(response, ServeJsonOptions));
-                Console.Out.Flush();
-                if (string.Equals(response.Message, "shutdown", StringComparison.OrdinalIgnoreCase))
-                {
-                    break;
+                    AgentServeResponse response = HandleServeRequest(runner, line);
+                    Console.WriteLine(JsonSerializer.Serialize(response, ServeJsonOptions));
+                    Console.Out.Flush();
+                    if (string.Equals(response.Message, "shutdown", StringComparison.OrdinalIgnoreCase))
+                    {
+                        break;
+                    }
                 }
             }
 
             return ExitSuccess;
+        }
+
+        private static int RunMcp(SimpleArgs args)
+        {
+            if (args.HasFlag("help"))
+            {
+                PrintMcpHelp();
+                return ExitSuccess;
+            }
+            if (!args.HasFlag("stdio"))
+            {
+                Console.Error.WriteLine("wcr2-agent mcp currently requires --stdio.");
+                return ExitUsage;
+            }
+
+            return new McpServer(AgentVersion).RunStdio();
         }
 
         private static AgentServeResponse HandleServeRequest(AgentJobRunner runner, string line)
@@ -166,6 +189,30 @@ namespace WzComparerR2.AgentHost
                 };
             }
 
+            if (string.Equals(method, "cache.stats", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(method, "stats", StringComparison.OrdinalIgnoreCase))
+            {
+                return new AgentServeResponse
+                {
+                    Id = requestId,
+                    Status = "ok",
+                    Message = "cache-stats",
+                    CacheStats = runner.GetCacheStats()
+                };
+            }
+
+            if (string.Equals(method, "cache.clear", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(method, "clear-cache", StringComparison.OrdinalIgnoreCase))
+            {
+                return new AgentServeResponse
+                {
+                    Id = requestId,
+                    Status = "ok",
+                    Message = "cache-cleared",
+                    CacheStats = runner.ClearCache()
+                };
+            }
+
             if (string.Equals(method, "run", StringComparison.OrdinalIgnoreCase))
             {
                 AgentRunResult result = runner.Run(new AgentRunRequest
@@ -208,9 +255,11 @@ namespace WzComparerR2.AgentHost
             Console.WriteLine("Usage:");
             Console.WriteLine("  wcr2-agent run --job <job.json> [--out <dir>] [--json]");
             Console.WriteLine("  wcr2-agent serve --stdio");
+            Console.WriteLine("  wcr2-agent mcp --stdio");
             Console.WriteLine("  wcr2-agent version");
             Console.WriteLine();
             Console.WriteLine("Supported steps: noop, image.search, image.export-related, skill.export, skill.export-batch, skill.export-xlsx, item.icon, item.export, map.export.");
+            Console.WriteLine("MCP tools: wcr2.run_job, wcr2.skill_export, wcr2.skill_export_batch, wcr2.skill_export_xlsx, wcr2.item_icon, wcr2.item_export, wcr2.map_export, wcr2.image_search, wcr2.cache_stats, wcr2.cache_clear.");
         }
 
         private static void PrintRunHelp()
@@ -225,7 +274,16 @@ namespace WzComparerR2.AgentHost
             Console.WriteLine("Usage: wcr2-agent serve --stdio");
             Console.WriteLine();
             Console.WriteLine("Protocol: newline-delimited JSON request/response over stdin/stdout.");
-            Console.WriteLine("Methods: ping, run, shutdown.");
+            Console.WriteLine("Methods: ping, run, cache.stats, cache.clear, shutdown.");
+        }
+
+        private static void PrintMcpHelp()
+        {
+            Console.WriteLine("Usage: wcr2-agent mcp --stdio");
+            Console.WriteLine();
+            Console.WriteLine("Protocol: MCP JSON-RPC over stdin/stdout.");
+            Console.WriteLine("Methods: server/discover, initialize, ping, tools/list, tools/call.");
+            Console.WriteLine("Tools: wcr2.run_job, wcr2.skill_export, wcr2.skill_export_batch, wcr2.skill_export_xlsx, wcr2.item_icon, wcr2.item_export, wcr2.map_export, wcr2.image_search, wcr2.cache_stats, wcr2.cache_clear.");
         }
 
         private static string FirstNonEmpty(params string[] values)
@@ -268,6 +326,7 @@ namespace WzComparerR2.AgentHost
         public string Status { get; set; }
         public string Error { get; set; }
         public string Message { get; set; }
+        public AgentSessionCacheStatsDto CacheStats { get; set; }
         public AgentRunResult Result { get; set; }
     }
 

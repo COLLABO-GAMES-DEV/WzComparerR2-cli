@@ -110,7 +110,7 @@ wcr2-agent run --job .test/jobs/image-search.json --json
 
 ### 2. Agent Serve
 
-반복 검색/추출이 많을 때 쓸 수 있는 장기 실행 인터페이스다. 현재 구현은 request/response protocol과 lifecycle 중심이며, request 간 WZ repository cache 공유는 아직 남은 작업이다.
+반복 검색/추출이 많을 때 쓸 수 있는 장기 실행 인터페이스다. 현재 구현은 request/response protocol과 lifecycle을 제공하며, 같은 serve process 안에서 스킬 export WZ repository/session, item/map domain repository, WZ context를 request 간 재사용한다.
 
 ```bash
 wcr2-agent serve --stdio
@@ -126,7 +126,7 @@ wcr2-agent serve --stdio
 
 `run`은 inline `job` object도 받을 수 있다. 응답은 한 줄 compact JSON이고, request의 `id`/`requestId`는 response `id`로 보존된다.
 
-향후 `serve`는 WZ context, source registry, index cache를 프로세스 안에서 재사용하도록 확장할 수 있다. 지금은 큰 batch 작업의 경우 `skill.export-batch`/`skill.export-xlsx` 내부 cache를 우선 사용한다.
+`serve`는 `cache.stats`와 `cache.clear` method를 제공한다. 현재 캐시 범위는 `skill.export`, `skill.export-batch`, `skill.export-xlsx`의 스킬 입력/옵션별 WZ repository/session, `item.icon`/`item.export`의 String/Canvas WZ context, `item.export`/`map.export`의 domain repository이다. binary index cache와 전체 media command source registry는 이후 확장 대상이다.
 
 ## 내부 계층
 
@@ -386,21 +386,67 @@ xlsx 배치 예시:
 
 - [x] `wcr2-agent serve --stdio` 추가
 - [x] line-delimited JSON request/response 프로토콜 정의
-- [ ] session-level source registry/cache 재사용
+- [x] skill export session-level WZ repository/cache 재사용
+- [x] item/map domain repository 및 WZ context cache 재사용
+- [ ] media/search/general source registry cache 재사용
 - [x] graceful shutdown 지원
 - [x] request id 기반 응답 보장
 
-`serve --stdio`는 stdin/stdout에서 newline-delimited JSON을 사용한다. 지원 method는 `ping`, `run`, `shutdown`이며, request의 `id` 또는 `requestId`는 response `id`로 그대로 반환한다. `run`은 기존 `AgentJobRunner`를 호출하고 `jobPath` 또는 inline `job` object를 받을 수 있다. 응답은 한 줄 compact JSON으로 출력한다.
+`serve --stdio`는 stdin/stdout에서 newline-delimited JSON을 사용한다. 지원 method는 `ping`, `run`, `cache.stats`, `cache.clear`, `shutdown`이며, request의 `id` 또는 `requestId`는 response `id`로 그대로 반환한다. `run`은 기존 `AgentJobRunner`를 호출하고 `jobPath` 또는 inline `job` object를 받을 수 있다. 응답은 한 줄 compact JSON으로 출력한다.
 
 예시:
 
 ```json
 { "id": "p1", "method": "ping" }
 { "id": "r1", "method": "run", "jobPath": "job.json", "outputDir": ".test/agent-runs/job1" }
+{ "id": "c1", "method": "cache.stats" }
+{ "id": "c2", "method": "cache.clear" }
 { "id": "s1", "method": "shutdown" }
 ```
 
-현재 `serve`는 프로세스 유지와 request/response protocol을 제공하지만, WZ repository/source registry를 request 사이에서 재사용하는 장기 session cache는 아직 구현하지 않았다. 큰 batch는 우선 `skill.export-batch`/`skill.export-xlsx` 내부 cache를 사용한다.
+같은 serve process 안에서 `skill.export`, `skill.export-batch`, `skill.export-xlsx`는 동일한 스킬 입력/옵션 조합일 때 WZ repository/session을 재사용한다. `item.icon`, `item.export`, `map.export`는 domain repository와 WZ context cache를 재사용한다. `run` result의 `cacheStats`, step의 `cacheStatus`, `cache.stats` response로 hit/miss와 현재 세션 수를 확인한다. 캐시 크기는 현재 skill session 4개, domain repository 8개, WZ context 16개이며, 초과 시 least-recently-used 항목을 dispose한다.
+
+### Phase 7. MCP wrapper
+
+`wcr2-agent mcp --stdio`는 MCP client가 AgentHost를 직접 tool server처럼 호출할 수 있게 하는 stdio JSON-RPC wrapper다. 별도 MCP SDK/package 의존성을 추가하지 않고, `AgentJobRunner`를 같은 process 안에서 유지해 `serve --stdio`와 동일한 캐시 재사용 효과를 얻는다.
+
+지원 request:
+
+```text
+server/discover
+initialize
+ping
+tools/list
+tools/call
+resources/list
+resources/templates/list
+prompts/list
+```
+
+노출 tool:
+
+```text
+wcr2.run_job
+wcr2.skill_export
+wcr2.skill_export_batch
+wcr2.skill_export_xlsx
+wcr2.item_icon
+wcr2.item_export
+wcr2.map_export
+wcr2.image_search
+wcr2.cache_stats
+wcr2.cache_clear
+```
+
+완료 기준:
+
+- [x] `wcr2-agent mcp --stdio` command 추가
+- [x] `server/discover`, legacy `initialize`, `tools/list`, `tools/call` 처리
+- [x] `wcr2.run_job`으로 inline job 실행
+- [x] 스킬/아이템/맵/이미지 검색 대표 agent step을 MCP tool로 노출
+- [x] `cache.stats`/`cache.clear`를 MCP tool로 노출
+- [x] `WzComparerR2.Cli.Tests`: MCP stdio discover/tools/run smoke 추가
+- [x] `docs/agent-quickstart.md`, `docs/cli.md`에 연결 예시 추가
 
 ## Upstream 통합 전략
 
@@ -462,7 +508,7 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Release/net8.0/wcr2-
 
 - 완전한 binary cache 포맷
 - full Data global image index builder
-- stdio server session cache
+- media/search/general stdio server source registry cache
 - Web/UI 인터페이스
 - WzLib 내부 구조 변경
 

@@ -24,7 +24,7 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Debug/net8.0/wcr2-ag
 
 ## Agent Runtime
 
-`wcr2-agent`는 단발 CLI 옵션 조합보다, 에이전트가 JSON job을 실행하고 manifest를 남기는 용도에 맞춘 인터페이스입니다. 처음 작업하는 에이전트는 먼저 [`docs/agent-quickstart.md`](agent-quickstart.md)를 읽고, 세부 명령은 이 문서를 reference로 사용합니다. 현재는 job 파싱, 빈 job, `noop`, `image.search`, `image.export-related`, `skill.export`, `skill.export-batch`, `skill.export-xlsx`, `item.icon`, `item.export`, `map.export`, `serve --stdio`를 지원합니다.
+`wcr2-agent`는 단발 CLI 옵션 조합보다, 에이전트가 JSON job을 실행하고 manifest를 남기는 용도에 맞춘 인터페이스입니다. 처음 작업하는 에이전트는 먼저 [`docs/agent-quickstart.md`](agent-quickstart.md)를 읽고, 세부 명령은 이 문서를 reference로 사용합니다. 현재는 job 파싱, 빈 job, `noop`, `image.search`, `image.export-related`, `skill.export`, `skill.export-batch`, `skill.export-xlsx`, `item.icon`, `item.export`, `map.export`, `serve --stdio`, MCP stdio wrapper를 지원합니다.
 
 ```bash
 wcr2-agent run --job job.json --json
@@ -122,13 +122,58 @@ wcr2-agent run --job job.json --json
 
 `item.icon` step은 `itemId`/`id` 또는 `name`으로 아이템 icon PNG를 추출합니다. `item.export` step은 `item-info.json`과 icon 결과를 한 폴더에 같이 저장합니다. `map.export` step은 실제 렌더 PNG가 아니라 map metadata export이며 `map-info.json`과 `map-metadata.json`에 portals/life/objects/reactors 정보를 저장합니다. agent step의 `id`는 step identifier이므로 item/map id는 `itemId`/`mapId`를 우선 사용합니다.
 
-`wcr2-agent serve --stdio`는 newline-delimited JSON request/response 프로토콜입니다. 한 줄에 하나의 JSON request를 보내면 한 줄 compact JSON response가 stdout으로 돌아옵니다. 지원 method는 `ping`, `run`, `shutdown`입니다. `run`은 `jobPath` 또는 inline `job` object를 받으며, `id`/`requestId`는 response `id`로 그대로 반환됩니다. 현재 serve process는 protocol/lifecycle만 제공하고, request 사이의 WZ repository cache는 아직 공유하지 않습니다.
+`wcr2-agent serve --stdio`는 newline-delimited JSON request/response 프로토콜입니다. 한 줄에 하나의 JSON request를 보내면 한 줄 compact JSON response가 stdout으로 돌아옵니다. 지원 method는 `ping`, `run`, `cache.stats`, `cache.clear`, `shutdown`입니다. `run`은 `jobPath` 또는 inline `job` object를 받으며, `id`/`requestId`는 response `id`로 그대로 반환됩니다. 같은 serve process 안에서는 `skill.export`, `skill.export-batch`, `skill.export-xlsx`가 동일한 스킬 입력/옵션 조합일 때 WZ repository/session을 재사용하고, `item.icon`, `item.export`, `map.export`는 domain repository 및 WZ context cache를 재사용합니다. 각 run result에는 `cacheStats`, cache를 쓰는 step에는 `cacheStatus`가 포함됩니다.
 
 ```json
 { "id": "p1", "method": "ping" }
 { "id": "r1", "method": "run", "jobPath": "job.json", "outputDir": ".test/agent-runs/job1" }
+{ "id": "c1", "method": "cache.stats" }
+{ "id": "c2", "method": "cache.clear" }
 { "id": "s1", "method": "shutdown" }
 ```
+
+`wcr2-agent mcp --stdio`는 MCP client가 붙을 수 있는 stdio JSON-RPC wrapper입니다. 내부 실행은 같은 `AgentJobRunner`를 사용하므로 MCP process가 살아 있는 동안 `serve --stdio`와 같은 session cache를 재사용합니다.
+
+```bash
+DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Release/net8.0/wcr2-agent.dll mcp --stdio
+```
+
+MCP client 설정 예시:
+
+```json
+{
+  "mcpServers": {
+    "wcr2": {
+      "command": "dotnet",
+      "args": [
+        "/Users/ijun17/Desktop/MSW/WzComparerR2/WzComparerR2.AgentHost/bin/Release/net8.0/wcr2-agent.dll",
+        "mcp",
+        "--stdio"
+      ],
+      "env": {
+        "DOTNET_ROLL_FORWARD": "Major"
+      }
+    }
+  }
+}
+```
+
+노출 tool:
+
+```text
+wcr2.run_job
+wcr2.skill_export
+wcr2.skill_export_batch
+wcr2.skill_export_xlsx
+wcr2.item_icon
+wcr2.item_export
+wcr2.map_export
+wcr2.image_search
+wcr2.cache_stats
+wcr2.cache_clear
+```
+
+`wcr2.run_job`은 `jobPath` 또는 inline `job` object를 받습니다. 나머지 tool은 해당 agent step 한 개짜리 job을 내부에서 만들어 실행합니다.
 
 ## 처음 사용하는 순서
 
@@ -224,6 +269,7 @@ wcr2 patch dry-run <patch-file> --target <dir> [--json]
 wcr2 patch apply <patch-file> --target <dir> --out <dir> [--log <file>] [--json]
 wcr2-agent run --job <job.json> [--out <dir>] [--json]
 wcr2-agent serve --stdio
+wcr2-agent mcp --stdio
 ```
 
 공통 옵션:

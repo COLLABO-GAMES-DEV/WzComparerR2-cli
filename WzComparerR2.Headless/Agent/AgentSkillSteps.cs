@@ -52,7 +52,9 @@ namespace WzComparerR2.Headless.Agent
             {
                 ParsedArgs parsedArgs = ParsedArgs.Parse(args.Skip(1));
                 SkillSpriteExportOptions options = SkillSpriteExportOptions.FromArgs(parsedArgs, true);
-                SkillSpriteExportResultDto result = SkillSpriteExporter.Export(skillInput, skillId.Trim(), outputDir, parsedArgs, options);
+                AgentSkillSessionLease session = context.SessionCache.GetSkillSession(skillInput, parsedArgs, options);
+                SkillSpriteExportResultDto result = session.Session.Export(skillId.Trim(), outputDir);
+                result.Diagnostics.Add("Agent session cache: " + session.CacheStatus + " (" + session.SessionId + ")");
                 WriteJsonSidecar(resultJsonPath, result);
 
                 return new AgentStepResult
@@ -64,6 +66,7 @@ namespace WzComparerR2.Headless.Agent
                     ManifestPath = resultJsonPath,
                     ResultPath = resultJsonPath,
                     Command = args,
+                    CacheStatus = session.CacheStatus,
                     ExitCode = 0,
                     Count = result.ExportedFileCount
                 };
@@ -132,7 +135,9 @@ namespace WzComparerR2.Headless.Agent
                 ParsedArgs parsedArgs = ParsedArgs.Parse(args.Skip(1));
                 SkillSpriteExportOptions exportOptions = SkillSpriteExportOptions.FromArgs(parsedArgs, true);
                 SkillBatchExportOptions batchOptions = SkillBatchExportOptions.FromArgs(parsedArgs);
-                SkillBatchExportManifestDto result = SkillBatchExporter.Export(skillInput, parsedArgs, exportOptions, batchOptions);
+                AgentSkillSessionLease session = context.SessionCache.GetSkillSession(skillInput, parsedArgs, exportOptions);
+                SkillBatchExportManifestDto result = SkillBatchExporter.ExportWithSession(skillInput, session.Session, parsedArgs, batchOptions);
+                result.Diagnostics.Add("Agent session cache: " + session.CacheStatus + " (" + session.SessionId + ")");
                 WriteJsonSidecar(resultJsonPath, result);
 
                 bool success = result.Failed == 0;
@@ -147,6 +152,7 @@ namespace WzComparerR2.Headless.Agent
                     ManifestPath = result.ManifestPath,
                     ResultPath = resultJsonPath,
                     Command = args,
+                    CacheStatus = session.CacheStatus,
                     ExitCode = success ? 0 : 1,
                     Count = result.ExportedFileCount
                 };
@@ -245,9 +251,11 @@ namespace WzComparerR2.Headless.Agent
                 ParsedArgs parsedArgs = ParsedArgs.Parse(args.Skip(1));
                 SkillSpriteExportOptions exportOptions = SkillSpriteExportOptions.FromArgs(parsedArgs, true);
                 SkillBatchExportOptions batchOptions = SkillBatchExportOptions.FromArgs(parsedArgs);
-                SkillBatchExportManifestDto result = SkillBatchExporter.Export(skillInput, parsedArgs, exportOptions, batchOptions);
+                AgentSkillSessionLease session = context.SessionCache.GetSkillSession(skillInput, parsedArgs, exportOptions);
+                SkillBatchExportManifestDto result = SkillBatchExporter.ExportWithSession(skillInput, session.Session, parsedArgs, batchOptions);
                 result.Diagnostics.Add("XLSX recipe: " + recipePath);
                 result.Diagnostics.Add("XLSX names file: " + namesFilePath);
+                result.Diagnostics.Add("Agent session cache: " + session.CacheStatus + " (" + session.SessionId + ")");
                 WriteJsonSidecar(resultJsonPath, result);
 
                 bool success = result.Failed == 0;
@@ -262,6 +270,7 @@ namespace WzComparerR2.Headless.Agent
                     ManifestPath = result.ManifestPath,
                     ResultPath = resultJsonPath,
                     Command = args,
+                    CacheStatus = session.CacheStatus,
                     ExitCode = success ? 0 : 1,
                     Count = result.ExportedFileCount
                 };

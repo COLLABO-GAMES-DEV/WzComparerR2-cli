@@ -9,29 +9,54 @@ namespace WzComparerR2.Headless
     {
         public static ItemIconExportResultDto Export(ParsedArgs args, string outputDirectory)
         {
+            return Export(args, outputDirectory, (input, options) => new ItemIconLoadLease(WzLoadContext.Load(input, options), true));
+        }
+
+        internal static ItemIconExportResultDto Export(
+            ParsedArgs args,
+            string outputDirectory,
+            Func<string, WzLoadOptions, ItemIconLoadLease> loadContext)
+        {
+            if (loadContext == null)
+            {
+                throw new ArgumentNullException(nameof(loadContext));
+            }
+
             string id = args.GetValue("id");
             string name = args.GetValue("name");
             string dataDir = args.GetValue("data-dir");
             string itemInput = ItemIconPaths.ResolveItemInput(args, dataDir);
             string stringInput = ItemIconPaths.ResolveStringInput(args, dataDir, itemInput);
             string category = ItemIconPaths.NormalizeCategory(args.GetValue("category"));
+            WzLoadOptions loadOptions = WzLoadOptions.FromArgs(args);
 
             ItemStringMatch selectedString = null;
             var diagnostics = new List<string>();
 
             if (!string.IsNullOrEmpty(name))
             {
-                selectedString = ItemStringResolver.ResolveByName(stringInput, name, args);
-                id = selectedString.Id;
-                category = category ?? selectedString.Category;
+                if (string.IsNullOrEmpty(stringInput))
+                {
+                    throw new UsageException("item icon --name requires --string-wz <file-or-dir>, --data-dir <dir>, or an input path that can infer a sibling String folder.");
+                }
+
+                using (ItemIconLoadLease stringContext = loadContext(stringInput, loadOptions))
+                {
+                    selectedString = ItemStringResolver.ResolveByName(stringContext.Context, name);
+                    id = selectedString.Id;
+                    category = category ?? selectedString.Category;
+                }
             }
 
             if (selectedString == null && !string.IsNullOrEmpty(stringInput))
             {
-                selectedString = ItemStringResolver.TryResolveById(stringInput, id, args);
-                if (selectedString != null)
+                using (ItemIconLoadLease stringContext = loadContext(stringInput, loadOptions))
                 {
-                    category = category ?? selectedString.Category;
+                    selectedString = ItemStringResolver.TryResolveById(stringContext.Context, id);
+                    if (selectedString != null)
+                    {
+                        category = category ?? selectedString.Category;
+                    }
                 }
             }
 
@@ -53,13 +78,13 @@ namespace WzComparerR2.Headless
             List<string> paddedIdCandidates = ItemIconPaths.BuildPaddedIdCandidates(id);
             List<string> iconPaths = ItemIconPaths.BuildIconPathCandidates(paddedIdCandidates);
 
-            using (var context = WzLoadContext.Load(canvasInput, WzLoadOptions.FromArgs(args)))
+            using (ItemIconLoadLease context = loadContext(canvasInput, loadOptions))
             {
                 Wz_Node iconNode = null;
                 string matchedPath = null;
                 foreach (string iconPath in iconPaths)
                 {
-                    iconNode = NodePath.Resolve(context.Root, iconPath, true);
+                    iconNode = NodePath.Resolve(context.Context.Root, iconPath, true);
                     if (iconNode != null && iconNode.Value is Wz_Png)
                     {
                         matchedPath = iconPath;
@@ -91,13 +116,40 @@ namespace WzComparerR2.Headless
                     Category = category,
                     StringPath = selectedString == null ? null : selectedString.Path,
                     StringInputPath = selectedString == null ? null : selectedString.InputPath,
-                    CanvasInputPath = context.InputPath,
+                    CanvasInputPath = context.Context.InputPath,
                     IconPath = iconNode.FullPath,
                     RequestedIconPath = matchedPath,
                     OutputDirectory = Path.GetFullPath(outputDirectory),
                     Files = files,
                     Diagnostics = diagnostics
                 };
+            }
+        }
+
+        internal sealed class ItemIconLoadLease : IDisposable
+        {
+            private readonly bool ownsContext;
+
+            public ItemIconLoadLease(WzLoadContext context, bool ownsContext)
+            {
+                if (context == null)
+                {
+                    throw new ArgumentNullException(nameof(context));
+                }
+
+                this.Context = context;
+                this.ownsContext = ownsContext;
+            }
+
+            public WzLoadContext Context { get; private set; }
+
+            public void Dispose()
+            {
+                if (ownsContext && Context != null)
+                {
+                    Context.Dispose();
+                }
+                Context = null;
             }
         }
     }

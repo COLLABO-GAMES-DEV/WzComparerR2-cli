@@ -358,6 +358,23 @@ namespace WzComparerR2.Headless
             SkillSpriteExportOptions exportOptions,
             SkillBatchExportOptions batchOptions)
         {
+            using (var session = SkillSpriteExporter.OpenSession(skillInput, args, exportOptions))
+            {
+                return ExportWithSession(skillInput, session, args, batchOptions);
+            }
+        }
+
+        internal static SkillBatchExportManifestDto ExportWithSession(
+            string skillInput,
+            SkillSpriteExporter.SkillSpriteExportSession session,
+            ParsedArgs args,
+            SkillBatchExportOptions batchOptions)
+        {
+            if (session == null)
+            {
+                throw new ArgumentNullException(nameof(session));
+            }
+
             Directory.CreateDirectory(batchOptions.OutputRoot);
 
             var manifest = new SkillBatchExportManifestDto
@@ -369,19 +386,16 @@ namespace WzComparerR2.Headless
                 Diagnostics = new List<string>()
             };
 
-            using (var session = SkillSpriteExporter.OpenSession(skillInput, args, exportOptions))
+            using (var nameResolver = SkillNameResolver.OpenSession(session.Repository))
             {
-                using (var nameResolver = SkillNameResolver.OpenSession(session.Repository))
+                foreach (var request in batchOptions.Requests)
                 {
-                    foreach (var request in batchOptions.Requests)
+                    var item = ExportOne(session, nameResolver, request, args, batchOptions);
+                    manifest.Items.Add(item);
+                    if (item.Status == "failed" && !batchOptions.ContinueOnError)
                     {
-                        var item = ExportOne(session, nameResolver, request, args, batchOptions);
-                        manifest.Items.Add(item);
-                        if (item.Status == "failed" && !batchOptions.ContinueOnError)
-                        {
-                            manifest.Diagnostics.Add("Stopped after first failed skill; use --continue-on-error to process remaining entries.");
-                            break;
-                        }
+                        manifest.Diagnostics.Add("Stopped after first failed skill; use --continue-on-error to process remaining entries.");
+                        break;
                     }
                 }
             }

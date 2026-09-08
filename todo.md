@@ -1007,9 +1007,27 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `docs/agent-quickstart.md`
   - 새 에이전트 read order, 수정 경계, 대표 job, 검증 명령, 현재 한계 정리
   - `AGENTS.md`, `docs/cli.md`, `docs/agent-runtime-plan.md`의 stale agent 설명 보정
-- [ ] Agent Runtime Phase 6B: serve process 안에서 request 간 WZ source registry/session cache 재사용
-  - 현재는 protocol/lifecycle만 구현됨
-  - 큰 batch는 우선 `skill.export-batch`/`skill.export-xlsx` 내부 cache 사용
+- [x] Agent Runtime Phase 6B: serve process 안에서 skill export WZ session cache 재사용
+  - `skill.export`, `skill.export-batch`, `skill.export-xlsx`가 동일한 스킬 입력/옵션 조합이면 같은 serve process 안에서 WZ repository/session 재사용
+  - `run` result의 `cacheStats`, skill step의 `cacheStatus`, serve `cache.stats`/`cache.clear`로 상태 확인 및 초기화
+  - cache size는 현재 skill session 4개, 초과 시 least-recently-used 세션 dispose
+  - `.test/wcr2-agent-serve-cache-20260908`: `3141000` `keydown` 두 번 연속 추출에서 첫 요청 `cache-miss`, 두 번째 요청 `cache-hit`, 각 20개 파일 확인
+- [x] Agent Runtime Phase 6C: item/map domain repository 및 WZ context cache 확장
+  - `item.icon`, `item.export`, `map.export`가 같은 serve process 안에서 domain repository 및 WZ context cache 재사용
+  - `cacheStats`에 skill session, domain repository, WZ context count/hit/miss/eviction 기록
+  - step `cacheStatus`는 단일 cache hit/miss 또는 복수 cache가 섞인 `cache-mixed`로 기록
+  - `.test/wcr2-agent-serve-cache-20260908/serve-output-phase6c.jsonl`: `item.icon`/`item.export`/`map.export` 반복 요청에서 WZ context 및 domain repository hit 확인
+- [x] Agent Runtime Phase 7: MCP stdio wrapper 추가
+  - `wcr2-agent mcp --stdio` command 추가
+  - MCP JSON-RPC request 처리: `server/discover`, legacy `initialize`, `ping`, `tools/list`, `tools/call`
+  - `wcr2.run_job`은 `jobPath` 또는 inline `job` object로 기존 agent job 실행
+  - 대표 tool 노출: `wcr2.skill_export`, `wcr2.skill_export_batch`, `wcr2.skill_export_xlsx`, `wcr2.item_icon`, `wcr2.item_export`, `wcr2.map_export`, `wcr2.image_search`
+  - cache tool 노출: `wcr2.cache_stats`, `wcr2.cache_clear`
+  - `WzComparerR2.Cli.Tests`: MCP discover/tools/run stdio smoke 추가
+  - `docs/agent-quickstart.md`, `docs/cli.md`, `docs/agent-runtime-plan.md`에 연결 예시와 tool 목록 반영
+- [ ] Agent Runtime Phase 6D: media/search/general source registry cache 확장
+  - 현재 cache 범위는 agent skill/item/map step으로 제한
+  - standalone media command와 image search의 live WZ source registry는 추후 필요성에 따라 확장
 - [x] 실제 WZ/MS 샘플 기반 `info/tree/list/search/compare/dump/extract` 검증
   - `.test/wcr2-core-command-smoke-20260907/`
   - `info Data/String --json`: `String.wz`, `String_000.wz` 인식

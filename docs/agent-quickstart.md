@@ -277,6 +277,8 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Release/net8.0/wcr2-
 ```json
 { "id": "p1", "method": "ping" }
 { "id": "r1", "method": "run", "jobPath": ".test/job.json", "outputDir": ".test/job/out" }
+{ "id": "c1", "method": "cache.stats" }
+{ "id": "c2", "method": "cache.clear" }
 { "id": "s1", "method": "shutdown" }
 ```
 
@@ -286,9 +288,54 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Release/net8.0/wcr2-
 { "id": "r2", "method": "run", "job": { "steps": [{ "id": "probe", "type": "noop" }] } }
 ```
 
-현재 `serve`는 request/response protocol과 lifecycle만 제공한다. request 사이에서 WZ repository를 공유하는 session cache는 아직 구현되지 않았다.
+같은 serve process 안에서는 `skill.export`, `skill.export-batch`, `skill.export-xlsx`가 동일한 스킬 입력/옵션 조합일 때 WZ repository/session을 재사용한다. `item.icon`, `item.export`, `map.export`도 domain repository 및 WZ context cache를 재사용한다. `run` 응답의 `result.cacheStats`로 현재 세션 수와 hit/miss를 확인하고, cache를 쓰는 step의 `cacheStatus`로 해당 step이 `cache-hit`, `cache-miss`, `cache-mixed`인지 확인한다. 캐시를 비우려면 `cache.clear`를 보낸다.
 
-## 10. 흔한 판단 기준
+## 10. MCP wrapper
+
+MCP를 지원하는 에이전트 호스트에서는 `wcr2-agent mcp --stdio`를 연결한다. 이 wrapper는 MCP JSON-RPC 요청을 받아 내부 `AgentJobRunner`로 전달한다.
+
+```bash
+DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Release/net8.0/wcr2-agent.dll mcp --stdio
+```
+
+MCP client 설정 예시:
+
+```json
+{
+  "mcpServers": {
+    "wcr2": {
+      "command": "dotnet",
+      "args": [
+        "/Users/ijun17/Desktop/MSW/WzComparerR2/WzComparerR2.AgentHost/bin/Release/net8.0/wcr2-agent.dll",
+        "mcp",
+        "--stdio"
+      ],
+      "env": {
+        "DOTNET_ROLL_FORWARD": "Major"
+      }
+    }
+  }
+}
+```
+
+대표 tool:
+
+```text
+wcr2.run_job
+wcr2.skill_export
+wcr2.skill_export_batch
+wcr2.skill_export_xlsx
+wcr2.item_icon
+wcr2.item_export
+wcr2.map_export
+wcr2.image_search
+wcr2.cache_stats
+wcr2.cache_clear
+```
+
+경로를 모르면 `wcr2.image_search`로 후보를 찾고, 스킬/아이템/맵이 확정되어 있으면 전용 tool을 쓴다. 복합 workflow나 엑셀 기반 대량 추출은 `wcr2.run_job`에 기존 agent job을 inline 또는 `jobPath`로 넘긴다.
+
+## 11. 흔한 판단 기준
 
 - `skill-info.json` 이름이 깨져 보이면 먼저 viewer/editor encoding을 확인한다. JSON 자체는 UTF-8로 저장된다.
 - `resources.json`의 `Origin`/`Delay`가 null이면 exporter 누락인지 원본 metadata 부재인지 `Data/Packs/Skill_*.ms`와 `_Canvas` resolved path를 같이 확인한다.
@@ -297,7 +344,7 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.AgentHost/bin/Release/net8.0/wcr2-
 - macOS에서 일부 GIF/APNG/System.Drawing 경로는 제한될 수 있다. PNG 추출은 cross-platform writer가 지원하는 texture format이면 동작한다.
 - patch/lua/network 실제 검증은 fixture 또는 외부 runtime/target 서버가 필요하다. dry-run 통과를 실제 handshake 통과로 보고하지 않는다.
 
-## 11. 커밋 전 체크
+## 12. 커밋 전 체크
 
 ```bash
 git diff --check

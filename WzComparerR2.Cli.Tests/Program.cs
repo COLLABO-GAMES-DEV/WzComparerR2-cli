@@ -53,7 +53,8 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("agent run noop step succeeds", () => AgentRunNoopStepSucceeds(agentRunner)),
                 TestCase.Create("agent run unknown step emits json failure", () => AgentRunUnknownStepEmitsJsonFailure(agentRunner)),
                 TestCase.Create("agent run invalid json emits json failure", () => AgentRunInvalidJsonEmitsJsonFailure(agentRunner)),
-                TestCase.Create("agent serve stdio handles ping run shutdown", () => AgentServeStdioHandlesPingRunShutdown(agentRunner)),
+                TestCase.Create("agent serve stdio handles ping run cache shutdown", () => AgentServeStdioHandlesPingRunCacheShutdown(agentRunner)),
+                TestCase.Create("agent mcp stdio handles discover tools and run", () => AgentMcpStdioHandlesDiscoverToolsAndRun(agentRunner)),
                 TestCase.Create("agent image search validates required data", () => AgentImageSearchValidatesRequiredData(agentRunner)),
                 TestCase.Create("agent image related export validates from step", () => AgentImageRelatedExportValidatesFromStep(agentRunner)),
                 TestCase.Create("agent skill export validates required fields", () => AgentSkillExportValidatesRequiredFields(agentRunner)),
@@ -681,6 +682,8 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(result.Stdout, "item.icon");
             AssertContains(result.Stdout, "map.export");
             AssertContains(result.Stdout, "wcr2-agent serve --stdio");
+            AssertContains(result.Stdout, "wcr2-agent mcp --stdio");
+            AssertContains(result.Stdout, "wcr2.run_job");
         }
 
         private static void AgentRunEmptyJobEmitsManifest(CliRunner runner)
@@ -762,19 +765,21 @@ namespace WzComparerR2.Cli.Tests
             }
         }
 
-        private static void AgentServeStdioHandlesPingRunShutdown(CliRunner runner)
+        private static void AgentServeStdioHandlesPingRunCacheShutdown(CliRunner runner)
         {
             string input = string.Join(Environment.NewLine, new[]
             {
                 "{ \"id\": \"p1\", \"method\": \"ping\" }",
+                "{ \"id\": \"c1\", \"method\": \"cache.stats\" }",
                 "{ \"id\": \"r1\", \"method\": \"run\", \"job\": { \"steps\": [{ \"id\": \"probe\", \"type\": \"noop\" }] } }",
+                "{ \"id\": \"c2\", \"method\": \"cache.clear\" }",
                 "{ \"id\": \"s1\", \"method\": \"shutdown\" }"
             }) + Environment.NewLine;
 
             CommandResult result = runner.RunWithInput(input, "serve", "--stdio");
             AssertExitCode(result, 0);
             string[] lines = result.Stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-            AssertEqual(3, lines.Length, "serve response count");
+            AssertEqual(5, lines.Length, "serve response count");
 
             using (JsonDocument ping = JsonDocument.Parse(lines[0]))
             {
@@ -782,19 +787,110 @@ namespace WzComparerR2.Cli.Tests
                 AssertEqual("ok", ping.RootElement.GetProperty("status").GetString(), "ping status");
                 AssertEqual("pong", ping.RootElement.GetProperty("message").GetString(), "ping message");
             }
-            using (JsonDocument run = JsonDocument.Parse(lines[1]))
+            using (JsonDocument stats = JsonDocument.Parse(lines[1]))
+            {
+                AssertEqual("c1", stats.RootElement.GetProperty("id").GetString(), "cache stats response id");
+                AssertEqual("ok", stats.RootElement.GetProperty("status").GetString(), "cache stats status");
+                JsonElement cacheStats = stats.RootElement.GetProperty("cacheStats");
+                AssertEqual(0, cacheStats.GetProperty("skillSessionCount").GetInt32(), "initial skill session count");
+                AssertEqual(4, cacheStats.GetProperty("maxSkillSessions").GetInt32(), "max skill sessions");
+                AssertEqual(0, cacheStats.GetProperty("domainRepositoryCount").GetInt32(), "initial domain repository count");
+                AssertEqual(8, cacheStats.GetProperty("maxDomainRepositories").GetInt32(), "max domain repositories");
+                AssertEqual(0, cacheStats.GetProperty("wzContextCount").GetInt32(), "initial wz context count");
+                AssertEqual(16, cacheStats.GetProperty("maxWzContexts").GetInt32(), "max wz contexts");
+            }
+            using (JsonDocument run = JsonDocument.Parse(lines[2]))
             {
                 AssertEqual("r1", run.RootElement.GetProperty("id").GetString(), "run response id");
                 AssertEqual("ok", run.RootElement.GetProperty("status").GetString(), "run status");
                 JsonElement runResult = run.RootElement.GetProperty("result");
                 AssertEqual("ok", runResult.GetProperty("status").GetString(), "inline run status");
                 AssertEqual("noop", runResult.GetProperty("steps")[0].GetProperty("type").GetString(), "inline run step type");
+                AssertEqual(0, runResult.GetProperty("cacheStats").GetProperty("skillSessionCount").GetInt32(), "noop run skill session count");
             }
-            using (JsonDocument shutdown = JsonDocument.Parse(lines[2]))
+            using (JsonDocument clear = JsonDocument.Parse(lines[3]))
+            {
+                AssertEqual("c2", clear.RootElement.GetProperty("id").GetString(), "cache clear response id");
+                AssertEqual("ok", clear.RootElement.GetProperty("status").GetString(), "cache clear status");
+                AssertEqual("cache-cleared", clear.RootElement.GetProperty("message").GetString(), "cache clear message");
+                JsonElement clearedStats = clear.RootElement.GetProperty("cacheStats");
+                AssertEqual(0, clearedStats.GetProperty("skillSessionCount").GetInt32(), "cleared skill session count");
+                AssertEqual(0, clearedStats.GetProperty("domainRepositoryCount").GetInt32(), "cleared domain repository count");
+                AssertEqual(0, clearedStats.GetProperty("wzContextCount").GetInt32(), "cleared wz context count");
+            }
+            using (JsonDocument shutdown = JsonDocument.Parse(lines[4]))
             {
                 AssertEqual("s1", shutdown.RootElement.GetProperty("id").GetString(), "shutdown response id");
                 AssertEqual("ok", shutdown.RootElement.GetProperty("status").GetString(), "shutdown status");
                 AssertEqual("shutdown", shutdown.RootElement.GetProperty("message").GetString(), "shutdown message");
+            }
+        }
+
+        private static void AgentMcpStdioHandlesDiscoverToolsAndRun(CliRunner runner)
+        {
+            string input = string.Join(Environment.NewLine, new[]
+            {
+                "{ \"jsonrpc\": \"2.0\", \"id\": \"d1\", \"method\": \"server/discover\", \"params\": { \"_meta\": { \"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientInfo\": { \"name\": \"wcr2-tests\", \"version\": \"1.0\" }, \"io.modelcontextprotocol/clientCapabilities\": {} } } }",
+                "{ \"jsonrpc\": \"2.0\", \"id\": \"i1\", \"method\": \"initialize\", \"params\": { \"protocolVersion\": \"2025-11-25\", \"capabilities\": {}, \"clientInfo\": { \"name\": \"wcr2-tests\", \"version\": \"1.0\" } } }",
+                "{ \"jsonrpc\": \"2.0\", \"method\": \"notifications/initialized\" }",
+                "{ \"jsonrpc\": \"2.0\", \"id\": \"l1\", \"method\": \"tools/list\", \"params\": {} }",
+                "{ \"jsonrpc\": \"2.0\", \"id\": \"r1\", \"method\": \"tools/call\", \"params\": { \"name\": \"wcr2.run_job\", \"arguments\": { \"job\": { \"steps\": [{ \"id\": \"probe\", \"type\": \"noop\" }] } } } }",
+                "{ \"jsonrpc\": \"2.0\", \"id\": \"c1\", \"method\": \"tools/call\", \"params\": { \"name\": \"wcr2.cache_stats\", \"arguments\": {} } }"
+            }) + Environment.NewLine;
+
+            CommandResult result = runner.RunWithInput(input, "mcp", "--stdio");
+            AssertExitCode(result, 0);
+            string[] lines = result.Stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            AssertEqual(5, lines.Length, "mcp response count");
+
+            using (JsonDocument discover = JsonDocument.Parse(lines[0]))
+            {
+                JsonElement root = discover.RootElement;
+                AssertEqual("2.0", root.GetProperty("jsonrpc").GetString(), "discover jsonrpc");
+                AssertEqual("d1", root.GetProperty("id").GetString(), "discover response id");
+                JsonElement discoverResult = root.GetProperty("result");
+                AssertEqual("complete", discoverResult.GetProperty("resultType").GetString(), "discover result type");
+                AssertJsonArrayContainsString(discoverResult.GetProperty("supportedVersions"), "2026-07-28", "discover versions");
+                AssertEqual(true, discoverResult.GetProperty("capabilities").TryGetProperty("tools", out _), "discover tools capability");
+            }
+            using (JsonDocument initialize = JsonDocument.Parse(lines[1]))
+            {
+                JsonElement root = initialize.RootElement;
+                AssertEqual("i1", root.GetProperty("id").GetString(), "initialize response id");
+                JsonElement initializeResult = root.GetProperty("result");
+                AssertEqual("2025-11-25", initializeResult.GetProperty("protocolVersion").GetString(), "initialize protocol version");
+                AssertEqual(true, initializeResult.GetProperty("capabilities").TryGetProperty("tools", out _), "initialize tools capability");
+                AssertEqual("wcr2-agent", initializeResult.GetProperty("serverInfo").GetProperty("name").GetString(), "initialize server name");
+            }
+            using (JsonDocument tools = JsonDocument.Parse(lines[2]))
+            {
+                JsonElement root = tools.RootElement;
+                AssertEqual("l1", root.GetProperty("id").GetString(), "tools/list response id");
+                JsonElement toolsResult = root.GetProperty("result");
+                AssertEqual("complete", toolsResult.GetProperty("resultType").GetString(), "tools/list result type");
+                AssertToolListContains(toolsResult.GetProperty("tools"), "wcr2.run_job");
+                AssertToolListContains(toolsResult.GetProperty("tools"), "wcr2.skill_export");
+                AssertToolListContains(toolsResult.GetProperty("tools"), "wcr2.cache_stats");
+            }
+            using (JsonDocument call = JsonDocument.Parse(lines[3]))
+            {
+                JsonElement root = call.RootElement;
+                AssertEqual("r1", root.GetProperty("id").GetString(), "tools/call response id");
+                JsonElement callResult = root.GetProperty("result");
+                AssertEqual("complete", callResult.GetProperty("resultType").GetString(), "tools/call result type");
+                AssertEqual(false, callResult.GetProperty("isError").GetBoolean(), "tools/call isError");
+                JsonElement structured = callResult.GetProperty("structuredContent");
+                AssertEqual("ok", structured.GetProperty("status").GetString(), "run job status");
+                AssertEqual("noop", structured.GetProperty("steps")[0].GetProperty("type").GetString(), "run job step type");
+                AssertEqual("text", callResult.GetProperty("content")[0].GetProperty("type").GetString(), "tools/call content type");
+            }
+            using (JsonDocument stats = JsonDocument.Parse(lines[4]))
+            {
+                JsonElement root = stats.RootElement;
+                AssertEqual("c1", root.GetProperty("id").GetString(), "cache stats response id");
+                JsonElement statsResult = root.GetProperty("result");
+                AssertEqual(false, statsResult.GetProperty("isError").GetBoolean(), "cache stats isError");
+                AssertEqual(0, statsResult.GetProperty("structuredContent").GetProperty("skillSessionCount").GetInt32(), "mcp skill session count");
             }
         }
 
@@ -1058,6 +1154,34 @@ public sealed class HelloProvider : ICliCommandProvider
             {
                 throw new Exception("Expected text to contain '" + expected + "'." + Environment.NewLine + value);
             }
+        }
+
+        private static void AssertJsonArrayContainsString(JsonElement array, string expected, string name)
+        {
+            foreach (JsonElement item in array.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String
+                    && string.Equals(item.GetString(), expected, StringComparison.Ordinal))
+                {
+                    return;
+                }
+            }
+
+            throw new Exception("Expected " + name + " to contain '" + expected + "'.");
+        }
+
+        private static void AssertToolListContains(JsonElement tools, string expectedName)
+        {
+            foreach (JsonElement tool in tools.EnumerateArray())
+            {
+                if (tool.TryGetProperty("name", out JsonElement name)
+                    && string.Equals(name.GetString(), expectedName, StringComparison.Ordinal))
+                {
+                    return;
+                }
+            }
+
+            throw new Exception("Expected MCP tool list to contain '" + expectedName + "'.");
         }
 
         private static void AssertEqual<T>(T expected, T actual, string name)

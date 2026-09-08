@@ -51,7 +51,12 @@ namespace WzComparerR2.Headless.Agent
             try
             {
                 ParsedArgs parsedArgs = ParsedArgs.Parse(args.Skip(1));
-                ItemIconExportResultDto result = ItemIconExporter.Export(parsedArgs, outputDir);
+                var cacheStatuses = new List<string>();
+                ItemIconExportResultDto result = ItemIconExporter.Export(
+                    parsedArgs,
+                    outputDir,
+                    (input, options) => LoadCachedItemIconContext(context, input, options, cacheStatuses));
+                AddCacheDiagnostic(result.Diagnostics, cacheStatuses);
                 WriteJsonSidecar(resultJsonPath, result);
 
                 return new AgentStepResult
@@ -63,6 +68,7 @@ namespace WzComparerR2.Headless.Agent
                     ManifestPath = resultJsonPath,
                     ResultPath = resultJsonPath,
                     Command = args,
+                    CacheStatus = CombineCacheStatus(cacheStatuses),
                     ExitCode = 0,
                     Count = result.Files == null ? 0 : result.Files.Count
                 };
@@ -129,6 +135,7 @@ namespace WzComparerR2.Headless.Agent
             try
             {
                 ParsedArgs parsedArgs = ParsedArgs.Parse(args.Skip(1));
+                var cacheStatuses = new List<string>();
                 string itemInput = ItemIconPaths.ResolveItemInput(parsedArgs, parsedArgs.GetValue("data-dir"));
                 if (string.IsNullOrWhiteSpace(itemInput))
                 {
@@ -138,12 +145,17 @@ namespace WzComparerR2.Headless.Agent
                 if (string.IsNullOrWhiteSpace(id))
                 {
                     string stringInput = ItemIconPaths.ResolveStringInput(parsedArgs, parsedArgs.GetValue("data-dir"), itemInput);
-                    ItemStringMatch match = ItemStringResolver.ResolveByName(stringInput, name, parsedArgs);
-                    id = match.Id;
+                    using (ItemIconExporter.ItemIconLoadLease stringContext = LoadCachedItemIconContext(context, stringInput, WzLoadOptions.FromArgs(parsedArgs), cacheStatuses))
+                    {
+                        ItemStringMatch match = ItemStringResolver.ResolveByName(stringContext.Context, name);
+                        id = match.Id;
+                    }
                 }
                 id = id.Trim();
 
-                DomainInfoDto info = ExportDomainInfo("item", itemInput, id, parsedArgs, Path.Combine(outputDir, "item-info.json"));
+                AgentDomainRepositoryLease repository = context.SessionCache.GetDomainRepository("item", itemInput, parsedArgs);
+                cacheStatuses.Add(FormatCacheStatus(repository.CacheStatus, repository.SessionId));
+                DomainInfoDto info = ExportDomainInfo("item", id, repository.Repository, Path.Combine(outputDir, "item-info.json"));
 
                 ItemIconExportResultDto icon = null;
                 string iconResultPath = null;
@@ -153,8 +165,12 @@ namespace WzComparerR2.Headless.Agent
                 {
                     try
                     {
-                        icon = ItemIconExporter.Export(parsedArgs, Path.Combine(outputDir, "icon"));
+                        icon = ItemIconExporter.Export(
+                            parsedArgs,
+                            Path.Combine(outputDir, "icon"),
+                            (input, options) => LoadCachedItemIconContext(context, input, options, cacheStatuses));
                         iconResultPath = Path.Combine(outputDir, "item-icon-result.json");
+                        AddCacheDiagnostic(icon.Diagnostics, cacheStatuses);
                         WriteJsonSidecar(iconResultPath, icon);
                     }
                     catch (Exception ex) when (allowMissingIcon && IsDomainExportException(ex))
@@ -168,6 +184,7 @@ namespace WzComparerR2.Headless.Agent
                             Diagnostics = new List<string> { "Icon export skipped after failure: " + GetInnermostMessage(ex) },
                             Files = new List<ExtractedFileDto>()
                         };
+                        AddCacheDiagnostic(icon.Diagnostics, cacheStatuses);
                         WriteJsonSidecar(iconResultPath, icon);
                     }
                 }
@@ -185,6 +202,7 @@ namespace WzComparerR2.Headless.Agent
                     ExportedFileCount = icon == null || icon.Files == null ? 0 : icon.Files.Count,
                     Diagnostics = icon == null || icon.Diagnostics == null ? new List<string>() : icon.Diagnostics
                 };
+                AddCacheDiagnostic(result.Diagnostics, cacheStatuses);
                 WriteJsonSidecar(resultJsonPath, result);
 
                 return new AgentStepResult
@@ -196,6 +214,7 @@ namespace WzComparerR2.Headless.Agent
                     ManifestPath = resultJsonPath,
                     ResultPath = resultJsonPath,
                     Command = args,
+                    CacheStatus = CombineCacheStatus(cacheStatuses),
                     ExitCode = 0,
                     Count = result.ExportedFileCount
                 };
@@ -247,23 +266,23 @@ namespace WzComparerR2.Headless.Agent
             try
             {
                 ParsedArgs parsedArgs = ParsedArgs.Parse(args.Skip(1));
+                var cacheStatuses = new List<string>();
                 string mapInput = ResolveDomainInputFromParsed(parsedArgs, "map");
                 if (string.IsNullOrWhiteSpace(mapInput))
                 {
                     throw new UsageException("map.export requires input, mapWz, or dataDir.");
                 }
 
-                DomainInfoDto info = ExportDomainInfo("map", mapInput, id.Trim(), parsedArgs, Path.Combine(outputDir, "map-info.json"));
+                AgentDomainRepositoryLease repository = context.SessionCache.GetDomainRepository("map", mapInput, parsedArgs);
+                cacheStatuses.Add(FormatCacheStatus(repository.CacheStatus, repository.SessionId));
+                DomainInfoDto info = ExportDomainInfo("map", id.Trim(), repository.Repository, Path.Combine(outputDir, "map-info.json"));
                 MapMetadataDto metadata;
-                using (var repository = CliWzRepository.ForDomain("map", mapInput, parsedArgs))
+                CliWzDataResult dataResult = repository.Repository.FindDataNode("map", id.Trim());
+                if (dataResult == null)
                 {
-                    CliWzDataResult dataResult = repository.FindDataNode("map", id.Trim());
-                    if (dataResult == null)
-                    {
-                        throw new UsageException("map id not found: " + id.Trim());
-                    }
-                    metadata = MapMetadataDto.FromMapNode(id.Trim(), dataResult.Node, "objects");
+                    throw new UsageException("map id not found: " + id.Trim());
                 }
+                metadata = MapMetadataDto.FromMapNode(id.Trim(), dataResult.Node, "objects");
 
                 string metadataPath = Path.Combine(outputDir, "map-metadata.json");
                 WriteJsonSidecar(metadataPath, metadata);
@@ -294,6 +313,7 @@ namespace WzComparerR2.Headless.Agent
                     ManifestPath = resultJsonPath,
                     ResultPath = resultJsonPath,
                     Command = args,
+                    CacheStatus = CombineCacheStatus(cacheStatuses),
                     ExitCode = 0,
                     Count = result.PortalCount + result.LifeCount + result.ReactorCount + result.ObjectCount
                 };
@@ -318,31 +338,82 @@ namespace WzComparerR2.Headless.Agent
         {
             using (var repository = CliWzRepository.ForDomain(kind, input, args))
             {
-                CliWzDataResult dataResult = repository.FindDataNode(kind, id);
-                if (dataResult == null)
-                {
-                    throw new UsageException(kind + " id not found: " + id);
-                }
-
-                DomainStringInfo stringInfo = null;
-                CliWzStringResult stringResult = repository.FindStringInfo(kind, id);
-                if (stringResult != null)
-                {
-                    stringInfo = stringResult.StringInfo;
-                }
-
-                DomainInfoDto dto = DomainInfoDto.FromNode(
-                    kind,
-                    id,
-                    dataResult.Node,
-                    stringInfo,
-                    dataResult.InputPath,
-                    stringResult == null ? null : stringResult.InputPath,
-                    repository.DataInputPaths,
-                    repository.StringInputPaths);
-                WriteJsonSidecar(outputPath, dto);
-                return dto;
+                return ExportDomainInfo(kind, id, repository, outputPath);
             }
+        }
+
+        private static DomainInfoDto ExportDomainInfo(string kind, string id, CliWzRepository repository, string outputPath)
+        {
+            if (repository == null)
+            {
+                throw new ArgumentNullException(nameof(repository));
+            }
+
+            CliWzDataResult dataResult = repository.FindDataNode(kind, id);
+            if (dataResult == null)
+            {
+                throw new UsageException(kind + " id not found: " + id);
+            }
+
+            DomainStringInfo stringInfo = null;
+            CliWzStringResult stringResult = repository.FindStringInfo(kind, id);
+            if (stringResult != null)
+            {
+                stringInfo = stringResult.StringInfo;
+            }
+
+            DomainInfoDto dto = DomainInfoDto.FromNode(
+                kind,
+                id,
+                dataResult.Node,
+                stringInfo,
+                dataResult.InputPath,
+                stringResult == null ? null : stringResult.InputPath,
+                repository.DataInputPaths,
+                repository.StringInputPaths);
+            WriteJsonSidecar(outputPath, dto);
+            return dto;
+        }
+
+        private static ItemIconExporter.ItemIconLoadLease LoadCachedItemIconContext(
+            AgentRunContext context,
+            string input,
+            WzLoadOptions options,
+            List<string> cacheStatuses)
+        {
+            AgentWzContextLease lease = context.SessionCache.GetWzContext(input, options);
+            cacheStatuses.Add(FormatCacheStatus(lease.CacheStatus, lease.SessionId));
+            return new ItemIconExporter.ItemIconLoadLease(lease.Context, false);
+        }
+
+        private static void AddCacheDiagnostic(List<string> diagnostics, List<string> cacheStatuses)
+        {
+            if (diagnostics == null || cacheStatuses == null || cacheStatuses.Count == 0)
+            {
+                return;
+            }
+            diagnostics.Add("Agent cache: " + string.Join(", ", cacheStatuses));
+        }
+
+        private static string FormatCacheStatus(string status, string id)
+        {
+            return string.IsNullOrWhiteSpace(id) ? status : status + "(" + id + ")";
+        }
+
+        private static string CombineCacheStatus(List<string> cacheStatuses)
+        {
+            if (cacheStatuses == null || cacheStatuses.Count == 0)
+            {
+                return null;
+            }
+
+            bool hasHit = cacheStatuses.Any(item => item.StartsWith("cache-hit", StringComparison.OrdinalIgnoreCase));
+            bool hasMiss = cacheStatuses.Any(item => item.StartsWith("cache-miss", StringComparison.OrdinalIgnoreCase));
+            if (hasHit && hasMiss)
+            {
+                return "cache-mixed";
+            }
+            return hasHit ? "cache-hit" : "cache-miss";
         }
 
         private static string ResolveStepOutputDirectory(AgentJobStep step, AgentRunContext context)
