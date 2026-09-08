@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -28,6 +29,7 @@ namespace WzComparerR2.Cli.Tests
                 TestCase.Create("skill sprite validates required inputs", () => SkillSpriteValidatesRequiredInputs(runner)),
                 TestCase.Create("optional real data skill sprite merges pack metadata", () => OptionalRealDataSkillSpriteMergesPackMetadata(runner)),
                 TestCase.Create("optional real data map detail prefers populated shard", () => OptionalRealDataMapDetailPrefersPopulatedShard(runner)),
+                TestCase.Create("optional real data media golden exports stable files", () => OptionalRealDataMediaGoldenExportsStableFiles(runner)),
                 TestCase.Create("media help lists dedicated commands", () => MediaHelpListsDedicatedCommands(runner)),
                 TestCase.Create("media commands validate required inputs", () => MediaCommandsValidateRequiredInputs(runner)),
                 TestCase.Create("unknown command returns usage error", () => UnknownCommandReturnsUsageError(runner)),
@@ -319,6 +321,128 @@ namespace WzComparerR2.Cli.Tests
                 if (childrenCount <= 1)
                 {
                     throw new Exception("Expected map info to prefer populated shard data." + Environment.NewLine + info.Stdout);
+                }
+            }
+        }
+
+        private static void OptionalRealDataMediaGoldenExportsStableFiles(CliRunner runner)
+        {
+            string dataDir = Environment.GetEnvironmentVariable("WCR2_TEST_DATA_DIR");
+            if (string.IsNullOrWhiteSpace(dataDir) || !Directory.Exists(dataDir))
+            {
+                return;
+            }
+
+            string mobCanvas = FirstExistingDirectory(
+                Path.Combine(dataDir, "Mob", "_Canvas"),
+                Path.Combine(dataDir, "Mob_Canvas"));
+            string soundDirectory = Path.Combine(dataDir, "Sound");
+            string skillPack = Path.Combine(dataDir, "Packs", "Skill_00006.ms");
+            using (var temp = TempDirectory.Create())
+            {
+                bool ranAny = false;
+
+                if (!string.IsNullOrWhiteSpace(mobCanvas))
+                {
+                    ranAny = true;
+                    CommandResult image = runner.Run(
+                        "image",
+                        "export",
+                        mobCanvas,
+                        "--path",
+                        "0100100.img/stand/0",
+                        "--out",
+                        Path.Combine(temp.Path, "image"),
+                        "--manifest",
+                        Path.Combine(temp.Path, "image", "manifest.json"),
+                        "--json");
+                    AssertExitCode(image, 0);
+                    using (JsonDocument doc = JsonDocument.Parse(image.Stdout))
+                    {
+                        JsonElement file = GetSingleFile(doc.RootElement, "image golden file");
+                        AssertEqual("0100100.img\\stand\\0", file.GetProperty("SourcePath").GetString(), "image source path");
+                        AssertEqual("png", file.GetProperty("Type").GetString(), "image type");
+                        AssertEqual(37, file.GetProperty("Width").GetInt32(), "image width");
+                        AssertEqual(26, file.GetProperty("Height").GetInt32(), "image height");
+                        AssertEqual("ARGB4444", file.GetProperty("Format").GetString(), "image format");
+                        AssertEqual(767L, file.GetProperty("Bytes").GetInt64(), "image bytes");
+                        AssertEqual("10b1db09629e091490af75385a2f84005f50949250895e39acc669041e32545a", file.GetProperty("Sha256").GetString(), "image sha256");
+                        AssertExportedFileMatchesDto(file, "image golden");
+                    }
+                }
+
+                if (Directory.Exists(soundDirectory))
+                {
+                    ranAny = true;
+                    CommandResult sound = runner.Run(
+                        "sound",
+                        "export",
+                        soundDirectory,
+                        "--path",
+                        "AchievementEff.img/GradeUp",
+                        "--out",
+                        Path.Combine(temp.Path, "sound"),
+                        "--manifest",
+                        Path.Combine(temp.Path, "sound", "manifest.json"),
+                        "--json");
+                    AssertExitCode(sound, 0);
+                    using (JsonDocument doc = JsonDocument.Parse(sound.Stdout))
+                    {
+                        JsonElement file = GetSingleFile(doc.RootElement, "sound golden file");
+                        AssertEqual("AchievementEff.img\\GradeUp", file.GetProperty("SourcePath").GetString(), "sound source path");
+                        AssertEqual("mp3", file.GetProperty("Type").GetString(), "sound type");
+                        AssertEqual(38452L, file.GetProperty("Bytes").GetInt64(), "sound bytes");
+                        AssertEqual("45261e3c14083c3086a6c40533a8466ec46067a7142668d2b4c994d5eec1dc21", file.GetProperty("Sha256").GetString(), "sound sha256");
+                        AssertEqual(38452, file.GetProperty("DataLength").GetInt32(), "sound data length");
+                        AssertEqual(2403, file.GetProperty("Ms").GetInt32(), "sound ms");
+                        AssertEqual(2, file.GetProperty("Channels").GetInt32(), "sound channels");
+                        AssertEqual(44100, file.GetProperty("Frequency").GetInt32(), "sound frequency");
+                        AssertEqual("Mp3", file.GetProperty("SoundType").GetString(), "sound type metadata");
+                        AssertExportedFileMatchesDto(file, "sound golden");
+                    }
+                }
+
+                string ffmpeg = FindFfmpegForTests();
+                if (File.Exists(skillPack) && !string.IsNullOrWhiteSpace(ffmpeg))
+                {
+                    ranAny = true;
+                    CommandResult video = runner.Run(
+                        "video",
+                        "export",
+                        skillPack,
+                        "--path",
+                        "Skill/524.img/skill/5241503/screen2/video",
+                        "--format",
+                        "frames",
+                        "--max-frames",
+                        "1",
+                        "--ffmpeg",
+                        ffmpeg,
+                        "--out",
+                        Path.Combine(temp.Path, "video"),
+                        "--manifest",
+                        Path.Combine(temp.Path, "video", "manifest.json"),
+                        "--json");
+                    AssertExitCode(video, 0);
+                    using (JsonDocument doc = JsonDocument.Parse(video.Stdout))
+                    {
+                        JsonElement file = GetSingleFile(doc.RootElement, "video golden file");
+                        AssertEqual("524.img\\skill\\5241503\\screen2\\video", file.GetProperty("SourcePath").GetString(), "video source path");
+                        AssertEqual("png", file.GetProperty("Type").GetString(), "video frame type");
+                        AssertEqual(1368, file.GetProperty("Width").GetInt32(), "video width");
+                        AssertEqual(768, file.GetProperty("Height").GetInt32(), "video height");
+                        AssertEqual("VP90", file.GetProperty("Format").GetString(), "video format");
+                        AssertEqual(41, file.GetProperty("FrameCount").GetInt32(), "video frame count");
+                        AssertEqual("AlphaMap", file.GetProperty("VideoFlags").GetString(), "video flags");
+                        AssertEqual(875623L, file.GetProperty("Bytes").GetInt64(), "video frame bytes");
+                        AssertEqual("11f71e613986a0d7d285cb5b82076a1fd525544551612e279d537c8aab79fcc1", file.GetProperty("Sha256").GetString(), "video frame sha256");
+                        AssertExportedFileMatchesDto(file, "video golden");
+                    }
+                }
+
+                if (!ranAny)
+                {
+                    throw new Exception("WCR2_TEST_DATA_DIR was set but no known media golden roots were found: " + dataDir);
                 }
             }
         }
@@ -1191,6 +1315,78 @@ public sealed class HelloProvider : ICliCommandProvider
             }
 
             throw new Exception("Expected MCP tool list to contain '" + expectedName + "'.");
+        }
+
+        private static JsonElement GetSingleFile(JsonElement root, string name)
+        {
+            JsonElement files = root.GetProperty("Files");
+            AssertEqual(1, files.GetArrayLength(), name + " count");
+            return files[0];
+        }
+
+        private static void AssertExportedFileMatchesDto(JsonElement file, string name)
+        {
+            string outputPath = file.GetProperty("OutputPath").GetString();
+            AssertEqual(true, File.Exists(outputPath), name + " output exists");
+            long bytes = new FileInfo(outputPath).Length;
+            AssertEqual(file.GetProperty("Bytes").GetInt64(), bytes, name + " output bytes");
+            AssertEqual(file.GetProperty("Sha256").GetString(), ComputeSha256(outputPath), name + " output sha256");
+        }
+
+        private static string FirstExistingDirectory(params string[] paths)
+        {
+            foreach (string path in paths)
+            {
+                if (Directory.Exists(path))
+                {
+                    return path;
+                }
+            }
+
+            return null;
+        }
+
+        private static string FindFfmpegForTests()
+        {
+            string configured = Environment.GetEnvironmentVariable("WCR2_TEST_FFMPEG");
+            if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
+            {
+                return configured;
+            }
+
+            foreach (string candidate in new[] { "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg" })
+            {
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            string path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+            foreach (string directory in path.Split(Path.PathSeparator))
+            {
+                if (string.IsNullOrWhiteSpace(directory))
+                {
+                    continue;
+                }
+
+                string candidate = Path.Combine(directory, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        private static string ComputeSha256(string path)
+        {
+            using (var sha256 = SHA256.Create())
+            using (var stream = File.OpenRead(path))
+            {
+                return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+            }
         }
 
         private static void AssertEqual<T>(T expected, T actual, string name)

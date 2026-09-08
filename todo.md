@@ -236,8 +236,11 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
 - [x] split `Data` layout 경로 차이를 문서화한다.
   - Windows 예: `Data\Mob_Canvas`
   - macOS/CrossOver 예: `Data/Mob/_Canvas`
-- [ ] 실제 WZ 샘플 기반 media golden 검증을 추가한다.
-  - PNG dimensions/hash
+- [x] 실제 WZ 샘플 기반 media golden 검증을 추가한다.
+  - `WCR2_TEST_DATA_DIR`가 있는 환경에서만 실행되는 optional test로 추가한다.
+  - PNG golden: `Mob/_Canvas` 또는 `Mob_Canvas`의 `0100100.img/stand/0`, dimensions/hash/manifest DTO와 실제 파일 bytes/hash 검증.
+  - Sound golden: `Sound/AchievementEff.img/GradeUp`, MP3 bytes/hash/ms/channels/frequency 검증.
+  - Video golden: `Packs/Skill_00006.ms`의 `5241503 screen2/video`, ffmpeg가 있을 때 첫 frame PNG dimensions/hash/frame metadata 검증.
   - sound bytes/hash
   - recursive export manifest
 
