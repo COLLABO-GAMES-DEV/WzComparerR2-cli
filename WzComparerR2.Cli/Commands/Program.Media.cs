@@ -292,10 +292,10 @@ namespace WzComparerR2.Cli
                 }
                 else
                 {
-                    IReadOnlyList<ImageSearchScanRoot> roots = ImageSearchDataSources.FromDataDirectory(options.DataDirectory, options.Scope);
+                    IReadOnlyList<ImageSearchScanRoot> roots = ImageSearchDataSources.FromDataDirectory(options.DataDirectory, options.Scope, options.IncludeVideo);
                     if (roots.Count == 0)
                     {
-                        throw new UsageException("No canvas roots were found under --data-dir for scope: " + options.Scope);
+                        throw new UsageException("No image roots were found under --data-dir for scope: " + options.Scope);
                     }
 
                     result = ImageSimilaritySearcher.SearchInputs(roots, nodePath, options, CreateHeadlessWzLoadOptions(args));
@@ -319,6 +319,12 @@ namespace WzComparerR2.Cli
                     writer.WriteLine("Indexed: " + result.IndexedImageCount
                         + ", prefiltered: " + result.PrefilteredImageCount
                         + ", refined: " + result.RefinedImageCount + ".");
+                }
+                if (result.IndexedVideoFrameCount > 0 || result.ScannedVideoFrameCount > 0 || result.SkippedVideoFrameCount > 0)
+                {
+                    writer.WriteLine("Video frames: indexed " + result.IndexedVideoFrameCount
+                        + ", scanned " + result.ScannedVideoFrameCount
+                        + ", skipped " + result.SkippedVideoFrameCount + ".");
                 }
                 if (result.Roots != null && result.Roots.Count > 1)
                 {
@@ -353,6 +359,7 @@ namespace WzComparerR2.Cli
         private static ImageSearchOptions CreateImageSearchOptions(ParsedArgs args)
         {
             bool noCache = args.HasFlag("no-cache");
+            bool probe = args.HasFlag("probe");
             string cacheDirectory = args.GetValue("cache-dir");
             if (string.IsNullOrWhiteSpace(cacheDirectory) && !noCache)
             {
@@ -369,9 +376,14 @@ namespace WzComparerR2.Cli
                 CacheDirectory = cacheDirectory,
                 NoCache = noCache,
                 RebuildCache = args.HasFlag("rebuild-cache"),
-                TrustCache = args.HasFlag("trust-cache"),
-                NoRefine = args.HasFlag("no-refine"),
+                TrustCache = probe || args.HasFlag("trust-cache"),
+                NoRefine = probe || args.HasFlag("no-refine"),
                 NoSizePrefilter = args.HasFlag("no-size-prefilter"),
+                TrimBackground = args.HasFlag("trim-background"),
+                BackgroundTolerance = Math.Max(0, args.GetInt("background-tolerance", 24)),
+                IncludeVideo = args.HasFlag("include-video") || args.HasFlag("include-videos"),
+                FfmpegPath = args.GetValue("ffmpeg") ?? "ffmpeg",
+                MaxVideoFrames = Math.Max(0, args.GetInt("max-video-frames", 0)),
                 MinSizeRatio = ParseImageSearchScore(args.GetValue("min-size-ratio"), 0.25, "--min-size-ratio"),
                 MaxResults = Math.Max(1, args.GetInt("max-results", 20)),
                 RefineLimit = Math.Max(0, args.GetInt("refine-limit", 0)),

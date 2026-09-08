@@ -401,6 +401,15 @@ namespace WzComparerR2.AgentHost
                 { "branch", StringSchema("Skill branch list such as auto, icon,effect,hit, keydown, prepare.") },
                 { "category", StringSchema("Item category such as cash, consume, install, etc, or pet.") },
                 { "scope", StringSchema("Image search scope such as ui, item, skill, map, mob, or all.") },
+                { "probe", BoolSchema("For image search, run a faster first-pass query by trusting cache and skipping pixel refine.") },
+                { "trustCache", BoolSchema("For image search, skip source timestamp validation for faster cache reads.") },
+                { "noRefine", BoolSchema("For image search, return cache/index scores without reopening top candidates for pixel scoring.") },
+                { "refine", BoolSchema("For image search, enable or disable pixel-level refinement.") },
+                { "trimBackground", BoolSchema("For image search, trim a solid-ish border background from the query before scoring.") },
+                { "backgroundTolerance", NumberSchema("For image search, RGB distance threshold for trimBackground; default 24.") },
+                { "includeVideo", BoolSchema("For image search, include internal MCV/Wz_Video frames in the searched index. Query remains a PNG.") },
+                { "ffmpeg", StringSchema("For image/video operations, ffmpeg executable path; default ffmpeg.") },
+                { "maxVideoFrames", NumberSchema("For image search includeVideo, decode only first n frames per video; default 0 means all frames.") },
                 { "stepId", StringSchema("Optional step id to use inside the generated agent job.") },
                 { "baseDirectory", StringSchema("Base directory for relative paths.") }
             };
@@ -427,6 +436,24 @@ namespace WzComparerR2.AgentHost
             return new Dictionary<string, object>
             {
                 { "type", "string" },
+                { "description", description }
+            };
+        }
+
+        private static Dictionary<string, object> BoolSchema(string description)
+        {
+            return new Dictionary<string, object>
+            {
+                { "type", "boolean" },
+                { "description", description }
+            };
+        }
+
+        private static Dictionary<string, object> NumberSchema(string description)
+        {
+            return new Dictionary<string, object>
+            {
+                { "type", "number" },
                 { "description", description }
             };
         }

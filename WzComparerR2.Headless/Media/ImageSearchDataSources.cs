@@ -9,6 +9,7 @@ namespace WzComparerR2.Headless.Media
     {
         public string InputPath { get; set; }
         public string Scope { get; set; }
+        public bool IncludeVideo { get; set; }
     }
 
     public static class ImageSearchDataSources
@@ -31,6 +32,11 @@ namespace WzComparerR2.Headless.Media
 
         public static IReadOnlyList<ImageSearchScanRoot> FromDataDirectory(string dataDirectory, string scope)
         {
+            return FromDataDirectory(dataDirectory, scope, includeVideo: false);
+        }
+
+        public static IReadOnlyList<ImageSearchScanRoot> FromDataDirectory(string dataDirectory, string scope, bool includeVideo)
+        {
             if (string.IsNullOrWhiteSpace(dataDirectory))
             {
                 return Array.Empty<ImageSearchScanRoot>();
@@ -47,6 +53,10 @@ namespace WzComparerR2.Headless.Media
             foreach (string item in requestedScopes)
             {
                 AddScopeRoots(roots, fullDataDirectory, item);
+                if (includeVideo)
+                {
+                    AddScopeVideoRoots(roots, fullDataDirectory, item);
+                }
             }
 
             return roots
@@ -92,7 +102,8 @@ namespace WzComparerR2.Headless.Media
                     roots.Add(new ImageSearchScanRoot
                     {
                         InputPath = canvasDirectory,
-                        Scope = scope
+                        Scope = scope,
+                        IncludeVideo = false
                     });
                 }
             }
@@ -103,8 +114,41 @@ namespace WzComparerR2.Headless.Media
                 roots.Add(new ImageSearchScanRoot
                 {
                     InputPath = siblingCanvasDirectory,
-                    Scope = scope
+                    Scope = scope,
+                    IncludeVideo = false
                 });
+            }
+        }
+
+        private static void AddScopeVideoRoots(List<ImageSearchScanRoot> roots, string dataDirectory, string scope)
+        {
+            if (string.Equals(scope, "all", StringComparison.OrdinalIgnoreCase) || string.Equals(scope, "auto", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (string item in DefaultScopeOrder)
+                {
+                    AddScopeVideoRoots(roots, dataDirectory, item);
+                }
+                return;
+            }
+
+            if (!string.Equals(scope, "skill", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(scope, "video", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string packsDirectory = Path.Combine(dataDirectory, "Packs");
+            if (Directory.Exists(packsDirectory))
+            {
+                foreach (string file in Directory.EnumerateFiles(packsDirectory, "Skill*.ms", SearchOption.TopDirectoryOnly))
+                {
+                    roots.Add(new ImageSearchScanRoot
+                    {
+                        InputPath = file,
+                        Scope = "skill-video",
+                        IncludeVideo = true
+                    });
+                }
             }
         }
 

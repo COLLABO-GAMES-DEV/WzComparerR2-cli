@@ -328,6 +328,7 @@ namespace WzComparerR2.Headless.Agent
                 manifestPath = ResolvePath(context.JobDirectory, manifestPath);
             }
 
+            bool probe = GetBool(step, "probe", false);
             var options = new ImageSearchOptions
             {
                 DataDirectory = dataDir,
@@ -338,9 +339,14 @@ namespace WzComparerR2.Headless.Agent
                 CacheDirectory = ResolveOptionalPath(context.JobDirectory, GetString(step, "cacheDir")),
                 NoCache = GetBool(step, "noCache", false),
                 RebuildCache = GetBool(step, "rebuildCache", false),
-                TrustCache = GetBool(step, "trustCache", false),
-                NoRefine = !GetBool(step, "refine", true) || GetBool(step, "noRefine", false),
+                TrustCache = probe || GetBool(step, "trustCache", false),
+                NoRefine = probe || !GetBool(step, "refine", true) || GetBool(step, "noRefine", false),
                 NoSizePrefilter = GetBool(step, "noSizePrefilter", false),
+                TrimBackground = GetBool(step, "trimBackground", false),
+                BackgroundTolerance = Math.Max(0, GetInt(step, "backgroundTolerance", 24)),
+                IncludeVideo = GetBool(step, "includeVideo", false) || GetBool(step, "includeVideos", false),
+                FfmpegPath = GetString(step, "ffmpeg") ?? "ffmpeg",
+                MaxVideoFrames = Math.Max(0, GetInt(step, "maxVideoFrames", 0)),
                 MinSizeRatio = GetDouble(step, "minSizeRatio", 0.25),
                 MaxResults = Math.Max(1, GetInt(step, "maxResults", 20)),
                 RefineLimit = Math.Max(0, GetInt(step, "refineLimit", 0)),
@@ -373,13 +379,13 @@ namespace WzComparerR2.Headless.Agent
                 }
                 else
                 {
-                    IReadOnlyList<ImageSearchScanRoot> roots = ImageSearchDataSources.FromDataDirectory(dataDir, options.Scope);
+                    IReadOnlyList<ImageSearchScanRoot> roots = ImageSearchDataSources.FromDataDirectory(dataDir, options.Scope, options.IncludeVideo);
                     if (roots.Count == 0)
                     {
-                        return FailedStep(step.Id, step.Type, "no-roots", "No canvas roots were found under dataDir for scope: " + options.Scope);
+                        return FailedStep(step.Id, step.Type, "no-roots", "No image roots were found under dataDir for scope: " + options.Scope);
                     }
 
-                    result = ImageSimilaritySearcher.SearchInputs(roots, nodePath, options, loadOptions);
+                    result = ImageSimilaritySearcher.SearchInputs(roots, nodePath, options, loadOptions, context.SessionCache);
                 }
 
                 if (!string.IsNullOrWhiteSpace(options.ManifestPath))

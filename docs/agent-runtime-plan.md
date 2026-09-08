@@ -504,6 +504,26 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Release/net8.0/wcr2-
 - upstream rebase 시 충돌 범위가 새 headless/agent/cli 계층 안에 머문다.
 - WzLib/GUI 변경 없이 기능 확장이 가능하다.
 
+## Image Search 최적화 계획
+
+현재 완료:
+
+- [x] top-K 후보 유지 비용 절감: 후보 추가 때마다 전체 sort하지 않고, bounded replacement 후 필요한 경우에만 sort한다.
+- [x] `--probe`/agent `probe` 옵션 추가: 빠른 1차 후보 탐색용 shorthand이며 `--trust-cache --no-refine`과 같은 의미다.
+- [x] `probe/noRefine` 검색에서는 refine 후보 pool을 `maxResults`로 제한한다. pixel refine를 하지 않는 모드이므로 결과 top N은 유지하면서 후보 유지 비용만 줄인다.
+- [x] MCP/serve process 안에서 image search index를 메모리에 LRU로 유지한다. 디스크 cache는 그대로 두고, `cache.stats`/`wcr2.cache_stats`에서 `imageSearchIndex*` 통계를 확인한다.
+- [x] cache-hit scoring 상한 pruning 추가: 현재 top-K floor를 넘을 수 없는 fingerprint pair는 color/shape 계산을 생략한다. 기존 top result를 바꾸지 않는 보수적 최적화다.
+- [x] gzip JSON cache와 호환되는 `.bin.gz` sidecar 추가: 기존 `.json.gz`를 유지하면서 cache hit read/deserialize 비용을 줄인다. sidecar가 없으면 JSON을 읽고 자동 생성하며, 실패 시 JSON cache로 fallback한다.
+- [x] 인터넷 reference 이미지용 opt-in background trim 추가: `--trim-background`/agent `trimBackground`가 모서리 배경색을 제거한 query fingerprint를 사용한다. 원본 query 크기와 실제 검색 query 크기는 manifest에 함께 기록한다.
+- [x] 내부 MCV/Wz_Video frame 검색 추가: query는 PNG로 유지하고, `--include-video`/agent `includeVideo`를 켰을 때 `Data/Packs/Skill*.ms` video frame을 image index에 포함한다. 결과에는 `Type=video-frame`, `VideoPath`, `FrameIndex`, `FrameCount`, `FrameDelayMs`, `FrameStartMs`가 남는다.
+
+남은 후보:
+
+- [ ] cache hit scoring 전용 width/height/aspect/alpha bucket index 추가
+- [ ] pHash/dHash/edge hash 기반 coarse candidate prefilter 추가
+- [ ] 인터넷 reference 이미지용 scale refine 추가
+- [ ] gzip JSON cache를 완전한 binary 또는 SQLite primary index로 교체
+
 ## 보류 항목
 
 - 완전한 binary cache 포맷

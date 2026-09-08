@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
+using WzComparerR2.Headless;
 using WzComparerR2.Headless.Wz;
 using WzComparerR2.WzLib;
 
@@ -24,6 +25,11 @@ namespace WzComparerR2.Headless.Media
         public bool TrustCache { get; set; }
         public bool NoRefine { get; set; }
         public bool NoSizePrefilter { get; set; }
+        public bool TrimBackground { get; set; }
+        public int BackgroundTolerance { get; set; }
+        public bool IncludeVideo { get; set; }
+        public string FfmpegPath { get; set; }
+        public int MaxVideoFrames { get; set; }
         public double MinSizeRatio { get; set; }
         public int RefineLimit { get; set; }
         public int MaxResults { get; set; }
@@ -39,6 +45,13 @@ namespace WzComparerR2.Headless.Media
         public string QueryPath { get; set; }
         public int QueryWidth { get; set; }
         public int QueryHeight { get; set; }
+        public int QuerySearchWidth { get; set; }
+        public int QuerySearchHeight { get; set; }
+        public bool QueryBackgroundTrimmed { get; set; }
+        public int? QueryTrimX { get; set; }
+        public int? QueryTrimY { get; set; }
+        public int? QueryTrimWidth { get; set; }
+        public int? QueryTrimHeight { get; set; }
         public string Method { get; set; }
         public string Scope { get; set; }
         public string CacheDirectory { get; set; }
@@ -54,6 +67,9 @@ namespace WzComparerR2.Headless.Media
         public int MinAlpha { get; set; }
         public int IndexedImageCount { get; set; }
         public int ScannedImageCount { get; set; }
+        public int IndexedVideoFrameCount { get; set; }
+        public int ScannedVideoFrameCount { get; set; }
+        public int SkippedVideoFrameCount { get; set; }
         public int SkippedImageCount { get; set; }
         public int PrefilteredImageCount { get; set; }
         public int Count { get { return this.Results == null ? 0 : this.Results.Count; } }
@@ -68,6 +84,7 @@ namespace WzComparerR2.Headless.Media
         public string InputPath { get; set; }
         public string RootPath { get; set; }
         public string Scope { get; set; }
+        public bool IncludeVideo { get; set; }
         public string Status { get; set; }
         public bool CacheHit { get; set; }
         public string CachePath { get; set; }
@@ -100,6 +117,11 @@ namespace WzComparerR2.Headless.Media
         public string Path { get; set; }
         public string Type { get; set; }
         public int? Page { get; set; }
+        public string VideoPath { get; set; }
+        public int? FrameIndex { get; set; }
+        public int? FrameCount { get; set; }
+        public double? FrameDelayMs { get; set; }
+        public double? FrameStartMs { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
         public string Format { get; set; }
@@ -126,7 +148,8 @@ namespace WzComparerR2.Headless.Media
             }
 
             RgbaImage queryImage = PngFileReader.Load(options.QueryPath);
-            List<ImageFingerprint> queryVariants = ImageFingerprint.CreateSearchVariants(queryImage, options.MinAlpha).ToList();
+            ImageSearchQuery query = PrepareQuery(queryImage, options);
+            List<ImageFingerprint> queryVariants = query.Fingerprints;
             var candidates = new List<ImageSearchCandidate>();
             var result = new ImageSearchResultDto
             {
@@ -136,6 +159,13 @@ namespace WzComparerR2.Headless.Media
                 QueryPath = Path.GetFullPath(options.QueryPath),
                 QueryWidth = queryImage.Width,
                 QueryHeight = queryImage.Height,
+                QuerySearchWidth = query.SearchImage.Width,
+                QuerySearchHeight = query.SearchImage.Height,
+                QueryBackgroundTrimmed = query.BackgroundTrimmed,
+                QueryTrimX = query.TrimX,
+                QueryTrimY = query.TrimY,
+                QueryTrimWidth = query.TrimWidth,
+                QueryTrimHeight = query.TrimHeight,
                 Method = FullScoreMethod,
                 MaxResults = options.MaxResults,
                 CandidatePoolLimit = options.MaxResults,
@@ -151,6 +181,7 @@ namespace WzComparerR2.Headless.Media
                 InputPath = result.InputPath,
                 RootPath = result.RootPath,
                 Scope = result.Scope,
+                IncludeVideo = options.IncludeVideo,
                 Status = "scanned"
             };
             result.Roots.Add(rootDto);
@@ -158,16 +189,36 @@ namespace WzComparerR2.Headless.Media
             foreach (Wz_Node node in Traverse(root))
             {
                 Wz_Node imageNode = HeadlessNodePath.ExtractImageNode(node, true);
-                var png = imageNode == null ? null : imageNode.Value as Wz_Png;
+                if (imageNode == null)
+                {
+                    continue;
+                }
+
+                var png = imageNode.Value as Wz_Png;
                 if (png == null)
                 {
+                    if (options.IncludeVideo && imageNode.Value is Wz_Video)
+                    {
+                        ScanVideoNode(
+                            imageNode,
+                            result.InputPath,
+                            result.RootPath,
+                            result.Scope,
+                            options,
+                            query.SearchImage,
+                            queryVariants,
+                            candidates,
+                            result,
+                            rootDto,
+                            options.MaxResults);
+                    }
                     continue;
                 }
 
                 int pages = Math.Max(1, png.ActualPages);
                 for (int page = 0; page < pages; page++)
                 {
-                    if (ShouldPrefilterBySize(queryImage.Width, queryImage.Height, png.Width, png.Height, options))
+                    if (ShouldPrefilterBySize(query.SearchImage.Width, query.SearchImage.Height, png.Width, png.Height, options))
                     {
                         result.PrefilteredImageCount++;
                         continue;
@@ -210,7 +261,7 @@ namespace WzComparerR2.Headless.Media
             candidates.Sort(CompareCandidates);
             if (!string.IsNullOrEmpty(options.OutputDirectory))
             {
-                ExportMatches(candidates, options.OutputDirectory, null);
+                ExportMatches(candidates, options.OutputDirectory, null, options);
             }
 
             int rank = 1;
@@ -223,7 +274,12 @@ namespace WzComparerR2.Headless.Media
             return result;
         }
 
-        public static ImageSearchResultDto SearchInputs(IReadOnlyList<ImageSearchScanRoot> inputs, string nodePath, ImageSearchOptions options, HeadlessWzLoadOptions loadOptions)
+        public static ImageSearchResultDto SearchInputs(
+            IReadOnlyList<ImageSearchScanRoot> inputs,
+            string nodePath,
+            ImageSearchOptions options,
+            HeadlessWzLoadOptions loadOptions,
+            IImageSearchCacheProvider cacheProvider = null)
         {
             if (inputs == null)
             {
@@ -234,8 +290,11 @@ namespace WzComparerR2.Headless.Media
                 throw new ArgumentNullException(nameof(options));
             }
 
+            cacheProvider = cacheProvider ?? FileImageSearchCacheProvider.Instance;
+
             RgbaImage queryImage = PngFileReader.Load(options.QueryPath);
-            List<ImageFingerprint> queryVariants = ImageFingerprint.CreateSearchVariants(queryImage, options.MinAlpha).ToList();
+            ImageSearchQuery query = PrepareQuery(queryImage, options);
+            List<ImageFingerprint> queryVariants = query.Fingerprints;
             var candidates = new List<ImageSearchCandidate>();
             int candidatePoolLimit = GetCandidatePoolLimit(options);
             var result = new ImageSearchResultDto
@@ -245,6 +304,13 @@ namespace WzComparerR2.Headless.Media
                 QueryPath = Path.GetFullPath(options.QueryPath),
                 QueryWidth = queryImage.Width,
                 QueryHeight = queryImage.Height,
+                QuerySearchWidth = query.SearchImage.Width,
+                QuerySearchHeight = query.SearchImage.Height,
+                QueryBackgroundTrimmed = query.BackgroundTrimmed,
+                QueryTrimX = query.TrimX,
+                QueryTrimY = query.TrimY,
+                QueryTrimWidth = query.TrimWidth,
+                QueryTrimHeight = query.TrimHeight,
                 Method = FullScoreMethod,
                 Scope = options.Scope,
                 MaxResults = options.MaxResults,
@@ -260,16 +326,18 @@ namespace WzComparerR2.Headless.Media
             bool canUseCache = !options.NoCache && string.IsNullOrEmpty(nodePath);
             foreach (ImageSearchScanRoot input in inputs)
             {
+                ImageSearchOptions rootOptions = CreateRootOptions(options, input.IncludeVideo);
                 var rootDto = new ImageSearchRootDto
                 {
                     InputPath = Path.GetFullPath(input.InputPath),
-                    Scope = input.Scope
+                    Scope = input.Scope,
+                    IncludeVideo = rootOptions.IncludeVideo
                 };
                 result.Roots.Add(rootDto);
 
                 ImageSearchCacheFileDto cache;
                 string cachePath;
-                if (canUseCache && !options.RebuildCache && ImageSearchCacheStore.TryReadValid(options.CacheDirectory, input.InputPath, options, out cache, out cachePath))
+                if (canUseCache && !options.RebuildCache && cacheProvider.TryReadValid(options.CacheDirectory, input.InputPath, rootOptions, out cache, out cachePath))
                 {
                     rootDto.CacheHit = true;
                     rootDto.CachePath = cachePath;
@@ -277,14 +345,14 @@ namespace WzComparerR2.Headless.Media
                     rootDto.Status = "cache-hit";
                     result.CacheHitCount++;
                     result.UsedCache = true;
-                    ScoreCachedItems(cache, queryVariants, queryImage, candidates, options, result, rootDto, candidatePoolLimit);
+                    ScoreCachedItems(cache, queryVariants, query.SearchImage, candidates, rootOptions, result, rootDto, candidatePoolLimit);
                     continue;
                 }
 
                 result.CacheMissCount++;
                 if (canUseCache)
                 {
-                    rootDto.CachePath = ImageSearchCacheStore.GetCachePath(options.CacheDirectory, input.InputPath, options);
+                    rootDto.CachePath = ImageSearchCacheStore.GetCachePath(options.CacheDirectory, input.InputPath, rootOptions);
                 }
 
                 try
@@ -308,21 +376,23 @@ namespace WzComparerR2.Headless.Media
                                 Version = ImageSearchCacheStore.CurrentVersion,
                                 Method = ImageSearchCacheStore.Method,
                                 MinAlpha = options.MinAlpha,
+                                IncludeVideo = rootOptions.IncludeVideo,
+                                MaxVideoFrames = rootOptions.MaxVideoFrames,
                                 InputPath = Path.GetFullPath(input.InputPath),
                                 RootPath = root.FullPath,
                                 Scope = input.Scope,
                                 CreatedUtc = DateTime.UtcNow,
                                 InputStamp = ImageSearchCacheStore.CreateStamp(input.InputPath),
-                                Items = BuildIndex(input.InputPath, input.Scope, root, options, result, rootDto)
+                                Items = BuildIndex(input.InputPath, input.Scope, root, rootOptions, result, rootDto)
                             };
-                            rootDto.CachePath = ImageSearchCacheStore.Write(options.CacheDirectory, cacheFile);
+                            rootDto.CachePath = cacheProvider.Write(options.CacheDirectory, cacheFile);
                             rootDto.Status = "indexed";
                             result.UsedCache = true;
-                            ScoreCachedItems(cacheFile, queryVariants, queryImage, candidates, options, result, rootDto, candidatePoolLimit);
+                            ScoreCachedItems(cacheFile, queryVariants, query.SearchImage, candidates, rootOptions, result, rootDto, candidatePoolLimit);
                         }
                         else
                         {
-                            ScanLoadedRoot(input.InputPath, input.Scope, root, options, queryImage, queryVariants, candidates, result, rootDto, candidatePoolLimit);
+                            ScanLoadedRoot(input.InputPath, input.Scope, root, rootOptions, query.SearchImage, queryVariants, candidates, result, rootDto, candidatePoolLimit);
                             rootDto.Status = "scanned";
                         }
                     }
@@ -344,7 +414,7 @@ namespace WzComparerR2.Headless.Media
             TrimCandidates(candidates, options.MaxResults);
             if (!string.IsNullOrEmpty(options.OutputDirectory))
             {
-                ExportMatches(candidates, options.OutputDirectory, loadOptions);
+                ExportMatches(candidates, options.OutputDirectory, loadOptions, options);
             }
 
             int rank = 1;
@@ -386,6 +456,222 @@ namespace WzComparerR2.Headless.Media
             return fullPath;
         }
 
+        private static ImageSearchOptions CreateRootOptions(ImageSearchOptions options, bool includeVideo)
+        {
+            if (options.IncludeVideo == includeVideo)
+            {
+                return options;
+            }
+
+            return new ImageSearchOptions
+            {
+                DataDirectory = options.DataDirectory,
+                QueryPath = options.QueryPath,
+                OutputDirectory = options.OutputDirectory,
+                ManifestPath = options.ManifestPath,
+                Scope = options.Scope,
+                CacheDirectory = options.CacheDirectory,
+                NoCache = options.NoCache,
+                RebuildCache = options.RebuildCache,
+                TrustCache = options.TrustCache,
+                NoRefine = options.NoRefine,
+                NoSizePrefilter = options.NoSizePrefilter,
+                TrimBackground = options.TrimBackground,
+                BackgroundTolerance = options.BackgroundTolerance,
+                IncludeVideo = includeVideo,
+                FfmpegPath = options.FfmpegPath,
+                MaxVideoFrames = options.MaxVideoFrames,
+                MinSizeRatio = options.MinSizeRatio,
+                RefineLimit = options.RefineLimit,
+                MaxResults = options.MaxResults,
+                MinScore = options.MinScore,
+                MinAlpha = options.MinAlpha
+            };
+        }
+
+        private static ImageSearchQuery PrepareQuery(RgbaImage queryImage, ImageSearchOptions options)
+        {
+            RgbaImage searchImage = queryImage;
+            ImageRect? trimRect = null;
+            if (options.TrimBackground)
+            {
+                RgbaImage trimmed;
+                ImageRect rect;
+                int tolerance = options.BackgroundTolerance > 0 ? options.BackgroundTolerance : 24;
+                if (TryTrimBackground(queryImage, options.MinAlpha, tolerance, out trimmed, out rect))
+                {
+                    searchImage = trimmed;
+                    trimRect = rect;
+                }
+            }
+
+            return new ImageSearchQuery
+            {
+                SearchImage = searchImage,
+                Fingerprints = ImageFingerprint.CreateSearchVariants(searchImage, options.MinAlpha).ToList(),
+                BackgroundTrimmed = trimRect.HasValue,
+                TrimX = trimRect.HasValue ? trimRect.Value.X : (int?)null,
+                TrimY = trimRect.HasValue ? trimRect.Value.Y : (int?)null,
+                TrimWidth = trimRect.HasValue ? trimRect.Value.Width : (int?)null,
+                TrimHeight = trimRect.HasValue ? trimRect.Value.Height : (int?)null
+            };
+        }
+
+        private static bool TryTrimBackground(RgbaImage image, int minAlpha, int tolerance, out RgbaImage trimmed, out ImageRect trimRect)
+        {
+            trimmed = null;
+            trimRect = default;
+            if (image.Width < 4 || image.Height < 4)
+            {
+                return false;
+            }
+
+            bool hasBackground;
+            AverageColor background = EstimateCornerBackground(image, minAlpha, out hasBackground);
+            if (!hasBackground)
+            {
+                return false;
+            }
+
+            int minX = image.Width;
+            int minY = image.Height;
+            int maxX = -1;
+            int maxY = -1;
+            double toleranceSquared = tolerance * tolerance;
+            for (int y = 0; y < image.Height; y++)
+            {
+                for (int x = 0; x < image.Width; x++)
+                {
+                    int offset = image.GetOffset(x, y);
+                    if (image.Pixels[offset + 3] <= minAlpha)
+                    {
+                        continue;
+                    }
+
+                    double distanceSquared = ColorDistanceSquared(
+                        image.Pixels[offset],
+                        image.Pixels[offset + 1],
+                        image.Pixels[offset + 2],
+                        background);
+                    if (distanceSquared <= toleranceSquared)
+                    {
+                        continue;
+                    }
+
+                    if (x < minX)
+                    {
+                        minX = x;
+                    }
+                    if (y < minY)
+                    {
+                        minY = y;
+                    }
+                    if (x > maxX)
+                    {
+                        maxX = x;
+                    }
+                    if (y > maxY)
+                    {
+                        maxY = y;
+                    }
+                }
+            }
+
+            if (maxX < minX || maxY < minY)
+            {
+                return false;
+            }
+
+            const int Padding = 2;
+            minX = Math.Max(0, minX - Padding);
+            minY = Math.Max(0, minY - Padding);
+            maxX = Math.Min(image.Width - 1, maxX + Padding);
+            maxY = Math.Min(image.Height - 1, maxY + Padding);
+            int width = maxX - minX + 1;
+            int height = maxY - minY + 1;
+            if (width < 2 || height < 2 || (width == image.Width && height == image.Height))
+            {
+                return false;
+            }
+
+            trimRect = new ImageRect(minX, minY, width, height);
+            trimmed = CropImage(image, trimRect);
+            return true;
+        }
+
+        private static AverageColor EstimateCornerBackground(RgbaImage image, int minAlpha, out bool hasBackground)
+        {
+            int sampleWidth = Math.Max(1, Math.Min(6, image.Width / 4));
+            int sampleHeight = Math.Max(1, Math.Min(6, image.Height / 4));
+            long r = 0;
+            long g = 0;
+            long b = 0;
+            int count = 0;
+            AccumulateCorner(image, 0, 0, sampleWidth, sampleHeight, minAlpha, ref r, ref g, ref b, ref count);
+            AccumulateCorner(image, image.Width - sampleWidth, 0, sampleWidth, sampleHeight, minAlpha, ref r, ref g, ref b, ref count);
+            AccumulateCorner(image, 0, image.Height - sampleHeight, sampleWidth, sampleHeight, minAlpha, ref r, ref g, ref b, ref count);
+            AccumulateCorner(image, image.Width - sampleWidth, image.Height - sampleHeight, sampleWidth, sampleHeight, minAlpha, ref r, ref g, ref b, ref count);
+
+            hasBackground = count > 0;
+            if (!hasBackground)
+            {
+                return new AverageColor(255, 255, 255);
+            }
+
+            return new AverageColor((double)r / count, (double)g / count, (double)b / count);
+        }
+
+        private static void AccumulateCorner(
+            RgbaImage image,
+            int startX,
+            int startY,
+            int width,
+            int height,
+            int minAlpha,
+            ref long r,
+            ref long g,
+            ref long b,
+            ref int count)
+        {
+            for (int y = startY; y < startY + height; y++)
+            {
+                for (int x = startX; x < startX + width; x++)
+                {
+                    int offset = image.GetOffset(x, y);
+                    if (image.Pixels[offset + 3] <= minAlpha)
+                    {
+                        continue;
+                    }
+
+                    r += image.Pixels[offset];
+                    g += image.Pixels[offset + 1];
+                    b += image.Pixels[offset + 2];
+                    count++;
+                }
+            }
+        }
+
+        private static double ColorDistanceSquared(byte r, byte g, byte b, AverageColor average)
+        {
+            double dr = r - average.R;
+            double dg = g - average.G;
+            double db = b - average.B;
+            return dr * dr + dg * dg + db * db;
+        }
+
+        private static RgbaImage CropImage(RgbaImage image, ImageRect rect)
+        {
+            var pixels = new byte[rect.Width * rect.Height * 4];
+            for (int y = 0; y < rect.Height; y++)
+            {
+                int sourceOffset = image.GetOffset(rect.X, rect.Y + y);
+                int targetOffset = y * rect.Width * 4;
+                Buffer.BlockCopy(image.Pixels, sourceOffset, pixels, targetOffset, rect.Width * 4);
+            }
+
+            return new RgbaImage(rect.Width, rect.Height, pixels);
+        }
+
         private static void ScanLoadedRoot(
             string inputPath,
             string scope,
@@ -403,9 +689,29 @@ namespace WzComparerR2.Headless.Media
             foreach (Wz_Node node in Traverse(root))
             {
                 Wz_Node imageNode = HeadlessNodePath.ExtractImageNode(node, true);
-                var png = imageNode == null ? null : imageNode.Value as Wz_Png;
+                if (imageNode == null)
+                {
+                    continue;
+                }
+
+                var png = imageNode.Value as Wz_Png;
                 if (png == null)
                 {
+                    if (options.IncludeVideo && imageNode.Value is Wz_Video)
+                    {
+                        ScanVideoNode(
+                            imageNode,
+                            sourceInputPath,
+                            sourceRootPath,
+                            scope,
+                            options,
+                            queryImage,
+                            queryVariants,
+                            candidates,
+                            result,
+                            rootDto,
+                            candidatePoolLimit);
+                    }
                     continue;
                 }
 
@@ -467,9 +773,18 @@ namespace WzComparerR2.Headless.Media
             foreach (Wz_Node node in Traverse(root))
             {
                 Wz_Node imageNode = HeadlessNodePath.ExtractImageNode(node, true);
-                var png = imageNode == null ? null : imageNode.Value as Wz_Png;
+                if (imageNode == null)
+                {
+                    continue;
+                }
+
+                var png = imageNode.Value as Wz_Png;
                 if (png == null)
                 {
+                    if (options.IncludeVideo && imageNode.Value is Wz_Video)
+                    {
+                        IndexVideoNode(imageNode, options, indexItems, result, rootDto);
+                    }
                     continue;
                 }
 
@@ -500,6 +815,188 @@ namespace WzComparerR2.Headless.Media
             return indexItems;
         }
 
+        private static void ScanVideoNode(
+            Wz_Node videoNode,
+            string sourceInputPath,
+            string sourceRootPath,
+            string scope,
+            ImageSearchOptions options,
+            RgbaImage queryImage,
+            IReadOnlyList<ImageFingerprint> queryVariants,
+            List<ImageSearchCandidate> candidates,
+            ImageSearchResultDto result,
+            ImageSearchRootDto rootDto,
+            int candidatePoolLimit)
+        {
+            try
+            {
+                ForEachDecodedVideoFrame(videoNode, options, 0, frame =>
+                {
+                    if (ShouldPrefilterBySize(queryImage.Width, queryImage.Height, frame.Image.Width, frame.Image.Height, options))
+                    {
+                        result.PrefilteredImageCount++;
+                        rootDto.PrefilteredImageCount++;
+                        return;
+                    }
+
+                    List<ImageFingerprint> variants = ImageFingerprint.CreateCandidateVariants(frame.Image, options.MinAlpha).ToList();
+                    ImageSearchScore score = Score(queryVariants, variants);
+                    result.ScannedImageCount++;
+                    result.ScannedVideoFrameCount++;
+                    rootDto.ScannedImageCount++;
+                    if (score.Score < options.MinScore)
+                    {
+                        return;
+                    }
+
+                    AddTopCandidate(candidates, new ImageSearchCandidate
+                    {
+                        Node = videoNode,
+                        SourceInputPath = sourceInputPath,
+                        SourceRootPath = sourceRootPath,
+                        SourceScope = scope,
+                        Page = 0,
+                        Match = CreateVideoFrameMatch(videoNode, frame, score, FullScoreMethod, sourceInputPath, sourceRootPath, scope, false)
+                    }, candidatePoolLimit);
+                });
+            }
+            catch (UsageException ex)
+            {
+                if (IsMissingFfmpeg(ex))
+                {
+                    throw;
+                }
+
+                MarkSkippedVideoFrames(videoNode, options, result, rootDto);
+                return;
+            }
+            catch (InvalidOperationException)
+            {
+                MarkSkippedVideoFrames(videoNode, options, result, rootDto);
+                return;
+            }
+            catch (NotSupportedException)
+            {
+                MarkSkippedVideoFrames(videoNode, options, result, rootDto);
+                return;
+            }
+        }
+
+        private static void IndexVideoNode(
+            Wz_Node videoNode,
+            ImageSearchOptions options,
+            List<ImageSearchIndexItemDto> indexItems,
+            ImageSearchResultDto result,
+            ImageSearchRootDto rootDto)
+        {
+            try
+            {
+                ForEachDecodedVideoFrame(videoNode, options, 0, frame =>
+                {
+                    List<ImageFingerprint> variants = ImageFingerprint.CreateCandidateVariants(frame.Image, options.MinAlpha).ToList();
+                    indexItems.Add(CreateVideoFrameIndexItem(videoNode, frame, variants));
+                    result.IndexedImageCount++;
+                    result.IndexedVideoFrameCount++;
+                    rootDto.IndexedImageCount++;
+                });
+            }
+            catch (UsageException ex)
+            {
+                if (IsMissingFfmpeg(ex))
+                {
+                    throw;
+                }
+
+                MarkSkippedVideoFrames(videoNode, options, result, rootDto);
+                return;
+            }
+            catch (InvalidOperationException)
+            {
+                MarkSkippedVideoFrames(videoNode, options, result, rootDto);
+                return;
+            }
+            catch (NotSupportedException)
+            {
+                MarkSkippedVideoFrames(videoNode, options, result, rootDto);
+                return;
+            }
+        }
+
+        private static void ForEachDecodedVideoFrame(Wz_Node videoNode, ImageSearchOptions options, int maxFramesOverride, Action<DecodedVideoFrameImage> action)
+        {
+            string tempDirectory = Path.Combine(Path.GetTempPath(), "wcr2-image-search-video", Guid.NewGuid().ToString("N"));
+            try
+            {
+                int maxFrames = maxFramesOverride > 0 ? maxFramesOverride : options.MaxVideoFrames;
+                foreach (VideoExporter.DecodedVideoFrameFile frame in VideoExporter.DecodeFrameFiles(videoNode, tempDirectory, options.FfmpegPath, maxFrames))
+                {
+                    action(new DecodedVideoFrameImage
+                    {
+                        Frame = frame,
+                        Image = PngFileReader.Load(frame.Path)
+                    });
+                }
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(tempDirectory))
+                    {
+                        Directory.Delete(tempDirectory, recursive: true);
+                    }
+                }
+                catch
+                {
+                    // Temporary decoded frames are search scratch data only.
+                }
+            }
+        }
+
+        private static DecodedVideoFrameImage DecodeSingleVideoFrame(Wz_Node videoNode, int frameIndex, ImageSearchOptions options)
+        {
+            if (frameIndex < 0)
+            {
+                return null;
+            }
+
+            DecodedVideoFrameImage result = null;
+            ForEachDecodedVideoFrame(videoNode, options, frameIndex + 1, frame =>
+            {
+                if (frame.Frame.FrameIndex == frameIndex)
+                {
+                    result = frame;
+                }
+            });
+            return result;
+        }
+
+        private static void MarkSkippedVideoFrames(Wz_Node videoNode, ImageSearchOptions options, ImageSearchResultDto result, ImageSearchRootDto rootDto)
+        {
+            int skipped = TryGetVideoFrameLimit(videoNode, options);
+            result.SkippedVideoFrameCount += skipped;
+            result.SkippedImageCount += skipped;
+            rootDto.SkippedImageCount += skipped;
+        }
+
+        private static int TryGetVideoFrameLimit(Wz_Node videoNode, ImageSearchOptions options)
+        {
+            try
+            {
+                var header = ((Wz_Video)videoNode.Value).ReadVideoFileHeader();
+                if (header == null)
+                {
+                    return 1;
+                }
+
+                return options.MaxVideoFrames <= 0 ? Math.Max(1, header.FrameCount) : Math.Max(1, Math.Min(options.MaxVideoFrames, header.FrameCount));
+            }
+            catch
+            {
+                return 1;
+            }
+        }
+
         private static void ScoreCachedItems(
             ImageSearchCacheFileDto cache,
             IReadOnlyList<ImageFingerprint> queryVariants,
@@ -524,8 +1021,13 @@ namespace WzComparerR2.Headless.Media
                     continue;
                 }
 
-                ImageSearchScore score = ScoreCached(queryVariants, item.Fingerprints);
+                double scoreFloor = GetCandidateScoreFloor(candidates, candidatePoolLimit, options.MinScore);
+                ImageSearchScore score = ScoreCached(queryVariants, item.Fingerprints, scoreFloor);
                 result.ScannedImageCount++;
+                if (IsVideoFrameItem(item))
+                {
+                    result.ScannedVideoFrameCount++;
+                }
                 rootDto.ScannedImageCount++;
                 if (score.Score < options.MinScore)
                 {
@@ -628,7 +1130,7 @@ namespace WzComparerR2.Headless.Media
                 HashDistance = score.HashDistance,
                 QueryRegion = score.QueryRegion,
                 MatchedRegion = score.Region,
-                ParentPath = GetParentPath(item.Path),
+                ParentPath = string.IsNullOrEmpty(item.VideoPath) ? GetParentPath(item.Path) : item.VideoPath,
                 SourceInputPath = cache.InputPath,
                 SourceRootPath = cache.RootPath,
                 SourceScope = cache.Scope,
@@ -638,10 +1140,58 @@ namespace WzComparerR2.Headless.Media
                 Path = item.Path,
                 Type = item.Type,
                 Page = item.Page,
+                VideoPath = item.VideoPath,
+                FrameIndex = item.FrameIndex,
+                FrameCount = item.FrameCount,
+                FrameDelayMs = item.FrameDelayMs,
+                FrameStartMs = item.FrameStartMs,
                 Width = item.Width,
                 Height = item.Height,
                 Format = item.Format,
                 Pages = item.Pages
+            };
+        }
+
+        private static ImageSearchMatchDto CreateVideoFrameMatch(
+            Wz_Node videoNode,
+            DecodedVideoFrameImage frame,
+            ImageSearchScore score,
+            string scoreMethod,
+            string sourceInputPath,
+            string sourceRootPath,
+            string scope,
+            bool fromCache)
+        {
+            string framePath = CreateVideoFramePath(videoNode, frame.Frame.FrameIndex);
+            return new ImageSearchMatchDto
+            {
+                ScoreMethod = scoreMethod,
+                Score = Round(score.Score),
+                PerceptualScore = Round(score.PerceptualScore),
+                PixelScore = Round(score.PixelScore),
+                ColorScore = Round(score.ColorScore),
+                ShapeScore = Round(score.ShapeScore),
+                HashDistance = score.HashDistance,
+                QueryRegion = score.QueryRegion,
+                MatchedRegion = score.Region,
+                ParentPath = videoNode.FullPath,
+                SourceInputPath = sourceInputPath,
+                SourceRootPath = sourceRootPath,
+                SourceScope = scope,
+                FromCache = fromCache,
+                Refined = string.Equals(scoreMethod, FullScoreMethod, StringComparison.Ordinal),
+                Name = GetLastPathSegment(framePath),
+                Path = framePath,
+                Type = "video-frame",
+                VideoPath = videoNode.FullPath,
+                FrameIndex = frame.Frame.FrameIndex,
+                FrameCount = frame.Frame.FrameCount,
+                FrameDelayMs = RoundNullable(frame.Frame.DelayMs),
+                FrameStartMs = RoundNullable(frame.Frame.StartMs),
+                Width = frame.Image.Width,
+                Height = frame.Image.Height,
+                Format = frame.Frame.Format,
+                Pages = frame.Frame.FrameCount
             };
         }
 
@@ -657,6 +1207,27 @@ namespace WzComparerR2.Headless.Media
                 Height = png.Height,
                 Format = png.Format.ToString(),
                 Pages = pages,
+                Fingerprints = fingerprints.Select(ToDto).ToList()
+            };
+        }
+
+        private static ImageSearchIndexItemDto CreateVideoFrameIndexItem(Wz_Node videoNode, DecodedVideoFrameImage frame, IEnumerable<ImageFingerprint> fingerprints)
+        {
+            string framePath = CreateVideoFramePath(videoNode, frame.Frame.FrameIndex);
+            return new ImageSearchIndexItemDto
+            {
+                Name = GetLastPathSegment(framePath),
+                Path = framePath,
+                Type = "video-frame",
+                VideoPath = videoNode.FullPath,
+                FrameIndex = frame.Frame.FrameIndex,
+                FrameCount = frame.Frame.FrameCount,
+                FrameDelayMs = RoundNullable(frame.Frame.DelayMs),
+                FrameStartMs = RoundNullable(frame.Frame.StartMs),
+                Width = frame.Image.Width,
+                Height = frame.Image.Height,
+                Format = frame.Frame.Format,
+                Pages = frame.Frame.FrameCount,
                 Fingerprints = fingerprints.Select(ToDto).ToList()
             };
         }
@@ -697,12 +1268,28 @@ namespace WzComparerR2.Headless.Media
 
         private static int GetCandidatePoolLimit(ImageSearchOptions options)
         {
+            if (options.NoRefine)
+            {
+                return options.MaxResults;
+            }
+
             if (options.RefineLimit > 0)
             {
                 return Math.Max(options.MaxResults, options.RefineLimit);
             }
 
             return Math.Max(options.MaxResults, Math.Min(250, Math.Max(50, options.MaxResults * 8)));
+        }
+
+        private static double GetCandidateScoreFloor(List<ImageSearchCandidate> candidates, int candidatePoolLimit, double minScore)
+        {
+            double scoreFloor = Math.Max(0, minScore);
+            if (candidatePoolLimit > 0 && candidates.Count >= candidatePoolLimit)
+            {
+                scoreFloor = Math.Max(scoreFloor, candidates[candidates.Count - 1].Match.Score - 0.000001);
+            }
+
+            return scoreFloor;
         }
 
         private static void TrimCandidates(List<ImageSearchCandidate> candidates, int maxResults)
@@ -717,12 +1304,29 @@ namespace WzComparerR2.Headless.Media
 
         private static void AddTopCandidate(List<ImageSearchCandidate> candidates, ImageSearchCandidate candidate, int maxResults)
         {
-            candidates.Add(candidate);
-            candidates.Sort(CompareCandidates);
-            if (candidates.Count > maxResults)
+            if (maxResults <= 0)
             {
-                candidates.RemoveAt(candidates.Count - 1);
+                return;
             }
+
+            if (candidates.Count < maxResults)
+            {
+                candidates.Add(candidate);
+                if (candidates.Count == maxResults)
+                {
+                    candidates.Sort(CompareCandidates);
+                }
+                return;
+            }
+
+            ImageSearchCandidate worst = candidates[candidates.Count - 1];
+            if (CompareCandidates(candidate, worst) >= 0)
+            {
+                return;
+            }
+
+            candidates[candidates.Count - 1] = candidate;
+            candidates.Sort(CompareCandidates);
         }
 
         private static int CompareCandidates(ImageSearchCandidate left, ImageSearchCandidate right)
@@ -755,6 +1359,44 @@ namespace WzComparerR2.Headless.Media
                 foreach (ImageSearchCandidate candidate in candidates)
                 {
                     Wz_Node node = candidate.Node ?? ResolveCandidateNode(candidate, loadedContexts, loadOptions);
+                    if (IsVideoFrameMatch(candidate.Match))
+                    {
+                        if (node == null || !(node.Value is Wz_Video))
+                        {
+                            candidate.Match.OutputError = "Could not resolve cached video frame for refine.";
+                            continue;
+                        }
+
+                        try
+                        {
+                            DecodedVideoFrameImage frame = DecodeSingleVideoFrame(node, candidate.Match.FrameIndex ?? 0, options);
+                            if (frame == null)
+                            {
+                                candidate.Match.OutputError = "Could not decode cached video frame for refine.";
+                                continue;
+                            }
+
+                            ImageSearchScore score = Score(queryVariants, frame.Image, options.MinAlpha);
+                            UpdateMatchScore(candidate.Match, score, FullScoreMethod, true);
+                            result.Refined = true;
+                            result.RefinedImageCount++;
+                        }
+                        catch (UsageException ex)
+                        {
+                            candidate.Match.OutputError = "Refine skipped: " + ex.Message;
+                        }
+                        catch (NotSupportedException ex)
+                        {
+                            candidate.Match.OutputError = "Refine skipped: " + ex.Message;
+                        }
+                        catch (InvalidOperationException ex)
+                        {
+                            candidate.Match.OutputError = "Refine skipped: " + ex.Message;
+                        }
+
+                        continue;
+                    }
+
                     if (node == null || !(node.Value is Wz_Png))
                     {
                         candidate.Match.OutputError = "Could not resolve cached match for refine.";
@@ -803,7 +1445,7 @@ namespace WzComparerR2.Headless.Media
             match.Refined = refined;
         }
 
-        private static void ExportMatches(IReadOnlyList<ImageSearchCandidate> candidates, string outputDirectory, HeadlessWzLoadOptions loadOptions)
+        private static void ExportMatches(IReadOnlyList<ImageSearchCandidate> candidates, string outputDirectory, HeadlessWzLoadOptions loadOptions, ImageSearchOptions options)
         {
             string fullOutputDirectory = Path.GetFullPath(outputDirectory);
             Directory.CreateDirectory(fullOutputDirectory);
@@ -819,6 +1461,18 @@ namespace WzComparerR2.Headless.Media
                     {
                         node = ResolveCandidateNode(candidate, loadedContexts, loadOptions);
                     }
+                    if (IsVideoFrameMatch(candidate.Match))
+                    {
+                        if (node == null || !(node.Value is Wz_Video))
+                        {
+                            candidate.Match.OutputError = "Could not resolve cached video frame for export.";
+                            continue;
+                        }
+
+                        ExportVideoFrameMatch(candidate, node, i, fullOutputDirectory, options);
+                        continue;
+                    }
+
                     if (node == null || !(node.Value is Wz_Png))
                     {
                         candidate.Match.OutputError = "Could not resolve cached match for export.";
@@ -854,7 +1508,8 @@ namespace WzComparerR2.Headless.Media
 
         private static Wz_Node ResolveCandidateNode(ImageSearchCandidate candidate, Dictionary<string, HeadlessWzLoadContext> loadedContexts, HeadlessWzLoadOptions loadOptions)
         {
-            if (string.IsNullOrEmpty(candidate.SourceInputPath) || string.IsNullOrEmpty(candidate.Match.Path))
+            string candidatePath = GetResolvableCandidatePath(candidate);
+            if (string.IsNullOrEmpty(candidate.SourceInputPath) || string.IsNullOrEmpty(candidatePath))
             {
                 return null;
             }
@@ -866,7 +1521,71 @@ namespace WzComparerR2.Headless.Media
                 loadedContexts.Add(candidate.SourceInputPath, context);
             }
 
-            return HeadlessNodePath.Resolve(context.Root, candidate.Match.Path, true);
+            return HeadlessNodePath.Resolve(context.Root, candidatePath, true);
+        }
+
+        private static string GetResolvableCandidatePath(ImageSearchCandidate candidate)
+        {
+            if (candidate == null || candidate.Match == null)
+            {
+                return null;
+            }
+
+            return string.IsNullOrEmpty(candidate.Match.VideoPath) ? candidate.Match.Path : candidate.Match.VideoPath;
+        }
+
+        private static void ExportVideoFrameMatch(ImageSearchCandidate candidate, Wz_Node node, int rankIndex, string fullOutputDirectory, ImageSearchOptions options)
+        {
+            string tempDirectory = Path.Combine(Path.GetTempPath(), "wcr2-image-search-video-export", Guid.NewGuid().ToString("N"));
+            try
+            {
+                int frameIndex = candidate.Match.FrameIndex ?? 0;
+                VideoExporter.DecodedVideoFrameFile frame = VideoExporter
+                    .DecodeFrameFiles(node, tempDirectory, options.FfmpegPath, frameIndex + 1)
+                    .FirstOrDefault(item => item.FrameIndex == frameIndex);
+                if (frame == null || !File.Exists(frame.Path))
+                {
+                    candidate.Match.OutputError = "Could not decode cached video frame for export.";
+                    return;
+                }
+
+                string filename = (rankIndex + 1).ToString("D2", CultureInfo.InvariantCulture)
+                    + "_score-" + candidate.Match.Score.ToString("0.000", CultureInfo.InvariantCulture)
+                    + "_" + SanitizeFileName(candidate.Match.Path)
+                    + ".png";
+                string path = Path.Combine(fullOutputDirectory, filename);
+                File.Copy(frame.Path, path, overwrite: true);
+                var info = new FileInfo(path);
+                candidate.Match.OutputPath = path;
+                candidate.Match.Bytes = info.Length;
+                candidate.Match.Sha256 = ComputeSha256(path);
+            }
+            catch (UsageException ex)
+            {
+                candidate.Match.OutputError = "Export skipped: " + ex.Message;
+            }
+            catch (NotSupportedException ex)
+            {
+                candidate.Match.OutputError = "Export skipped: " + ex.Message;
+            }
+            catch (InvalidOperationException ex)
+            {
+                candidate.Match.OutputError = "Export skipped: " + ex.Message;
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(tempDirectory))
+                    {
+                        Directory.Delete(tempDirectory, recursive: true);
+                    }
+                }
+                catch
+                {
+                    // Temporary decoded frames are export scratch data only.
+                }
+            }
         }
 
         private static string SanitizeFileName(string text)
@@ -892,6 +1611,43 @@ namespace WzComparerR2.Headless.Media
 
             int index = Math.Max(path.LastIndexOf('\\'), path.LastIndexOf('/'));
             return index <= 0 ? null : path.Substring(0, index);
+        }
+
+        private static string GetLastPathSegment(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return null;
+            }
+
+            int index = Math.Max(path.LastIndexOf('\\'), path.LastIndexOf('/'));
+            return index < 0 ? path : path.Substring(index + 1);
+        }
+
+        private static string CreateVideoFramePath(Wz_Node videoNode, int frameIndex)
+        {
+            return videoNode.FullPath + "\\frame-" + (frameIndex + 1).ToString("D4", CultureInfo.InvariantCulture);
+        }
+
+        private static bool IsVideoFrameItem(ImageSearchIndexItemDto item)
+        {
+            return item != null && string.Equals(item.Type, "video-frame", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsVideoFrameMatch(ImageSearchMatchDto match)
+        {
+            return match != null && string.Equals(match.Type, "video-frame", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsMissingFfmpeg(Exception ex)
+        {
+            string message = ex == null ? string.Empty : ex.Message ?? string.Empty;
+            return message.IndexOf("ffmpeg was not found", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static double? RoundNullable(double? value)
+        {
+            return value.HasValue ? Math.Round(value.Value, 6, MidpointRounding.AwayFromZero) : (double?)null;
         }
 
         private static string ComputeSha256(string path)
@@ -945,7 +1701,10 @@ namespace WzComparerR2.Headless.Media
             return best ?? new ImageSearchScore { Region = "none", HashDistance = 64 };
         }
 
-        private static ImageSearchScore ScoreCached(IReadOnlyList<ImageFingerprint> queryVariants, IReadOnlyList<ImageSearchFingerprintDto> variants)
+        private static ImageSearchScore ScoreCached(
+            IReadOnlyList<ImageFingerprint> queryVariants,
+            IReadOnlyList<ImageSearchFingerprintDto> variants,
+            double scoreFloor)
         {
             ImageSearchScore best = null;
             if (variants == null)
@@ -959,6 +1718,12 @@ namespace WzComparerR2.Headless.Media
                 {
                     int distance = HammingDistance(query.Hash ^ variant.Hash);
                     double perceptualScore = 1.0 - distance / 63.0;
+                    double upperBound = perceptualScore * 0.72 + 0.28;
+                    if (upperBound < scoreFloor || (best != null && upperBound < best.Score))
+                    {
+                        continue;
+                    }
+
                     double colorScore = ColorSimilarity(query.AverageR, query.AverageG, query.AverageB, variant.AverageR, variant.AverageG, variant.AverageB);
                     double shapeScore = ShapeSimilarity(query.AspectRatio, query.AlphaCoverage, variant.AspectRatio, variant.AlphaCoverage);
                     double score = perceptualScore * 0.72 + colorScore * 0.20 + shapeScore * 0.08;
@@ -1123,6 +1888,12 @@ namespace WzComparerR2.Headless.Media
             public ImageSearchMatchDto Match { get; set; }
         }
 
+        private sealed class DecodedVideoFrameImage
+        {
+            public VideoExporter.DecodedVideoFrameFile Frame { get; set; }
+            public RgbaImage Image { get; set; }
+        }
+
         private sealed class ImageSearchScore
         {
             public double Score { get; set; }
@@ -1133,6 +1904,17 @@ namespace WzComparerR2.Headless.Media
             public int HashDistance { get; set; }
             public string QueryRegion { get; set; }
             public string Region { get; set; }
+        }
+
+        private sealed class ImageSearchQuery
+        {
+            public RgbaImage SearchImage { get; set; }
+            public List<ImageFingerprint> Fingerprints { get; set; }
+            public bool BackgroundTrimmed { get; set; }
+            public int? TrimX { get; set; }
+            public int? TrimY { get; set; }
+            public int? TrimWidth { get; set; }
+            public int? TrimHeight { get; set; }
         }
 
         private sealed class ImageFingerprint

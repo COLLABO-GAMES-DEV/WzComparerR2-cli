@@ -222,7 +222,14 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - `--scope ui,item,skill`로 agent가 검색 범위를 줄일 수 있게 한다.
   - OS 사용자 cache에 root별 fingerprint index를 gzip JSON으로 저장하고, `--cache-dir`, `--no-cache`, `--rebuild-cache`, `--trust-cache`를 지원한다.
   - 큰 query는 기본 size prefilter로 작은 아이콘 후보를 제외한다. cache key는 query 크기와 독립되어 같은 root의 다른 query에도 재사용된다.
-  - cache/index 점수로 넓은 후보 pool을 잡은 뒤, 기본적으로 top 후보를 WZ에서 다시 열어 pixel-level score로 refine한다. 빠른 agent probe에는 `--trust-cache --no-refine`을 쓸 수 있다.
+  - cache/index 점수로 넓은 후보 pool을 잡은 뒤, 기본적으로 top 후보를 WZ에서 다시 열어 pixel-level score로 refine한다. 빠른 agent probe에는 `--probe` 또는 `--trust-cache --no-refine`을 쓸 수 있다.
+  - [x] 2026-09-08 image search Phase A: top-K 후보 유지 로직을 반복 full sort에서 bounded replacement로 변경해 cache hit scoring 비용을 줄였다.
+  - [x] 2026-09-08 image search probe mode: `--probe` CLI flag와 agent/MCP `probe` option 추가. 정확도 보존 모드가 아니라 빠른 1차 후보 탐색용으로 문서화했다.
+  - [x] 2026-09-08 image search agent memory cache: `wcr2-agent serve`/MCP 프로세스 안에서 root image index를 LRU로 보관하고 `cache.stats`/`wcr2.cache_stats`에 `imageSearchIndex*` 통계를 노출한다.
+  - [x] 2026-09-08 image search scoring pruning: 현재 top-K floor를 넘을 수 없는 cache fingerprint pair의 color/shape 계산을 생략한다. mob query 기준 기존 top 30 diff 없음, probe 약 3.0초, refine 약 6.95초.
+  - [x] 2026-09-08 image search binary sidecar cache: 기존 `.json.gz` cache를 유지하면서 같은 hash의 `.bin.gz`를 생성/우선 읽기 한다. mob query 기준 binary hit 후 probe 약 1.81초, refine 약 5.72초, 기존 top 30 diff 없음.
+  - [x] 2026-09-08 image search background trim: `--trim-background`/agent `trimBackground`로 모서리 기반 배경 제거 query를 사용한다. 흰 배경을 붙인 mob query에서 기본 검색 1순위 `8610004.img\attack2\info\hit\3`, trim 검색 1순위 `8880725.img\stand\8`로 목표 계열 복구 확인.
+  - [x] 2026-09-08 image search internal video frame target: query는 PNG로 유지하고, `--include-video`/agent `includeVideo`가 내부 MCV/Wz_Video frame을 검색 대상으로 포함한다. 직접 `5241503 screen2/video` smoke에서 `Type=video-frame`, `FrameIndex=0`, score 1.0, `--out` PNG 추출 확인.
   - 2026-09-07 검증: `1788776940228-jmgl86.png`는 `--data-dir ... --scope ui`로 `UIWindowEvent5.img\2606UltimaStory\enterUI\back`를 1순위로 찾았다. 단, query는 여러 레이어가 합성된 화면이라 단일 PNG는 배경 계층만 일치한다. root index 생성은 약 2분 23초, cache hit+refine은 약 3.6초, `--trust-cache --no-refine`은 약 1.5초였다.
 - [x] macOS PNG 직접 저장 가능성을 별도 조사한다.
   - 코어 로직 변경 최소화를 우선하고, CLI 전용 PNG writer로 `ARGB4444`, `ARGB8888`, `ARGB1555`, `RGB565`, `DXT3`, `DXT5`, `A8`, `RGBA1010102`, `BC7`를 우선 지원한다.

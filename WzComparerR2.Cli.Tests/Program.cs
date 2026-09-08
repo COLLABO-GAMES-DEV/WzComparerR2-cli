@@ -350,6 +350,11 @@ namespace WzComparerR2.Cli.Tests
             AssertContains(image.Stdout, "--cache-dir <dir>");
             AssertContains(image.Stdout, "--trust-cache");
             AssertContains(image.Stdout, "--no-refine");
+            AssertContains(image.Stdout, "--probe");
+            AssertContains(image.Stdout, "--trim-background");
+            AssertContains(image.Stdout, "--background-tolerance <n>");
+            AssertContains(image.Stdout, "--include-video");
+            AssertContains(image.Stdout, "--max-video-frames <n>");
             AssertContains(image.Stdout, "System.Drawing PNG path");
 
             CommandResult video = runner.Run("video", "--help");
@@ -798,6 +803,8 @@ namespace WzComparerR2.Cli.Tests
                 AssertEqual(8, cacheStats.GetProperty("maxDomainRepositories").GetInt32(), "max domain repositories");
                 AssertEqual(0, cacheStats.GetProperty("wzContextCount").GetInt32(), "initial wz context count");
                 AssertEqual(16, cacheStats.GetProperty("maxWzContexts").GetInt32(), "max wz contexts");
+                AssertEqual(0, cacheStats.GetProperty("imageSearchIndexCount").GetInt32(), "initial image search index count");
+                AssertEqual(4, cacheStats.GetProperty("maxImageSearchIndexes").GetInt32(), "max image search indexes");
             }
             using (JsonDocument run = JsonDocument.Parse(lines[2]))
             {
@@ -817,6 +824,7 @@ namespace WzComparerR2.Cli.Tests
                 AssertEqual(0, clearedStats.GetProperty("skillSessionCount").GetInt32(), "cleared skill session count");
                 AssertEqual(0, clearedStats.GetProperty("domainRepositoryCount").GetInt32(), "cleared domain repository count");
                 AssertEqual(0, clearedStats.GetProperty("wzContextCount").GetInt32(), "cleared wz context count");
+                AssertEqual(0, clearedStats.GetProperty("imageSearchIndexCount").GetInt32(), "cleared image search index count");
             }
             using (JsonDocument shutdown = JsonDocument.Parse(lines[4]))
             {
@@ -891,6 +899,7 @@ namespace WzComparerR2.Cli.Tests
                 JsonElement statsResult = root.GetProperty("result");
                 AssertEqual(false, statsResult.GetProperty("isError").GetBoolean(), "cache stats isError");
                 AssertEqual(0, statsResult.GetProperty("structuredContent").GetProperty("skillSessionCount").GetInt32(), "mcp skill session count");
+                AssertEqual(0, statsResult.GetProperty("structuredContent").GetProperty("imageSearchIndexCount").GetInt32(), "mcp image search index count");
             }
         }
 

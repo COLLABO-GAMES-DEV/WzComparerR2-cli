@@ -61,6 +61,8 @@ wcr2-agent run --job job.json --json
       "maxResults": 10,
       "trustCache": true,
       "refine": true,
+      "includeVideo": false,
+      "maxVideoFrames": 0,
       "exportTopResults": true
     },
     {
@@ -75,7 +77,7 @@ wcr2-agent run --job job.json --json
 }
 ```
 
-`image.search` step은 CLI `wcr2 image search`와 같은 Headless 서비스를 사용합니다. `image.export-related` step은 이전 검색 결과의 `ParentPath` 기준으로 같은 그룹의 PNG를 재귀 추출합니다. 상대 경로는 현재 작업 디렉터리 기준으로 해석합니다.
+`image.search` step은 CLI `wcr2 image search`와 같은 Headless 서비스를 사용합니다. `includeVideo: true`를 켜면 query는 PNG 그대로 두고, 검색 대상에 `Data/Packs/Skill*.ms`의 내부 MCV/Wz_Video frame을 포함합니다. video frame 결과는 `Type: "video-frame"`, `VideoPath`, `FrameIndex`를 남깁니다. `image.export-related` step은 이전 검색 결과의 `ParentPath` 기준으로 같은 그룹의 PNG를 재귀 추출합니다. 상대 경로는 현재 작업 디렉터리 기준으로 해석합니다.
 
 스킬 단건 export job 예시:
 
@@ -213,7 +215,7 @@ wcr2 sound list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
 wcr2 sound export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 sound export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 image list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
-wcr2 image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--scope ui,item,skill,...] [--path <wz-path>] [--out <output-dir>] [--max-results <n>] [--min-score <0..1>] [--cache-dir <dir>] [--trust-cache] [--no-refine] [--json]
+wcr2 image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--scope ui,item,skill,...] [--path <wz-path>] [--out <output-dir>] [--max-results <n>] [--min-score <0..1>] [--cache-dir <dir>] [--trust-cache] [--no-refine] [--probe] [--trim-background] [--include-video] [--json]
 wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]
 wcr2 video list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]
@@ -457,9 +459,14 @@ For item icons, prefer `item icon --data-dir Data --name "<item name>" --out <di
 `image export`는 Windows에서 기존 `Wz_Png.ExtractPng()`/`System.Drawing` PNG 저장 경로를 재사용합니다.
 macOS/Linux에서는 CLI의 cross-platform PNG writer가 `ARGB4444`, `ARGB8888`, `ARGB1555`, `RGB565`, `DXT3`, `DXT5`, `A8`, `RGBA1010102`, `BC7` 같은 일반 WZ texture format을 직접 저장합니다.
 아직 지원하지 않는 texture format은 명확한 진단을 반환하며, 이 경우 `image list` 메타데이터 조회는 계속 사용할 수 있습니다.
-`image search`는 로컬 PNG를 query로 받아 WZ PNG 노드와 유사도를 비교합니다. 명시 input 없이 `--data-dir <Data>`를 주면 `UI`, `Item`, `Skill`, `Effect`, `Character`, `Mob`, `Npc`, `Map`, `Etc`, `Quest`, `Reactor`, `Morph` 아래의 `_Canvas` root를 자동으로 찾습니다. 범위를 줄이려면 `--scope ui,item,skill`처럼 comma-separated scope를 지정합니다.
+`image search`는 로컬 PNG를 query로 받아 WZ PNG 노드와 유사도를 비교합니다. 명시 input 없이 `--data-dir <Data>`를 주면 `UI`, `Item`, `Skill`, `Effect`, `Character`, `Mob`, `Npc`, `Map`, `Etc`, `Quest`, `Reactor`, `Morph` 아래의 `_Canvas` root를 자동으로 찾습니다. 범위를 줄이려면 `--scope ui,item,skill`처럼 comma-separated scope를 지정합니다. `--include-video`를 켜면 query는 PNG 그대로 두고, 검색 대상에 내부 MCV/Wz_Video frame을 추가합니다. `--data-dir` 검색에서는 `--scope skill` 또는 `--scope video`가 `Data/Packs/Skill*.ms`를 video root로 추가합니다.
 검색은 투명 영역 crop, pHash 기반 perceptual hash, 색 평균, query/candidate 부분 영역(`left-half`, `right-half`, `top-half`, `bottom-half`, `center`) 비교를 함께 사용합니다. 큰 query에서는 작은 후보를 먼저 제외하는 size prefilter가 기본으로 켜져 있으며, 기준은 `--min-size-ratio 0.25`입니다. query가 강하게 확대/축소된 이미지라면 `--no-size-prefilter`로 끌 수 있습니다.
-`--out`을 지정하면 상위 후보 PNG를 함께 추출하고, `--manifest`를 지정하면 검색 결과 JSON을 저장합니다. `--data-dir` 검색은 OS 사용자 cache에 root별 fingerprint index를 gzip JSON으로 저장합니다. 기본 위치는 macOS `~/Library/Caches/wcr2/image-search`, Windows `%LOCALAPPDATA%\wcr2\image-search`, Linux `${XDG_CACHE_HOME:-~/.cache}/wcr2/image-search`입니다. cache key에는 input path와 alpha 설정만 포함되므로 같은 root의 다른 query에도 재사용됩니다. 다시 만들려면 `--rebuild-cache`, 완전히 끄려면 `--no-cache`를 사용합니다. cache hit 후에는 기본적으로 상위 후보 pool을 WZ에서 다시 열어 pixel-level score로 refine합니다. 속도만 우선할 때는 `--trust-cache --no-refine`을 사용할 수 있습니다.
+인터넷 캡처처럼 배경색이 포함된 reference 이미지는 `--trim-background`를 opt-in으로 사용할 수 있습니다. 이 옵션은 모서리 색상을 배경으로 추정하고, `--background-tolerance 24` 기준을 벗어난 bounding box만 query fingerprint로 사용합니다. 결과 JSON에는 원본 `QueryWidth`/`QueryHeight`와 실제 검색에 사용한 `QuerySearchWidth`/`QuerySearchHeight`, `QueryBackgroundTrimmed`, `QueryTrim*` 값이 함께 기록됩니다.
+`--include-video`는 ffmpeg로 MCV/Wz_Video를 PNG frame으로 임시 디코드해 fingerprint를 만듭니다. PATH의 `ffmpeg`를 기본으로 쓰며, 필요하면 `--ffmpeg <path>`를 지정합니다. `--max-video-frames <n>`은 비디오당 앞 n프레임만 검색하고, 기본값 `0`은 전체 프레임입니다. video frame 결과는 `Type: "video-frame"`, 실제 노드 경로 `VideoPath`, 0-based `FrameIndex`, `FrameCount`, `FrameDelayMs`, `FrameStartMs`를 포함합니다.
+
+`--out`을 지정하면 상위 후보 PNG를 함께 추출하고, `--manifest`를 지정하면 검색 결과 JSON을 저장합니다. video frame 결과도 `--out`으로 PNG를 내보냅니다. `--data-dir` 검색은 OS 사용자 cache에 root별 fingerprint index를 gzip JSON으로 저장합니다. 기본 위치는 macOS `~/Library/Caches/wcr2/image-search`, Windows `%LOCALAPPDATA%\wcr2\image-search`, Linux `${XDG_CACHE_HOME:-~/.cache}/wcr2/image-search`입니다. cache key에는 input path와 alpha 설정이 포함되며, video frame을 포함한 root는 `include-video`와 `max-video-frames`도 별도 key로 들어갑니다. 다시 만들려면 `--rebuild-cache`, 완전히 끄려면 `--no-cache`를 사용합니다. cache hit 후에는 기본적으로 상위 후보 pool을 WZ에서 다시 열어 pixel-level score로 refine합니다. `--probe`는 `--trust-cache --no-refine`의 shorthand이며 빠른 1차 후보 탐색용입니다. 기본 검색보다 정확도가 낮을 수 있으므로 최종 확정에는 refine가 켜진 기본 검색을 사용합니다.
+기존 호환 cache는 `.json.gz`로 유지됩니다. 검색 시 같은 해시의 `.bin.gz` sidecar가 있으면 먼저 읽고, 없으면 `.json.gz`를 읽은 뒤 binary sidecar를 생성합니다. sidecar 생성이 실패해도 JSON cache로 계속 동작합니다. binary sidecar는 속도용 파생 파일이라 삭제해도 되고, 다음 검색에서 다시 만들어집니다.
+`wcr2-agent serve` 또는 MCP 서버에서 `image.search`를 반복 실행하면 디스크 cache에서 읽은 image index를 프로세스 메모리에 LRU로 보관합니다. 이 메모리 cache는 프로세스 종료 또는 `cache.clear`/`wcr2.cache_clear` 때 사라지며, 디스크 cache 파일은 삭제하지 않습니다. 상태는 `cache.stats` 또는 `wcr2.cache_stats`의 `imageSearchIndexCount`, `imageSearchIndexHits`, `imageSearchIndexMisses`, `imageSearchIndexes`에서 확인합니다.
 `video list`는 `Wz_Video`/MCV 노드의 `FourCC`, width/height, frame count, alpha map flag를 조회합니다.
 `video export`는 기본적으로 원본 `.mcv`를 저장합니다. `--format frames`는 alpha map을 적용한 PNG 프레임을 만들고, `--format gif`는 확인용 GIF를 만듭니다. `frames`, `gif`, `both`는 ffmpeg가 필요하며, 실행 파일이 PATH에 없으면 `--ffmpeg <path>`를 지정합니다.
 export manifest의 각 파일 항목에는 `Bytes`와 `Sha256`이 포함됩니다.

@@ -87,7 +87,7 @@ namespace WzComparerR2.Cli
             Console.WriteLine("  wcr2 sound export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 sound export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 image list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]");
-            Console.WriteLine("  wcr2 image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--scope ui,item,skill,...] [--path <wz-path>] [--out <output-dir>] [--max-results <n>] [--min-score <0..1>] [--cache-dir <dir>] [--trust-cache] [--no-refine] [--json]");
+            Console.WriteLine("  wcr2 image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--scope ui,item,skill,...] [--path <wz-path>] [--out <output-dir>] [--max-results <n>] [--min-score <0..1>] [--cache-dir <dir>] [--trust-cache] [--no-refine] [--probe] [--trim-background] [--include-video] [--json]");
             Console.WriteLine("  wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             Console.WriteLine("  wcr2 video list <file-or-dir> [--path <wz-path>] [--max-results <n>] [--json]");
@@ -394,7 +394,7 @@ namespace WzComparerR2.Cli
             }
             else if (string.Equals(kind, "image", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine("  wcr2 image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--scope ui,item,skill,...] [--path <wz-path>] [--out <output-dir>] [--max-results <n>] [--min-score <0..1>] [--cache-dir <dir>] [--trust-cache] [--no-refine] [--json]");
+                Console.WriteLine("  wcr2 image search [<file-or-dir>] --query <png> [--data-dir <Data>] [--scope ui,item,skill,...] [--path <wz-path>] [--out <output-dir>] [--max-results <n>] [--min-score <0..1>] [--cache-dir <dir>] [--trust-cache] [--no-refine] [--probe] [--trim-background] [--include-video] [--json]");
                 Console.WriteLine("  wcr2 image export <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
                 Console.WriteLine("  wcr2 image export-all <file-or-dir> --path <wz-path> --out <output-dir> [--manifest <json>] [--json]");
             }
@@ -416,6 +416,12 @@ namespace WzComparerR2.Cli
                 Console.WriteLine("  --rebuild-cache        Ignore existing cache and rebuild fingerprints.");
                 Console.WriteLine("  --trust-cache          Skip source timestamp validation for faster cache reads.");
                 Console.WriteLine("  --no-refine            Return cache/index scores without reopening top candidates for pixel scoring.");
+                Console.WriteLine("  --probe                Fast first-pass search; shorthand for --trust-cache --no-refine.");
+                Console.WriteLine("  --trim-background      Trim a solid-ish border background from the query before scoring.");
+                Console.WriteLine("  --background-tolerance <n> RGB distance threshold for --trim-background; default 24.");
+                Console.WriteLine("  --include-video        Include internal MCV/Wz_Video frames in the searched index. Query remains PNG.");
+                Console.WriteLine("  --ffmpeg <path>        ffmpeg executable used to decode MCV/Wz_Video frames; default ffmpeg.");
+                Console.WriteLine("  --max-video-frames <n> Decode only first n frames per video for --include-video; default 0 means all.");
                 Console.WriteLine("  --refine-limit <n>     Number of cache/index candidates to refine; default max(50, max-results*8), capped at 250.");
                 Console.WriteLine("  --min-score <0..1>     Keep matches at or above this score; default 0.");
                 Console.WriteLine("  --min-alpha <0-255>    Alpha threshold used for transparent crop; default 16.");
@@ -439,6 +445,7 @@ namespace WzComparerR2.Cli
                 Console.WriteLine("  image export uses WzComparerR2's existing System.Drawing PNG path on Windows.");
                 Console.WriteLine("  On macOS/Linux, image export uses the CLI cross-platform PNG writer for common WZ texture formats.");
                 Console.WriteLine("  image search can auto-scan Data/*/_Canvas roots with --data-dir and stores compact fingerprints in the user cache.");
+                Console.WriteLine("  Use --include-video to search internal MCV/Wz_Video frames such as Skill_*.ms screen/video nodes.");
             }
         }
 

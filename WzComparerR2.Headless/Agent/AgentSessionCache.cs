@@ -2,21 +2,25 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using WzComparerR2.Headless.Media;
 using WzComparerR2.WzLib;
 
 namespace WzComparerR2.Headless.Agent
 {
-    internal sealed class AgentSessionCache : IDisposable
+    internal sealed class AgentSessionCache : IImageSearchCacheProvider, IDisposable
     {
         private const int DefaultMaxSkillSessions = 4;
         private const int DefaultMaxDomainRepositories = 8;
         private const int DefaultMaxWzContexts = 16;
+        private const int DefaultMaxImageSearchIndexes = 4;
         private readonly Dictionary<string, SkillSessionEntry> skillSessions =
             new Dictionary<string, SkillSessionEntry>(StringComparer.Ordinal);
         private readonly Dictionary<string, DomainRepositoryEntry> domainRepositories =
             new Dictionary<string, DomainRepositoryEntry>(StringComparer.Ordinal);
         private readonly Dictionary<string, WzContextEntry> wzContexts =
             new Dictionary<string, WzContextEntry>(StringComparer.Ordinal);
+        private readonly Dictionary<string, ImageSearchIndexEntry> imageSearchIndexes =
+            new Dictionary<string, ImageSearchIndexEntry>(StringComparer.Ordinal);
         private long skillSessionHits;
         private long skillSessionMisses;
         private long skillSessionEvictions;
@@ -26,9 +30,13 @@ namespace WzComparerR2.Headless.Agent
         private long wzContextHits;
         private long wzContextMisses;
         private long wzContextEvictions;
+        private long imageSearchIndexHits;
+        private long imageSearchIndexMisses;
+        private long imageSearchIndexEvictions;
         private int nextSkillSessionId;
         private int nextDomainRepositoryId;
         private int nextWzContextId;
+        private int nextImageSearchIndexId;
         private bool disposed;
 
         public AgentSkillSessionLease GetSkillSession(
@@ -145,6 +153,52 @@ namespace WzComparerR2.Headless.Agent
             return new AgentWzContextLease(entry.Context, "cache-miss", entry.Id);
         }
 
+        public bool TryReadValid(
+            string cacheDirectory,
+            string inputPath,
+            ImageSearchOptions options,
+            out ImageSearchCacheFileDto cache,
+            out string cachePath)
+        {
+            ThrowIfDisposed();
+
+            cachePath = ImageSearchCacheStore.GetCachePath(cacheDirectory, inputPath, options);
+            cache = null;
+            string key = NormalizePathValue(cachePath);
+            ImageSearchIndexEntry entry;
+            if (imageSearchIndexes.TryGetValue(key, out entry))
+            {
+                if (ImageSearchCacheStore.IsValid(entry.Cache, inputPath, options))
+                {
+                    imageSearchIndexHits++;
+                    entry.UseCount++;
+                    entry.LastUsedAt = DateTimeOffset.Now;
+                    cache = entry.Cache;
+                    return true;
+                }
+
+                imageSearchIndexes.Remove(key);
+            }
+
+            imageSearchIndexMisses++;
+            if (!ImageSearchCacheStore.TryReadValid(cacheDirectory, inputPath, options, out cache, out cachePath))
+            {
+                return false;
+            }
+
+            StoreImageSearchIndex(cachePath, cache);
+            return true;
+        }
+
+        public string Write(string cacheDirectory, ImageSearchCacheFileDto cache)
+        {
+            ThrowIfDisposed();
+
+            string cachePath = ImageSearchCacheStore.Write(cacheDirectory, cache);
+            StoreImageSearchIndex(cachePath, cache);
+            return cachePath;
+        }
+
         public AgentSessionCacheStatsDto GetStats()
         {
             return new AgentSessionCacheStatsDto
@@ -199,6 +253,25 @@ namespace WzComparerR2.Headless.Agent
                         CreatedAt = item.CreatedAt.ToString("o"),
                         LastUsedAt = item.LastUsedAt.ToString("o")
                     })
+                    .ToList(),
+                ImageSearchIndexCount = imageSearchIndexes.Count,
+                MaxImageSearchIndexes = DefaultMaxImageSearchIndexes,
+                ImageSearchIndexHits = imageSearchIndexHits,
+                ImageSearchIndexMisses = imageSearchIndexMisses,
+                ImageSearchIndexEvictions = imageSearchIndexEvictions,
+                ImageSearchIndexes = imageSearchIndexes.Values
+                    .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                    .Select(item => new AgentImageSearchIndexCacheEntryDto
+                    {
+                        Id = item.Id,
+                        InputPath = item.InputPath,
+                        CachePath = item.CachePath,
+                        Scope = item.Scope,
+                        ItemCount = item.ItemCount,
+                        UseCount = item.UseCount,
+                        CreatedAt = item.CreatedAt.ToString("o"),
+                        LastUsedAt = item.LastUsedAt.ToString("o")
+                    })
                     .ToList()
             };
         }
@@ -222,6 +295,8 @@ namespace WzComparerR2.Headless.Agent
                 entry.Context.Dispose();
             }
             wzContexts.Clear();
+
+            imageSearchIndexes.Clear();
         }
 
         public void Dispose()
@@ -278,6 +353,57 @@ namespace WzComparerR2.Headless.Agent
             wzContexts.Remove(oldest.Key);
             oldest.Context.Dispose();
             wzContextEvictions++;
+        }
+
+        private void StoreImageSearchIndex(string cachePath, ImageSearchCacheFileDto cache)
+        {
+            string key = NormalizePathValue(cachePath);
+            ImageSearchIndexEntry existing;
+            if (imageSearchIndexes.TryGetValue(key, out existing))
+            {
+                existing.Cache = cache;
+                existing.InputPath = NormalizePathValue(cache.InputPath);
+                existing.CachePath = key;
+                existing.Scope = cache.Scope;
+                existing.ItemCount = cache.Items == null ? 0 : cache.Items.Count;
+                existing.UseCount++;
+                existing.LastUsedAt = DateTimeOffset.Now;
+                return;
+            }
+
+            if (imageSearchIndexes.Count >= DefaultMaxImageSearchIndexes)
+            {
+                EvictLeastRecentlyUsedImageSearchIndex();
+            }
+
+            var entry = new ImageSearchIndexEntry
+            {
+                Id = "image-index-" + (++nextImageSearchIndexId),
+                Key = key,
+                InputPath = NormalizePathValue(cache.InputPath),
+                CachePath = key,
+                Scope = cache.Scope,
+                ItemCount = cache.Items == null ? 0 : cache.Items.Count,
+                Cache = cache,
+                UseCount = 1,
+                CreatedAt = DateTimeOffset.Now,
+                LastUsedAt = DateTimeOffset.Now
+            };
+            imageSearchIndexes.Add(key, entry);
+        }
+
+        private void EvictLeastRecentlyUsedImageSearchIndex()
+        {
+            ImageSearchIndexEntry oldest = imageSearchIndexes.Values
+                .OrderBy(item => item.LastUsedAt)
+                .FirstOrDefault();
+            if (oldest == null)
+            {
+                return;
+            }
+
+            imageSearchIndexes.Remove(oldest.Key);
+            imageSearchIndexEvictions++;
         }
 
         private static string BuildSkillSessionKey(string skillInput, ParsedArgs args, SkillSpriteExportOptions options)
@@ -408,6 +534,20 @@ namespace WzComparerR2.Headless.Agent
             public string Key { get; set; }
             public string InputPath { get; set; }
             public WzLoadContext Context { get; set; }
+            public int UseCount { get; set; }
+            public DateTimeOffset CreatedAt { get; set; }
+            public DateTimeOffset LastUsedAt { get; set; }
+        }
+
+        private sealed class ImageSearchIndexEntry
+        {
+            public string Id { get; set; }
+            public string Key { get; set; }
+            public string InputPath { get; set; }
+            public string CachePath { get; set; }
+            public string Scope { get; set; }
+            public int ItemCount { get; set; }
+            public ImageSearchCacheFileDto Cache { get; set; }
             public int UseCount { get; set; }
             public DateTimeOffset CreatedAt { get; set; }
             public DateTimeOffset LastUsedAt { get; set; }

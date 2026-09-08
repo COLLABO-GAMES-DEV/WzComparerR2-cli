@@ -87,6 +87,12 @@ namespace WzComparerR2.Headless.Agent
         public long WzContextMisses { get; set; }
         public long WzContextEvictions { get; set; }
         public List<AgentWzContextCacheEntryDto> WzContexts { get; set; }
+        public int ImageSearchIndexCount { get; set; }
+        public int MaxImageSearchIndexes { get; set; }
+        public long ImageSearchIndexHits { get; set; }
+        public long ImageSearchIndexMisses { get; set; }
+        public long ImageSearchIndexEvictions { get; set; }
+        public List<AgentImageSearchIndexCacheEntryDto> ImageSearchIndexes { get; set; }
     }
 
     public sealed class AgentSkillSessionCacheEntryDto
@@ -114,6 +120,18 @@ namespace WzComparerR2.Headless.Agent
     {
         public string Id { get; set; }
         public string InputPath { get; set; }
+        public int UseCount { get; set; }
+        public string CreatedAt { get; set; }
+        public string LastUsedAt { get; set; }
+    }
+
+    public sealed class AgentImageSearchIndexCacheEntryDto
+    {
+        public string Id { get; set; }
+        public string InputPath { get; set; }
+        public string CachePath { get; set; }
+        public string Scope { get; set; }
+        public int ItemCount { get; set; }
         public int UseCount { get; set; }
         public string CreatedAt { get; set; }
         public string LastUsedAt { get; set; }

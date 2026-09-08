@@ -187,6 +187,10 @@ manifest.json
       "scope": ["ui", "item", "skill", "effect"],
       "maxResults": 20,
       "refine": true,
+      "trimBackground": false,
+      "backgroundTolerance": 24,
+      "includeVideo": false,
+      "maxVideoFrames": 0,
       "exportTopResults": true
     },
     {
@@ -209,7 +213,13 @@ Windows: %LOCALAPPDATA%\wcr2\image-search
 Linux: ${XDG_CACHE_HOME:-~/.cache}/wcr2/image-search
 ```
 
-검색이 느리면 `--scope` 또는 job `scope`를 좁힌다. 확대/축소된 reference 이미지라면 `noSizePrefilter`를 고려한다. 빠른 재검색만 필요하면 `trustCache`와 `noRefine`을 쓴다.
+cache는 호환용 `.json.gz`와 속도용 `.bin.gz` sidecar를 같은 디렉터리에 둔다. 기존 JSON cache만 있어도 첫 검색에서 binary sidecar를 만든다. sidecar는 파생 파일이므로 삭제해도 되고, `--rebuild-cache`/`rebuildCache`는 JSON과 sidecar를 다시 만든다.
+
+MCV/Wz_Video 내부 프레임도 검색 대상에 넣어야 하면 `"includeVideo": true`를 켠다. query는 여전히 PNG 파일이어야 하며, 이 옵션은 `Data/Packs/Skill*.ms` 안의 video frame을 디코드해 image index에 포함한다. 결과는 `Type: "video-frame"`, `VideoPath`, `FrameIndex`, `FrameCount`, `FrameDelayMs`, `FrameStartMs`를 가진다. `maxVideoFrames`는 비디오당 앞 n프레임만 디코드하며, `0`은 전체 프레임이다. `ffmpeg`가 PATH에 없으면 `"ffmpeg": "/path/to/ffmpeg"`를 지정한다.
+
+검색이 느리면 `--scope` 또는 job `scope`를 좁힌다. 확대/축소된 reference 이미지라면 `noSizePrefilter`를 고려한다. 배경이 붙은 인터넷 reference 이미지라면 `"trimBackground": true`를 사용하고, 경계가 과하게 잘리거나 덜 잘리면 `"backgroundTolerance": 16..48` 범위에서 조정한다. 빠른 1차 후보 탐색만 필요하면 job에 `"probe": true`를 넣는다. `probe`는 cache를 신뢰하고 pixel refine를 생략하므로 최종 확정에는 `"refine": true`인 기본 검색을 다시 실행한다.
+
+반복 검색은 `wcr2-agent serve --stdio` 또는 MCP 서버에서 실행하는 편이 더 빠르다. agent 프로세스가 디스크 image search cache에서 읽은 root index를 메모리에 유지하므로, 같은 scope/root의 두 번째 검색부터 JSON gzip cache를 다시 역직렬화하는 비용을 줄인다. 현재 상태는 `cache.stats`/`wcr2.cache_stats`의 `imageSearchIndexCount`, `imageSearchIndexHits`, `imageSearchIndexMisses`, `imageSearchIndexes`에서 확인한다.
 
 ## 8. 아이템과 맵
 

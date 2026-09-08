@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using WzComparerR2.WzLib;
 
 namespace WzComparerR2.Headless
@@ -61,6 +62,18 @@ namespace WzComparerR2.Headless
 
     internal static class VideoExporter
     {
+        internal sealed class DecodedVideoFrameFile
+        {
+            public string Path { get; set; }
+            public int FrameIndex { get; set; }
+            public int FrameCount { get; set; }
+            public int Width { get; set; }
+            public int Height { get; set; }
+            public double? DelayMs { get; set; }
+            public double? StartMs { get; set; }
+            public string Format { get; set; }
+        }
+
         public static List<ExtractedFileDto> Export(Wz_Node node, string outputDirectory, bool recursive, VideoExportOptions options)
         {
             string fullOutputDirectory = Path.GetFullPath(outputDirectory);
@@ -93,6 +106,59 @@ namespace WzComparerR2.Headless
             var files = new List<ExtractedFileDto>();
             ExportMcv(node, outputDirectory, root, files);
             return files[0];
+        }
+
+        public static List<DecodedVideoFrameFile> DecodeFrameFiles(Wz_Node node, string outputDirectory, string ffmpegPath, int maxFrames)
+        {
+            if (node == null || !(node.Value is Wz_Video))
+            {
+                return new List<DecodedVideoFrameFile>();
+            }
+
+            string fullOutputDirectory = Path.GetFullPath(outputDirectory);
+            Directory.CreateDirectory(fullOutputDirectory);
+
+            byte[] data = CopyVideoData(node);
+            var header = ((Wz_Video)node.Value).ReadVideoFileHeader();
+            int frameLimit = maxFrames <= 0 ? header.FrameCount : Math.Min(maxFrames, header.FrameCount);
+            if (frameLimit <= 0)
+            {
+                return new List<DecodedVideoFrameFile>();
+            }
+
+            string workDirectory = Path.Combine(fullOutputDirectory, ".mcv-work");
+            Directory.CreateDirectory(workDirectory);
+            try
+            {
+                string baseIvf = Path.Combine(workDirectory, "base.ivf");
+                WriteIvf(baseIvf, header, data, frameLimit, alpha: false);
+
+                bool hasAlpha = (header.DataFlag & McvDataFlags.AlphaMap) != 0
+                    && header.Frames.Any(frame => frame.AlphaDataOffset >= 0 && frame.AlphaDataCount > 0);
+                string alphaIvf = null;
+                if (hasAlpha)
+                {
+                    alphaIvf = Path.Combine(workDirectory, "alpha.ivf");
+                    WriteIvf(alphaIvf, header, data, frameLimit, alpha: true);
+                }
+
+                DecodeFrames(baseIvf, alphaIvf, hasAlpha, fullOutputDirectory, string.IsNullOrWhiteSpace(ffmpegPath) ? "ffmpeg" : ffmpegPath);
+                return GetDecodedFrameFiles(fullOutputDirectory, header, frameLimit);
+            }
+            finally
+            {
+                try
+                {
+                    if (Directory.Exists(workDirectory))
+                    {
+                        Directory.Delete(workDirectory, recursive: true);
+                    }
+                }
+                catch
+                {
+                    // Search/export callers can safely ignore temporary work directory cleanup failures.
+                }
+            }
         }
 
         private static void ExportVideoNode(Wz_Node node, string outputDirectory, Wz_Node root, VideoExportOptions options, List<ExtractedFileDto> files)
@@ -322,6 +388,48 @@ namespace WzComparerR2.Headless
             {
                 files.Add(CreateFileDto(node, node, path, "png"));
             }
+        }
+
+        private static List<DecodedVideoFrameFile> GetDecodedFrameFiles(string outputDirectory, McvHeader header, int frameLimit)
+        {
+            var result = new List<DecodedVideoFrameFile>();
+            string[] paths = Directory.EnumerateFiles(outputDirectory, "frame-*.png")
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            long startNanoseconds = 0;
+            int count = Math.Min(frameLimit, paths.Length);
+            string format = FormatFourCC(header.FourCC);
+            for (int i = 0; i < count; i++)
+            {
+                McvFrameInfo frame = header.Frames[i];
+                result.Add(new DecodedVideoFrameFile
+                {
+                    Path = paths[i],
+                    FrameIndex = i,
+                    FrameCount = header.FrameCount,
+                    Width = header.Width,
+                    Height = header.Height,
+                    DelayMs = ToMilliseconds(frame.DelayInNanoseconds),
+                    StartMs = startNanoseconds / 1000000.0,
+                    Format = format
+                });
+                if (frame.DelayInNanoseconds > 0)
+                {
+                    startNanoseconds += frame.DelayInNanoseconds;
+                }
+            }
+
+            return result;
+        }
+
+        private static double? ToMilliseconds(long nanoseconds)
+        {
+            return nanoseconds > 0 ? nanoseconds / 1000000.0 : (double?)null;
+        }
+
+        private static string FormatFourCC(uint fourCC)
+        {
+            return Encoding.ASCII.GetString(BitConverter.GetBytes(fourCC)).TrimEnd('\0');
         }
 
         private static string FirstNonEmptyLine(params string[] values)

@@ -9,6 +9,42 @@ using System.Text.Json;
 
 namespace WzComparerR2.Headless.Media
 {
+    public interface IImageSearchCacheProvider
+    {
+        bool TryReadValid(
+            string cacheDirectory,
+            string inputPath,
+            ImageSearchOptions options,
+            out ImageSearchCacheFileDto cache,
+            out string cachePath);
+
+        string Write(string cacheDirectory, ImageSearchCacheFileDto cache);
+    }
+
+    public sealed class FileImageSearchCacheProvider : IImageSearchCacheProvider
+    {
+        public static readonly FileImageSearchCacheProvider Instance = new FileImageSearchCacheProvider();
+
+        private FileImageSearchCacheProvider()
+        {
+        }
+
+        public bool TryReadValid(
+            string cacheDirectory,
+            string inputPath,
+            ImageSearchOptions options,
+            out ImageSearchCacheFileDto cache,
+            out string cachePath)
+        {
+            return ImageSearchCacheStore.TryReadValid(cacheDirectory, inputPath, options, out cache, out cachePath);
+        }
+
+        public string Write(string cacheDirectory, ImageSearchCacheFileDto cache)
+        {
+            return ImageSearchCacheStore.Write(cacheDirectory, cache);
+        }
+    }
+
     public sealed class ImageSearchCacheFileDto
     {
         public int Version { get; set; }
@@ -17,6 +53,8 @@ namespace WzComparerR2.Headless.Media
         public string InputPath { get; set; }
         public string RootPath { get; set; }
         public string Scope { get; set; }
+        public bool IncludeVideo { get; set; }
+        public int MaxVideoFrames { get; set; }
         public DateTime CreatedUtc { get; set; }
         public ImageSearchInputStampDto InputStamp { get; set; }
         public List<ImageSearchIndexItemDto> Items { get; set; }
@@ -36,6 +74,11 @@ namespace WzComparerR2.Headless.Media
         public string Path { get; set; }
         public string Type { get; set; }
         public int? Page { get; set; }
+        public string VideoPath { get; set; }
+        public int? FrameIndex { get; set; }
+        public int? FrameCount { get; set; }
+        public double? FrameDelayMs { get; set; }
+        public double? FrameStartMs { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
         public string Format { get; set; }
@@ -89,15 +132,21 @@ namespace WzComparerR2.Headless.Media
 
         public static string GetCachePath(string cacheDirectory, string inputPath, ImageSearchOptions options)
         {
-            return GetCachePath(cacheDirectory, inputPath, options.MinAlpha);
+            return GetCachePath(cacheDirectory, inputPath, options.MinAlpha, options.IncludeVideo, options.MaxVideoFrames);
         }
 
-        private static string GetCachePath(string cacheDirectory, string inputPath, int minAlpha)
+        private static string GetCachePath(string cacheDirectory, string inputPath, int minAlpha, bool includeVideo, int maxVideoFrames)
         {
             string fullInputPath = Path.GetFullPath(inputPath);
             string key = fullInputPath.ToLowerInvariant()
                 + "\n" + Method
                 + "\nmin-alpha=" + minAlpha.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (includeVideo)
+            {
+                key += "\ninclude-video=1"
+                    + "\nmax-video-frames=" + maxVideoFrames.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
             string hash = ComputeSha256Hex(Encoding.UTF8.GetBytes(key));
             return Path.Combine(Path.GetFullPath(cacheDirectory), hash + ".json.gz");
         }
@@ -106,6 +155,12 @@ namespace WzComparerR2.Headless.Media
         {
             cachePath = GetCachePath(cacheDirectory, inputPath, options);
             cache = null;
+            string binaryCachePath = ImageSearchBinaryCacheStore.GetCachePath(cachePath);
+            if (ImageSearchBinaryCacheStore.TryReadValid(binaryCachePath, inputPath, options, out cache))
+            {
+                return true;
+            }
+
             if (!File.Exists(cachePath))
             {
                 return false;
@@ -125,29 +180,43 @@ namespace WzComparerR2.Headless.Media
                 return false;
             }
 
-            if (loaded == null
-                || loaded.Version != CurrentVersion
-                || !string.Equals(loaded.Method, Method, StringComparison.Ordinal)
-                || loaded.MinAlpha != options.MinAlpha
-                || loaded.InputStamp == null
-                || (!options.TrustCache && !StampsEqual(loaded.InputStamp, CreateStamp(inputPath))))
+            if (!IsValid(loaded, inputPath, options))
             {
                 return false;
             }
 
             cache = loaded;
+            ImageSearchBinaryCacheStore.TryWrite(binaryCachePath, loaded);
             return true;
+        }
+
+        public static bool IsValid(ImageSearchCacheFileDto cache, string inputPath, ImageSearchOptions options)
+        {
+            if (cache == null
+                || options == null
+                || cache.Version != CurrentVersion
+                || !string.Equals(cache.Method, Method, StringComparison.Ordinal)
+                || cache.MinAlpha != options.MinAlpha
+                || cache.IncludeVideo != options.IncludeVideo
+                || (options.IncludeVideo && cache.MaxVideoFrames != options.MaxVideoFrames)
+                || cache.InputStamp == null)
+            {
+                return false;
+            }
+
+            return options.TrustCache || StampsEqual(cache.InputStamp, CreateStamp(inputPath));
         }
 
         public static string Write(string cacheDirectory, ImageSearchCacheFileDto cache)
         {
-            string cachePath = GetCachePath(cacheDirectory, cache.InputPath, cache.MinAlpha);
+            string cachePath = GetCachePath(cacheDirectory, cache.InputPath, cache.MinAlpha, cache.IncludeVideo, cache.MaxVideoFrames);
             Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
             using (var stream = File.Create(cachePath))
             using (var gzip = new GZipStream(stream, CompressionLevel.Optimal))
             {
                 JsonSerializer.Serialize(gzip, cache, JsonOptions);
             }
+            ImageSearchBinaryCacheStore.TryWrite(ImageSearchBinaryCacheStore.GetCachePath(cachePath), cache);
             return cachePath;
         }
 
