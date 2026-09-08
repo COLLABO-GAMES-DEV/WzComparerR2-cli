@@ -516,11 +516,11 @@ DOTNET_ROLL_FORWARD=Major dotnet WzComparerR2.Cli.Tests/bin/Release/net8.0/wcr2-
 - [x] gzip JSON cache와 호환되는 `.bin.gz` sidecar 추가: 기존 `.json.gz`를 유지하면서 cache hit read/deserialize 비용을 줄인다. sidecar가 없으면 JSON을 읽고 자동 생성하며, 실패 시 JSON cache로 fallback한다.
 - [x] 인터넷 reference 이미지용 opt-in background trim 추가: `--trim-background`/agent `trimBackground`가 모서리 배경색을 제거한 query fingerprint를 사용한다. 원본 query 크기와 실제 검색 query 크기는 manifest에 함께 기록한다.
 - [x] 내부 MCV/Wz_Video frame 검색 추가: query는 PNG로 유지하고, `--include-video`/agent `includeVideo`를 켰을 때 `Data/Packs/Skill*.ms` video frame을 image index에 포함한다. 결과에는 `Type=video-frame`, `VideoPath`, `FrameIndex`, `FrameCount`, `FrameDelayMs`, `FrameStartMs`가 남는다.
+- [x] pHash/dHash/edge hash 기반 coarse candidate prefilter 추가: cache v3 fingerprint에 dHash/edgeHash를 저장하고 cache-hit scoring에서 구조 점수 상한으로 color/shape 계산을 생략한다. `HashDistance`, `DHashDistance`, `EdgeHashDistance`, `StructuralScore`, `CoarsePrefilteredImageCount`를 manifest에 남긴다. mob query 기준 cache-hit refine 4.74초, probe 1.90초. 최종 refine top 10은 기존 baseline과 동일했고 tail 후보 일부는 v3 구조 점수 영향으로 바뀌었다.
 
 남은 후보:
 
 - [ ] cache hit scoring 전용 width/height/aspect/alpha bucket index 추가
-- [ ] pHash/dHash/edge hash 기반 coarse candidate prefilter 추가
 - [ ] 인터넷 reference 이미지용 scale refine 추가
 - [ ] gzip JSON cache를 완전한 binary 또는 SQLite primary index로 교체
 

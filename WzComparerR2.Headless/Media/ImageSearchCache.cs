@@ -90,6 +90,8 @@ namespace WzComparerR2.Headless.Media
     {
         public string Region { get; set; }
         public ulong Hash { get; set; }
+        public ulong DHash { get; set; }
+        public ulong EdgeHash { get; set; }
         public double AverageR { get; set; }
         public double AverageG { get; set; }
         public double AverageB { get; set; }
@@ -99,8 +101,8 @@ namespace WzComparerR2.Headless.Media
 
     public static class ImageSearchCacheStore
     {
-        public const int CurrentVersion = 2;
-        public const string Method = "phash-alpha-crop-region-color-cache-v2";
+        public const int CurrentVersion = 3;
+        public const string Method = "phash-dhash-edge-alpha-crop-region-color-cache-v3";
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {

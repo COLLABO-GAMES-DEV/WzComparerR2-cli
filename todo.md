@@ -230,6 +230,7 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - [x] 2026-09-08 image search binary sidecar cache: 기존 `.json.gz` cache를 유지하면서 같은 hash의 `.bin.gz`를 생성/우선 읽기 한다. mob query 기준 binary hit 후 probe 약 1.81초, refine 약 5.72초, 기존 top 30 diff 없음.
   - [x] 2026-09-08 image search background trim: `--trim-background`/agent `trimBackground`로 모서리 기반 배경 제거 query를 사용한다. 흰 배경을 붙인 mob query에서 기본 검색 1순위 `8610004.img\attack2\info\hit\3`, trim 검색 1순위 `8880725.img\stand\8`로 목표 계열 복구 확인.
   - [x] 2026-09-08 image search internal video frame target: query는 PNG로 유지하고, `--include-video`/agent `includeVideo`가 내부 MCV/Wz_Video frame을 검색 대상으로 포함한다. 직접 `5241503 screen2/video` smoke에서 `Type=video-frame`, `FrameIndex=0`, score 1.0, `--out` PNG 추출 확인.
+  - [x] 2026-09-09 image search coarse hash v3: cache fingerprint에 dHash/edgeHash를 추가하고 구조 점수 상한으로 cache-hit 후보를 coarse prefilter한다. 결과 JSON에는 `StructuralScore`, `DHashDistance`, `EdgeHashDistance`, `CoarsePrefilteredImageCount`가 포함된다. mob query 기준 cache-hit refine 4.74초, probe 1.90초, refine top 10 baseline 동일.
   - 2026-09-07 검증: `1788776940228-jmgl86.png`는 `--data-dir ... --scope ui`로 `UIWindowEvent5.img\2606UltimaStory\enterUI\back`를 1순위로 찾았다. 단, query는 여러 레이어가 합성된 화면이라 단일 PNG는 배경 계층만 일치한다. root index 생성은 약 2분 23초, cache hit+refine은 약 3.6초, `--trust-cache --no-refine`은 약 1.5초였다.
 - [x] macOS PNG 직접 저장 가능성을 별도 조사한다.
   - 코어 로직 변경 최소화를 우선하고, CLI 전용 PNG writer로 `ARGB4444`, `ARGB8888`, `ARGB1555`, `RGB565`, `DXT3`, `DXT5`, `A8`, `RGBA1010102`, `BC7`를 우선 지원한다.

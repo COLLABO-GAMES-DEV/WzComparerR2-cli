@@ -8,7 +8,7 @@ namespace WzComparerR2.Headless.Media
 {
     internal static class ImageSearchBinaryCacheStore
     {
-        private const int BinaryCacheVersion = 2;
+        private const int BinaryCacheVersion = 3;
         private const int MaxBinaryItemCount = 10000000;
         private const int MaxBinaryFingerprintCount = 64;
         private const string BinaryCacheMagic = "WCR2ISB";
@@ -258,6 +258,8 @@ namespace WzComparerR2.Headless.Media
             {
                 WriteNullableString(writer, fingerprint.Region);
                 writer.Write(fingerprint.Hash);
+                writer.Write(fingerprint.DHash);
+                writer.Write(fingerprint.EdgeHash);
                 writer.Write(fingerprint.AverageR);
                 writer.Write(fingerprint.AverageG);
                 writer.Write(fingerprint.AverageB);
@@ -281,6 +283,8 @@ namespace WzComparerR2.Headless.Media
                 {
                     Region = ReadNullableString(reader),
                     Hash = reader.ReadUInt64(),
+                    DHash = reader.ReadUInt64(),
+                    EdgeHash = reader.ReadUInt64(),
                     AverageR = reader.ReadDouble(),
                     AverageG = reader.ReadDouble(),
                     AverageB = reader.ReadDouble(),

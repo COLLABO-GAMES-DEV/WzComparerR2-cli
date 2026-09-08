@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Numerics;
 using System.Security.Cryptography;
 using WzComparerR2.Headless;
 using WzComparerR2.Headless.Wz;
@@ -72,6 +73,7 @@ namespace WzComparerR2.Headless.Media
         public int SkippedVideoFrameCount { get; set; }
         public int SkippedImageCount { get; set; }
         public int PrefilteredImageCount { get; set; }
+        public int CoarsePrefilteredImageCount { get; set; }
         public int Count { get { return this.Results == null ? 0 : this.Results.Count; } }
         public string OutputDirectory { get; set; }
         public string ManifestPath { get; set; }
@@ -92,6 +94,7 @@ namespace WzComparerR2.Headless.Media
         public int ScannedImageCount { get; set; }
         public int SkippedImageCount { get; set; }
         public int PrefilteredImageCount { get; set; }
+        public int CoarsePrefilteredImageCount { get; set; }
         public string Error { get; set; }
     }
 
@@ -104,7 +107,10 @@ namespace WzComparerR2.Headless.Media
         public double PixelScore { get; set; }
         public double ColorScore { get; set; }
         public double ShapeScore { get; set; }
+        public double StructuralScore { get; set; }
         public int HashDistance { get; set; }
+        public int DHashDistance { get; set; }
+        public int EdgeHashDistance { get; set; }
         public string QueryRegion { get; set; }
         public string MatchedRegion { get; set; }
         public string ParentPath { get; set; }
@@ -135,9 +141,12 @@ namespace WzComparerR2.Headless.Media
     public static class ImageSimilaritySearcher
     {
         private const string FullScoreMethod = "phash-alpha-crop-region-pixel-color-v2";
-        private const string CachedScoreMethod = "phash-alpha-crop-region-color-cache-v2";
+        private const string CachedScoreMethod = "phash-dhash-edge-alpha-crop-region-color-cache-v3";
         private const int HashSize = 32;
         private const int LowFrequencySize = 8;
+        private const int DHashWidth = 9;
+        private const int DHashHeight = 8;
+        private const int EdgeHashSize = 8;
         private static readonly double[,] CosineTable = CreateCosineTable();
 
         public static ImageSearchResultDto Search(string inputPath, Wz_Node root, ImageSearchOptions options)
@@ -1029,6 +1038,12 @@ namespace WzComparerR2.Headless.Media
                     result.ScannedVideoFrameCount++;
                 }
                 rootDto.ScannedImageCount++;
+                if (score.CoarseFiltered)
+                {
+                    result.CoarsePrefilteredImageCount++;
+                    rootDto.CoarsePrefilteredImageCount++;
+                    continue;
+                }
                 if (score.Score < options.MinScore)
                 {
                     continue;
@@ -1097,7 +1112,10 @@ namespace WzComparerR2.Headless.Media
                 PixelScore = Round(score.PixelScore),
                 ColorScore = Round(score.ColorScore),
                 ShapeScore = Round(score.ShapeScore),
+                StructuralScore = Round(score.StructuralScore),
                 HashDistance = score.HashDistance,
+                DHashDistance = score.DHashDistance,
+                EdgeHashDistance = score.EdgeHashDistance,
                 QueryRegion = score.QueryRegion,
                 MatchedRegion = score.Region,
                 ParentPath = GetParentPath(node.FullPath),
@@ -1127,7 +1145,10 @@ namespace WzComparerR2.Headless.Media
                 PixelScore = Round(score.PixelScore),
                 ColorScore = Round(score.ColorScore),
                 ShapeScore = Round(score.ShapeScore),
+                StructuralScore = Round(score.StructuralScore),
                 HashDistance = score.HashDistance,
+                DHashDistance = score.DHashDistance,
+                EdgeHashDistance = score.EdgeHashDistance,
                 QueryRegion = score.QueryRegion,
                 MatchedRegion = score.Region,
                 ParentPath = string.IsNullOrEmpty(item.VideoPath) ? GetParentPath(item.Path) : item.VideoPath,
@@ -1171,7 +1192,10 @@ namespace WzComparerR2.Headless.Media
                 PixelScore = Round(score.PixelScore),
                 ColorScore = Round(score.ColorScore),
                 ShapeScore = Round(score.ShapeScore),
+                StructuralScore = Round(score.StructuralScore),
                 HashDistance = score.HashDistance,
+                DHashDistance = score.DHashDistance,
+                EdgeHashDistance = score.EdgeHashDistance,
                 QueryRegion = score.QueryRegion,
                 MatchedRegion = score.Region,
                 ParentPath = videoNode.FullPath,
@@ -1238,6 +1262,8 @@ namespace WzComparerR2.Headless.Media
             {
                 Region = fingerprint.Region,
                 Hash = fingerprint.Hash,
+                DHash = fingerprint.DHash,
+                EdgeHash = fingerprint.EdgeHash,
                 AverageR = fingerprint.AverageR,
                 AverageG = fingerprint.AverageG,
                 AverageB = fingerprint.AverageB,
@@ -1439,7 +1465,10 @@ namespace WzComparerR2.Headless.Media
             match.PixelScore = Round(score.PixelScore);
             match.ColorScore = Round(score.ColorScore);
             match.ShapeScore = Round(score.ShapeScore);
+            match.StructuralScore = Round(score.StructuralScore);
             match.HashDistance = score.HashDistance;
+            match.DHashDistance = score.DHashDistance;
+            match.EdgeHashDistance = score.EdgeHashDistance;
             match.QueryRegion = score.QueryRegion;
             match.MatchedRegion = score.Region;
             match.Refined = refined;
@@ -1673,7 +1702,12 @@ namespace WzComparerR2.Headless.Media
                 foreach (ImageFingerprint variant in candidateVariants)
                 {
                     int distance = HammingDistance(query.Hash ^ variant.Hash);
-                    double perceptualScore = 1.0 - distance / 63.0;
+                    int dHashDistance = HammingDistance(query.DHash ^ variant.DHash);
+                    int edgeHashDistance = HammingDistance(query.EdgeHash ^ variant.EdgeHash);
+                    double perceptualScore = HashSimilarity(distance, 63);
+                    double dHashScore = HashSimilarity(dHashDistance, 64);
+                    double edgeHashScore = HashSimilarity(edgeHashDistance, 64);
+                    double structuralScore = StructuralSimilarity(perceptualScore, dHashScore, edgeHashScore);
                     double pixelScore = PixelSimilarity(query, variant);
                     double colorScore = ColorSimilarity(query, variant);
                     double shapeScore = ShapeSimilarity(query, variant);
@@ -1686,7 +1720,10 @@ namespace WzComparerR2.Headless.Media
                         PixelScore = Clamp01(pixelScore),
                         ColorScore = Clamp01(colorScore),
                         ShapeScore = Clamp01(shapeScore),
+                        StructuralScore = Clamp01(structuralScore),
                         HashDistance = distance,
+                        DHashDistance = dHashDistance,
+                        EdgeHashDistance = edgeHashDistance,
                         QueryRegion = query.Region,
                         Region = variant.Region
                     };
@@ -1698,7 +1735,7 @@ namespace WzComparerR2.Headless.Media
                 }
             }
 
-            return best ?? new ImageSearchScore { Region = "none", HashDistance = 64 };
+            return best ?? CreateEmptyScore(false);
         }
 
         private static ImageSearchScore ScoreCached(
@@ -1709,24 +1746,39 @@ namespace WzComparerR2.Headless.Media
             ImageSearchScore best = null;
             if (variants == null)
             {
-                return new ImageSearchScore { Region = "none", HashDistance = 64 };
+                return CreateEmptyScore(false);
             }
 
+            bool sawVariant = false;
+            bool evaluated = false;
             foreach (ImageFingerprint query in queryVariants)
             {
                 foreach (ImageSearchFingerprintDto variant in variants)
                 {
+                    sawVariant = true;
                     int distance = HammingDistance(query.Hash ^ variant.Hash);
-                    double perceptualScore = 1.0 - distance / 63.0;
-                    double upperBound = perceptualScore * 0.72 + 0.28;
+                    double perceptualScore = HashSimilarity(distance, 63);
+                    double pHashOnlyUpperBound = (perceptualScore * 0.80 + 0.20) * 0.72 + 0.28;
+                    if (pHashOnlyUpperBound < scoreFloor || (best != null && pHashOnlyUpperBound < best.Score))
+                    {
+                        continue;
+                    }
+
+                    int dHashDistance = HammingDistance(query.DHash ^ variant.DHash);
+                    int edgeHashDistance = HammingDistance(query.EdgeHash ^ variant.EdgeHash);
+                    double dHashScore = HashSimilarity(dHashDistance, 64);
+                    double edgeHashScore = HashSimilarity(edgeHashDistance, 64);
+                    double structuralScore = StructuralSimilarity(perceptualScore, dHashScore, edgeHashScore);
+                    double upperBound = structuralScore * 0.72 + 0.28;
                     if (upperBound < scoreFloor || (best != null && upperBound < best.Score))
                     {
                         continue;
                     }
 
+                    evaluated = true;
                     double colorScore = ColorSimilarity(query.AverageR, query.AverageG, query.AverageB, variant.AverageR, variant.AverageG, variant.AverageB);
                     double shapeScore = ShapeSimilarity(query.AspectRatio, query.AlphaCoverage, variant.AspectRatio, variant.AlphaCoverage);
-                    double score = perceptualScore * 0.72 + colorScore * 0.20 + shapeScore * 0.08;
+                    double score = structuralScore * 0.72 + colorScore * 0.20 + shapeScore * 0.08;
 
                     var current = new ImageSearchScore
                     {
@@ -1735,7 +1787,10 @@ namespace WzComparerR2.Headless.Media
                         PixelScore = 0,
                         ColorScore = Clamp01(colorScore),
                         ShapeScore = Clamp01(shapeScore),
+                        StructuralScore = Clamp01(structuralScore),
                         HashDistance = distance,
+                        DHashDistance = dHashDistance,
+                        EdgeHashDistance = edgeHashDistance,
                         QueryRegion = query.Region,
                         Region = variant.Region
                     };
@@ -1747,7 +1802,19 @@ namespace WzComparerR2.Headless.Media
                 }
             }
 
-            return best ?? new ImageSearchScore { Region = "none", HashDistance = 64 };
+            return best ?? CreateEmptyScore(sawVariant && !evaluated);
+        }
+
+        private static ImageSearchScore CreateEmptyScore(bool coarseFiltered)
+        {
+            return new ImageSearchScore
+            {
+                Region = "none",
+                HashDistance = 64,
+                DHashDistance = 64,
+                EdgeHashDistance = 64,
+                CoarseFiltered = coarseFiltered
+            };
         }
 
         private static double ColorSimilarity(ImageFingerprint left, ImageFingerprint right)
@@ -1787,6 +1854,11 @@ namespace WzComparerR2.Headless.Media
             return Clamp01(aspectSimilarity * 0.75 + coverageSimilarity * 0.25);
         }
 
+        private static double StructuralSimilarity(double perceptualScore, double dHashScore, double edgeHashScore)
+        {
+            return Clamp01(perceptualScore * 0.80 + dHashScore * 0.12 + edgeHashScore * 0.08);
+        }
+
         private static string GetInnermostMessage(Exception ex)
         {
             Exception current = ex;
@@ -1810,20 +1882,39 @@ namespace WzComparerR2.Headless.Media
             return value;
         }
 
-        private static int HammingDistance(ulong value)
+        private static double HashSimilarity(int distance, int bitCount)
         {
-            int count = 0;
-            while (value != 0)
+            if (bitCount <= 0)
             {
-                value &= value - 1;
-                count++;
+                return 0;
             }
 
-            return count;
+            return Clamp01(1.0 - distance / (double)bitCount);
+        }
+
+        private static int HammingDistance(ulong value)
+        {
+            return BitOperations.PopCount(value);
         }
 
         private static ulong ComputePHash(double[] grayscale)
         {
+            var horizontal = new double[LowFrequencySize, HashSize];
+            for (int u = 0; u < LowFrequencySize; u++)
+            {
+                for (int y = 0; y < HashSize; y++)
+                {
+                    double sum = 0;
+                    int row = y * HashSize;
+                    for (int x = 0; x < HashSize; x++)
+                    {
+                        sum += grayscale[row + x] * CosineTable[u, x];
+                    }
+
+                    horizontal[u, y] = sum;
+                }
+            }
+
             double[] coefficients = new double[LowFrequencySize * LowFrequencySize];
             int index = 0;
             for (int v = 0; v < LowFrequencySize; v++)
@@ -1833,11 +1924,7 @@ namespace WzComparerR2.Headless.Media
                     double sum = 0;
                     for (int y = 0; y < HashSize; y++)
                     {
-                        int row = y * HashSize;
-                        for (int x = 0; x < HashSize; x++)
-                        {
-                            sum += grayscale[row + x] * CosineTable[u, x] * CosineTable[v, y];
-                        }
+                        sum += horizontal[u, y] * CosineTable[v, y];
                     }
 
                     coefficients[index++] = sum * DctScale(u) * DctScale(v);
@@ -1857,6 +1944,83 @@ namespace WzComparerR2.Headless.Media
             }
 
             return hash;
+        }
+
+        private static ulong ComputeDHash(RgbaImage image, ImageRect rect)
+        {
+            ulong hash = 0;
+            int bit = 0;
+            for (int y = 0; y < DHashHeight; y++)
+            {
+                double sourceY = rect.Y + (y + 0.5) * rect.Height / DHashHeight - 0.5;
+                double previous = image.SampleLumaOnWhite(rect.X + 0.5 * rect.Width / DHashWidth - 0.5, sourceY);
+                for (int x = 1; x < DHashWidth; x++)
+                {
+                    double sourceX = rect.X + (x + 0.5) * rect.Width / DHashWidth - 0.5;
+                    double current = image.SampleLumaOnWhite(sourceX, sourceY);
+                    if (previous > current)
+                    {
+                        hash |= 1UL << bit;
+                    }
+
+                    previous = current;
+                    bit++;
+                }
+            }
+
+            return hash;
+        }
+
+        private static ulong ComputeEdgeHash(double[] grayscale)
+        {
+            var magnitudes = new double[EdgeHashSize * EdgeHashSize];
+            int block = Math.Max(1, HashSize / EdgeHashSize);
+            for (int y = 0; y < EdgeHashSize; y++)
+            {
+                int centerY = ClampIndex(y * block + block / 2);
+                for (int x = 0; x < EdgeHashSize; x++)
+                {
+                    int centerX = ClampIndex(x * block + block / 2);
+                    double left = grayscale[centerY * HashSize + centerX - 1];
+                    double right = grayscale[centerY * HashSize + centerX + 1];
+                    double up = grayscale[(centerY - 1) * HashSize + centerX];
+                    double down = grayscale[(centerY + 1) * HashSize + centerX];
+                    magnitudes[y * EdgeHashSize + x] = Math.Abs(right - left) + Math.Abs(down - up);
+                }
+            }
+
+            double[] sorted = magnitudes.ToArray();
+            Array.Sort(sorted);
+            if (sorted[sorted.Length - 1] <= 0.000001)
+            {
+                return 0;
+            }
+
+            double median = sorted[sorted.Length / 2];
+            ulong hash = 0;
+            for (int i = 0; i < magnitudes.Length; i++)
+            {
+                if (magnitudes[i] > median)
+                {
+                    hash |= 1UL << i;
+                }
+            }
+
+            return hash;
+        }
+
+        private static int ClampIndex(int value)
+        {
+            if (value < 1)
+            {
+                return 1;
+            }
+            if (value > HashSize - 2)
+            {
+                return HashSize - 2;
+            }
+
+            return value;
         }
 
         private static double DctScale(int value)
@@ -1901,7 +2065,11 @@ namespace WzComparerR2.Headless.Media
             public double PixelScore { get; set; }
             public double ColorScore { get; set; }
             public double ShapeScore { get; set; }
+            public double StructuralScore { get; set; }
             public int HashDistance { get; set; }
+            public int DHashDistance { get; set; }
+            public int EdgeHashDistance { get; set; }
+            public bool CoarseFiltered { get; set; }
             public string QueryRegion { get; set; }
             public string Region { get; set; }
         }
@@ -1924,6 +2092,8 @@ namespace WzComparerR2.Headless.Media
             }
 
             public ulong Hash { get; private set; }
+            public ulong DHash { get; private set; }
+            public ulong EdgeHash { get; private set; }
             public double AverageR { get; private set; }
             public double AverageG { get; private set; }
             public double AverageB { get; private set; }
@@ -1985,6 +2155,8 @@ namespace WzComparerR2.Headless.Media
                 return new ImageFingerprint
                 {
                     Hash = ComputePHash(grayscale),
+                    DHash = ComputeDHash(image, rect),
+                    EdgeHash = ComputeEdgeHash(grayscale),
                     Grayscale = grayscale,
                     AverageR = color.R,
                     AverageG = color.G,
