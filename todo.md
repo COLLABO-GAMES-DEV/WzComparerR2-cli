@@ -241,13 +241,11 @@ wcr2 compare <old-file-or-dir> <new-file-or-dir> --out <json-or-dir>
   - PNG golden: `Mob/_Canvas` 또는 `Mob_Canvas`의 `0100100.img/stand/0`, dimensions/hash/manifest DTO와 실제 파일 bytes/hash 검증.
   - Sound golden: `Sound/AchievementEff.img/GradeUp`, MP3 bytes/hash/ms/channels/frequency 검증.
   - Video golden: `Packs/Skill_00006.ms`의 `5241503 screen2/video`, ffmpeg가 있을 때 첫 frame PNG dimensions/hash/frame metadata 검증.
-  - sound bytes/hash
-  - recursive export manifest
 
 완료 기준:
 
-- [ ] 이미지 노드를 PNG 파일로 추출 가능
-- [ ] 사운드 노드를 파일로 추출 가능
+- [x] 이미지 노드를 PNG 파일로 추출 가능
+- [x] 사운드 노드를 파일로 추출 가능
 - [ ] export 실패 시 실패 노드 목록을 JSON으로 받을 수 있음
 
 ### Phase 5B. macOS/CrossOver Item/String 패키지 로딩 지원
